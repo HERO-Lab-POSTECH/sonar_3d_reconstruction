@@ -9,9 +9,9 @@
 sonar_3d_mapper:
   ros__parameters:
     # Sonar sensor parameters
-    horizontal_fov: 70.0        # Horizontal field of view in degrees
+    horizontal_fov: 130.0        # Horizontal field of view in degrees
     vertical_aperture: 20.0      # Vertical beam aperture in degrees
-    max_range: 10.0              # Maximum sonar range in meters
+    max_range: 3.5              # Maximum sonar range in meters
     min_range: 1.0               # Minimum range to filter noise in meters
     intensity_threshold: 120      # Intensity threshold for occupied detection (0-255)
     
@@ -27,7 +27,7 @@ sonar_3d_mapper:
     sonar_orientation:
       # For REAL WORLD (Oculus M750d on BlueBoat):
       roll: 0.0                  # Rotation around X axis (degrees)
-      pitch: 60.0                # Rotation around Y axis (degrees, 90 = pointing down)
+      pitch: 90.0                # Rotation around Y axis (degrees, 90 = pointing down)
       yaw: 0.0                   # Rotation around Z axis (degrees)
       
       # For SIMULATOR (Gazebo with ROS standard coordinates):
@@ -43,7 +43,7 @@ sonar_3d_mapper:
     
     # Z-axis filtering (remove voxels below this height)
     z_filter_min: -6.3           # Minimum Z value in meters (negative = below water surface)
-    z_filter_enabled: true       # Enable Z-axis filtering
+    z_filter_enabled: false       # Enable Z-axis filtering
     
     # Adaptive update parameters (protect free space from noise)
     adaptive_update: true        # Enable adaptive updating
@@ -69,7 +69,7 @@ sonar_3d_mapper:
     publish_tf: false            # Use TF from bag file instead
     
     # ROS2 Topics (for KIRO water tank data)
-    sonar_topic: "/sensor/sonar/oculus/m750d/image"
+    sonar_topic: "/sensor/sonar/oculus/m3000d/image"
     odometry_topic: "/fast_lio/odometry"
     pointcloud_topic: "/sonar_3d_map"
     marker_topic: "/sonar_3d_map_markers"
@@ -81,5 +81,5 @@ sonar_3d_mapper:
     launch_fast_lio: true        # Launch Fast-LIO for odometry
     launch_rviz: true            # Launch RViz for visualization
     play_bag: true              # Auto-play bag file
-    bag_file: "/workspace/data/2_kiro_watertank/20250926_blueboat_sonar_lidar/oculus-tilt60-gain50-freq2"
+    bag_file: "/workspace/data/4_yeondong_hang/20251029_blueboat_sonar_lidar/tilt90-range3.5_v3"
     bag_playback_rate: 0.5      # Playback speed (1.0 = normal, 0.5 = half speed, 2.0 = double speed)
