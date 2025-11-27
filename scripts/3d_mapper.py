@@ -14,6 +14,22 @@ import numpy as np
 from collections import defaultdict
 from typing import Tuple, List, Dict, Any, Optional
 import time
+import warnings
+
+# C++ 모듈 임포트 시도
+try:
+    # ROS2 install 경로에서 모듈 임포트
+    import sys
+    install_path = "/workspace/ros2_ws/install/sonar_3d_reconstruction/local/lib/python3.10/dist-packages"
+    if install_path not in sys.path:
+        sys.path.insert(0, install_path)
+    
+    from sonar_3d_reconstruction.sonar_3d_reconstruction_cpp import ProbabilityUpdater, MemoryStats
+    CPP_MODULE_AVAILABLE = True
+    print("[3D Mapper] C++ ProbabilityUpdater 모듈 로드 성공")
+except ImportError:
+    CPP_MODULE_AVAILABLE = False
+    print("[3D Mapper] C++ 모듈 없음 - Python SimpleOctree 사용")
 
 
 class SimpleOctree:
@@ -206,17 +222,8 @@ class SonarTo3DMapper:
         
         Args:
             config: Configuration dictionary (overrides defaults)
-        
-        Note: Parameter priority (highest to lowest):
-            1. ROS2 launch args (handled by node)
-            2. YAML file (handled by node)
-            3. Launch file params (handled by node)
-            4. Node defaults (handled by node)
-            5. Config dict passed here (overrides defaults below)
-            6. Default values in this class (lowest priority)
         """
-        # Default configuration (lowest priority - priority 5)
-        # These will be overridden by any values in the config dict
+        # Default configuration
         default_config = {
             # Sonar parameters
             'horizontal_fov': 130.0,       # degrees
@@ -246,10 +253,9 @@ class SonarTo3DMapper:
             'log_odds_free': -2.0,
             'log_odds_min': -10.0,
             'log_odds_max': 10.0,
-            
         }
         
-        # Update with provided config (config dict has priority over defaults)
+        # Update with provided config
         if config:
             default_config.update(config)
         
@@ -279,17 +285,54 @@ class SonarTo3DMapper:
             self.sonar_orientation
         )
         
-        # Initialize octree with settings
-        self.octree = SimpleOctree(self.voxel_resolution, self.dynamic_expansion)
+        # Initialize octree - Try C++ first, fallback to Python
+        self.use_cpp = default_config.get('use_cpp_backend', CPP_MODULE_AVAILABLE)
         
-        # Configure octree parameters
-        self.octree.log_odds_occupied = default_config['log_odds_occupied']
-        self.octree.log_odds_free = default_config['log_odds_free']
-        self.octree.log_odds_min = default_config['log_odds_min']
-        self.octree.log_odds_max = default_config['log_odds_max']
-        self.octree.adaptive_update = default_config['adaptive_update']
-        self.octree.adaptive_threshold = default_config['adaptive_threshold']
-        self.octree.adaptive_max_ratio = default_config['adaptive_max_ratio']
+        if self.use_cpp and CPP_MODULE_AVAILABLE:
+            # Initialize C++ ProbabilityUpdater
+            self.octree = ProbabilityUpdater(self.voxel_resolution)
+            
+            # Store log-odds values for ray processing
+            self.log_odds_occupied = default_config['log_odds_occupied']
+            self.log_odds_free = default_config['log_odds_free']
+            
+            # Configure C++ octree parameters
+            self.octree.set_log_odds_params(
+                self.log_odds_occupied,
+                self.log_odds_free
+            )
+            self.octree.set_adaptive_params(
+                default_config['adaptive_update'],
+                default_config['adaptive_threshold'],
+                default_config['adaptive_max_ratio']
+            )
+            
+            # Set clamping thresholds based on log-odds
+            min_prob = 1.0 / (1.0 + np.exp(-default_config['log_odds_min']))
+            max_prob = 1.0 / (1.0 + np.exp(-default_config['log_odds_max']))
+            self.octree.set_clamping_thresholds(min_prob, max_prob)
+            
+            print(f"[3D Mapper] C++ ProbabilityUpdater 사용 (해상도: {self.voxel_resolution}m)")
+        else:
+            # Initialize Python SimpleOctree  
+            self.octree = SimpleOctree(self.voxel_resolution, self.dynamic_expansion)
+            
+            # Store log-odds values for both approaches
+            self.log_odds_occupied = default_config['log_odds_occupied']
+            self.log_odds_free = default_config['log_odds_free']
+            
+            # Configure Python octree parameters
+            self.octree.log_odds_occupied = self.log_odds_occupied
+            self.octree.log_odds_free = self.log_odds_free
+            self.octree.log_odds_min = default_config['log_odds_min']
+            self.octree.log_odds_max = default_config['log_odds_max']
+            self.octree.adaptive_update = default_config['adaptive_update']
+            self.octree.adaptive_threshold = default_config['adaptive_threshold']
+            self.octree.adaptive_max_ratio = default_config['adaptive_max_ratio']
+            
+            print(f"[3D Mapper] Python SimpleOctree 사용 (해상도: {self.voxel_resolution}m)")
+            if self.use_cpp:
+                print("  주의: C++ 모듈을 요청했지만 사용할 수 없음")
         
         # Pre-compute bearing angles
         self.bearing_angles = np.linspace(
@@ -298,14 +341,9 @@ class SonarTo3DMapper:
             self.image_width
         )
         
-        
         # Frame counter
         self.frame_count = 0
         self.processed_frame_count = 0
-        
-        # Debug: Track update counts per voxel
-        self.voxel_update_counts = defaultdict(int)
-        self.frame_update_counts = defaultdict(int)  # Updates in current frame
         
         # Processing statistics
         self.last_processing_time = 0.0
@@ -384,6 +422,36 @@ class SonarTo3DMapper:
         half_fov = self.horizontal_fov / 2
         return abs(bearing_angle) <= half_fov
     
+    def world_to_key(self, x: float, y: float, z: float) -> Tuple[int, int, int]:
+        """
+        Convert world coordinates to voxel key (compatible with both C++ and Python)
+        
+        Args:
+            x, y, z: World coordinates in meters
+            
+        Returns:
+            Tuple (ix, iy, iz) as voxel index
+        """
+        i = int(np.floor(x / self.voxel_resolution))
+        j = int(np.floor(y / self.voxel_resolution))
+        k = int(np.floor(z / self.voxel_resolution))
+        return (i, j, k)
+    
+    def key_to_world(self, key: Tuple[int, int, int]) -> np.ndarray:
+        """
+        Convert voxel key to world coordinates (center of voxel)
+        
+        Args:
+            key: Tuple (ix, iy, iz) voxel index
+            
+        Returns:
+            numpy array [x, y, z] world coordinates
+        """
+        x = (key[0] + 0.5) * self.voxel_resolution
+        y = (key[1] + 0.5) * self.voxel_resolution
+        z = (key[2] + 0.5) * self.voxel_resolution
+        return np.array([x, y, z])
+    
     def process_sonar_ray(self, bearing_angle: float, intensity_profile: np.ndarray, 
                           T_sonar_to_world: np.ndarray) -> List[Tuple[np.ndarray, float, str]]:
         """
@@ -430,7 +498,6 @@ class SonarTo3DMapper:
                 vertical_angle = (v_step / max(1, num_vertical)) * half_aperture
                 
                 # Sonar coordinates (X=forward, Y=right, Z=down)
-                # Note: Negative y for correct right-hand coordinate system
                 x_sonar = range_m * np.cos(vertical_angle) * np.cos(bearing_angle)
                 y_sonar = -range_m * np.cos(vertical_angle) * np.sin(bearing_angle)
                 z_sonar = range_m * np.sin(vertical_angle)
@@ -443,7 +510,7 @@ class SonarTo3DMapper:
                 if self.z_filter_enabled and pt_world[2] < self.z_filter_min:
                     continue
                 
-                updates.append((pt_world[:3], self.octree.log_odds_free, 'free'))
+                updates.append((pt_world[:3], self.log_odds_free, 'free'))
         
         # Process occupied regions (dense)
         if first_hit_idx < len(intensity_profile):
@@ -478,7 +545,7 @@ class SonarTo3DMapper:
                         if self.z_filter_enabled and pt_world[2] < self.z_filter_min:
                             continue
                         
-                        updates.append((pt_world[:3], self.octree.log_odds_occupied, 'occupied'))
+                        updates.append((pt_world[:3], self.log_odds_occupied, 'occupied'))
         
         return updates
     
@@ -522,7 +589,6 @@ class SonarTo3DMapper:
         
         # Accumulate updates per voxel
         voxel_updates = defaultdict(lambda: {'sum': 0.0, 'count': 0, 'type': 'unknown'})
-        self.frame_update_counts.clear()  # Reset for this frame
         
         # Process subset of bearings for efficiency
         bearing_step = max(1, bearing_bins // 256)
@@ -540,56 +606,80 @@ class SonarTo3DMapper:
             
             # Accumulate updates
             for point, log_odds, update_type in ray_updates:
-                key = self.octree.world_to_key(point[0], point[1], point[2])
+                key = self.world_to_key(point[0], point[1], point[2])
                 if voxel_updates[key]['type'] != 'occupied':  # Occupied has priority
                     voxel_updates[key]['type'] = update_type
                 voxel_updates[key]['sum'] += log_odds
                 voxel_updates[key]['count'] += 1
-                
-                # Debug: Track updates
-                self.frame_update_counts[key] += 1
-                self.voxel_update_counts[key] += 1
         
         # Apply averaged updates to octree
         num_occupied = 0
         num_free = 0
         
-        for key, update_info in voxel_updates.items():
-            if update_info['count'] > 0:
-                avg_update = update_info['sum'] / update_info['count']
-                point = self.octree.key_to_world(key)
+        if self.use_cpp and CPP_MODULE_AVAILABLE:
+            # C++ 배치 업데이트 사용
+            points_list = []
+            log_odds_list = []
+            is_occupied_list = []
+            
+            for key, update_info in voxel_updates.items():
+                if update_info['count'] > 0:
+                    avg_update = update_info['sum'] / update_info['count']
+                    
+                    # 키를 월드 좌표로 변환
+                    world_point = self.key_to_world(key)
+                    points_list.append(world_point)
+                    log_odds_list.append(avg_update)
+                    is_occupied = update_info['type'] == 'occupied'
+                    is_occupied_list.append(is_occupied)
+                    
+                    if is_occupied:
+                        num_occupied += 1
+                    else:
+                        num_free += 1
+            
+            # NumPy 배열로 변환하여 배치 업데이트
+            if points_list:
+                points_array = np.array(points_list, dtype=np.float64)
+                log_odds_array = np.array(log_odds_list, dtype=np.float64)
+                is_occupied_array = np.array(is_occupied_list, dtype=bool)
                 
-                if update_info['type'] == 'occupied':
-                    self.octree.update_voxel(point, avg_update, adaptive=True)
-                    num_occupied += 1
-                elif update_info['type'] == 'free':
-                    self.octree.update_voxel(point, avg_update, adaptive=False)
-                    num_free += 1
+                # C++ 배치 업데이트 실행
+                self.octree.batch_update(
+                    points_array, log_odds_array, is_occupied_array
+                )
+                
+        else:
+            # Python 개별 업데이트 사용
+            for key, update_info in voxel_updates.items():
+                if update_info['count'] > 0:
+                    avg_update = update_info['sum'] / update_info['count']
+                    point = self.key_to_world(key)
+                    
+                    if update_info['type'] == 'occupied':
+                        self.octree.update_voxel(point, avg_update, adaptive=True)
+                        num_occupied += 1
+                    elif update_info['type'] == 'free':
+                        self.octree.update_voxel(point, avg_update, adaptive=False)
+                        num_free += 1
         
         # Calculate processing time
         processing_time = time.time() - start_time
         self.last_processing_time = processing_time
         self.total_processing_time += processing_time
         
-        # Debug statistics
-        if self.frame_update_counts:
-            max_updates_frame = max(self.frame_update_counts.values())
-            avg_updates_frame = sum(self.frame_update_counts.values()) / len(self.frame_update_counts)
-            max_updates_total = max(self.voxel_update_counts.values())
-            
-            if self.frame_count % 10 == 0:  # Log every 10 frames
-                print(f"[DEBUG] Frame {self.frame_count}:")
-                print(f"  Max updates in frame: {max_updates_frame}")
-                print(f"  Avg updates in frame: {avg_updates_frame:.1f}")
-                print(f"  Max total updates: {max_updates_total}")
-                print(f"  Voxels with >10 updates in frame: {sum(1 for v in self.frame_update_counts.values() if v > 10)}")
+        # Get voxel count (compatible with both C++ and Python)
+        if self.use_cpp and CPP_MODULE_AVAILABLE:
+            num_voxels = self.octree.get_num_nodes()
+        else:
+            num_voxels = len(self.octree.voxels)
         
         return {
             'frame_count': self.frame_count,
             'processed_count': self.processed_frame_count,
             'num_occupied': num_occupied,
             'num_free': num_free,
-            'num_voxels': len(self.octree.voxels),
+            'num_voxels': num_voxels,
             'processing_time': processing_time,
             'avg_processing_time': self.total_processing_time / max(1, self.processed_frame_count)
         }
@@ -604,42 +694,73 @@ class SonarTo3DMapper:
         Returns:
             Dictionary containing point cloud data and statistics
         """
-        if include_free:
-            classified = self.octree.get_all_voxels_classified(self.min_probability)
+        if self.use_cpp and CPP_MODULE_AVAILABLE:
+            # C++ ProbabilityUpdater 사용
+            if include_free:
+                warnings.warn("C++ 백엔드는 free space 복셀 조회를 지원하지 않습니다. occupied만 반환합니다.")
+                include_free = False
             
-            return {
-                'occupied': classified['occupied'],
-                'free': classified['free'],
-                'unknown': classified['unknown'],
-                'num_voxels': len(self.octree.voxels),
-                'num_occupied': len(classified['occupied']),
-                'num_free': len(classified['free']),
-                'num_unknown': len(classified['unknown']),
-                'frame_count': self.frame_count,
-                'processed_count': self.processed_frame_count,
-                'bounds': {
-                    'min': self.octree.min_bounds.copy() if self.octree.dynamic_expansion else None,
-                    'max': self.octree.max_bounds.copy() if self.octree.dynamic_expansion else None
-                }
-            }
-        else:
-            occupied_voxels = self.octree.get_occupied_voxels(self.min_probability)
+            # C++에서 점유 복셀 조회
+            occupied_data = self.octree.get_occupied_voxels(self.min_probability)
             
-            if occupied_voxels:
-                points = np.array([v[0] for v in occupied_voxels])
-                probabilities = np.array([v[1] for v in occupied_voxels])
+            if len(occupied_data) > 0:
+                points = occupied_data[:, :3]  # x, y, z
+                probabilities = occupied_data[:, 3]  # probability
             else:
                 points = np.empty((0, 3))
                 probabilities = np.empty(0)
             
+            # 메모리 사용량 통계
+            memory_stats = self.octree.get_memory_usage()
+            
             return {
                 'points': points,
                 'probabilities': probabilities,
-                'num_voxels': len(self.octree.voxels),
-                'num_occupied': len(occupied_voxels),
+                'num_voxels': memory_stats.num_nodes,
+                'num_occupied': len(points),
                 'frame_count': self.frame_count,
-                'processed_count': self.processed_frame_count
+                'processed_count': self.processed_frame_count,
+                'memory_mb': memory_stats.memory_mb,
+                'memory_efficiency': memory_stats.memory_efficiency
             }
+        else:
+            # Python SimpleOctree 사용
+            if include_free:
+                classified = self.octree.get_all_voxels_classified(self.min_probability)
+                
+                return {
+                    'occupied': classified['occupied'],
+                    'free': classified['free'],
+                    'unknown': classified['unknown'],
+                    'num_voxels': len(self.octree.voxels),
+                    'num_occupied': len(classified['occupied']),
+                    'num_free': len(classified['free']),
+                    'num_unknown': len(classified['unknown']),
+                    'frame_count': self.frame_count,
+                    'processed_count': self.processed_frame_count,
+                    'bounds': {
+                        'min': self.octree.min_bounds.copy() if self.octree.dynamic_expansion else None,
+                        'max': self.octree.max_bounds.copy() if self.octree.dynamic_expansion else None
+                    }
+                }
+            else:
+                occupied_voxels = self.octree.get_occupied_voxels(self.min_probability)
+                
+                if occupied_voxels:
+                    points = np.array([v[0] for v in occupied_voxels])
+                    probabilities = np.array([v[1] for v in occupied_voxels])
+                else:
+                    points = np.empty((0, 3))
+                    probabilities = np.empty(0)
+                
+                return {
+                    'points': points,
+                    'probabilities': probabilities,
+                    'num_voxels': len(self.octree.voxels),
+                    'num_occupied': len(occupied_voxels),
+                    'frame_count': self.frame_count,
+                    'processed_count': self.processed_frame_count
+                }
     
     def reset_map(self):
         """Reset the probabilistic map"""
@@ -648,36 +769,83 @@ class SonarTo3DMapper:
         self.processed_frame_count = 0
         self.total_processing_time = 0.0
         print("Map reset")
+    
+    def get_memory_stats(self) -> Dict[str, Any]:
+        """Get detailed memory usage statistics"""
+        if self.use_cpp and CPP_MODULE_AVAILABLE:
+            # C++ 메모리 통계
+            stats = self.octree.get_memory_usage()
+            return {
+                'backend': 'C++ ProbabilityUpdater',
+                'num_nodes': stats.num_nodes,
+                'num_leaf_nodes': stats.num_leaf_nodes,
+                'memory_mb': stats.memory_mb,
+                'memory_efficiency': stats.memory_efficiency,
+                'resolution': self.octree.get_resolution()
+            }
+        else:
+            # Python 메모리 추정
+            num_voxels = len(self.octree.voxels)
+            # 각 복셀당 대략적인 메모리 사용량 추정 (키 + 값)
+            estimated_mb = num_voxels * (3 * 8 + 8) / (1024 * 1024)  # 32바이트 per voxel
+            
+            return {
+                'backend': 'Python SimpleOctree',
+                'num_voxels': num_voxels,
+                'estimated_memory_mb': estimated_mb,
+                'resolution': self.voxel_resolution,
+                'dynamic_expansion': self.octree.dynamic_expansion
+            }
+    
+    def prune_map(self) -> int:
+        """
+        Prune unnecessary nodes from the map
+        
+        Returns:
+            Number of nodes removed (C++ only)
+        """
+        if self.use_cpp and CPP_MODULE_AVAILABLE:
+            removed_nodes = self.octree.prune_tree()
+            print(f"트리 정리 완료: {removed_nodes} 노드 제거")
+            return removed_nodes
+        else:
+            print("Python 백엔드는 트리 정리를 지원하지 않습니다")
+            return 0
 
 
 if __name__ == "__main__":
-    # Test the module
-    print("Testing 3D Mapper...")
+    """
+    3D Mapper 기본 테스트
+    """
+    print("🚀 3D Mapper 기본 테스트")
     
-    # Create instance with test config
+    # 기본 설정
     config = {
         'voxel_resolution': 0.1,
         'min_probability': 0.6,
-        'intensity_threshold': 30
+        'intensity_threshold': 30,
+        'max_range': 8.0
     }
     
+    # 매퍼 초기화
+    print(f"\n매퍼 초기화 - C++ 모듈: {'사용 가능' if CPP_MODULE_AVAILABLE else '사용 불가'}")
     mapper = SonarTo3DMapper(config)
     
-    # Create synthetic sonar image
-    test_image = np.zeros((500, 512), dtype=np.uint8)
-    test_image[100:150, 200:300] = 100  # Object at ~2m
-    test_image[300:350, 100:150] = 150  # Object at ~6m
+    # 테스트 이미지 생성
+    test_image = np.zeros((500, 256), dtype=np.uint8)
+    test_image[100:150, 120:140] = 80  # 객체
     
-    # Process with fake odometry
-    for i in range(3):
-        position = [i * 0.1, 0, 0]
-        orientation = [0, 0, 0, 1]  # Identity quaternion
-        
-        stats = mapper.process_sonar_image(test_image, position, orientation)
-        print(f"Frame {i+1}: {stats}")
+    # 프레임 처리 테스트
+    print("\n프레임 처리 테스트...")
+    stats = mapper.process_sonar_image(test_image, [0, 0, 0], [0, 0, 0, 1])
+    print(f"처리 결과: {stats['num_occupied']}개 점유 복셀, {stats['processing_time']:.3f}s")
     
-    # Get result
-    result = mapper.get_point_cloud()
-    print(f"\nGenerated {result['num_occupied']} occupied voxels")
-    print(f"Total voxels: {result['num_voxels']}")
-    print(f"Processed frames: {result['processed_count']}/{result['frame_count']}")
+    # 포인트 클라우드 조회
+    point_cloud = mapper.get_point_cloud()
+    print(f"포인트 클라우드: {point_cloud['num_occupied']}개 점")
+    
+    # 메모리 통계
+    memory_stats = mapper.get_memory_stats()
+    print(f"메모리 사용량: {memory_stats}")
+    
+    print("\n✅ 테스트 완료")

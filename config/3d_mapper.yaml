@@ -39,6 +39,7 @@ sonar_3d_mapper:
     voxel_resolution: 0.15        # Voxel size in meters (20cm) - TEST
     min_probability: 0.7         # Minimum probability to consider voxel occupied
     dynamic_expansion: true      # Enable dynamic map expansion without fixed bounds
+    use_cpp_backend: true        # Use C++ ProbabilityUpdater for memory efficiency (fallback to Python if unavailable)
     
     # Z-axis filtering (remove voxels below this height)
     z_filter_min: -6.3           # Minimum Z value in meters (negative = below water surface)
