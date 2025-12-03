@@ -9,11 +9,12 @@ Usage:
   # Log-odds method:
   ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py method:=log_odds
 
-  # With bag playback:
-  ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py play_bag:=true bag_file:=/path/to/bag
+  # Override bag file:
+  ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py bag_file:=/path/to/bag
 """
 
 import os
+import yaml
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -32,7 +33,12 @@ def generate_launch_description():
     common_config = os.path.join(pkg_dir, 'config', 'common.yaml')
     method_weighted_avg = os.path.join(pkg_dir, 'config', 'method_weighted_average.yaml')
     method_log_odds = os.path.join(pkg_dir, 'config', 'method_log_odds.yaml')
+    robot_detection_config = os.path.join(pkg_dir, 'config', 'robot_detection.yaml')
     rviz_config = os.path.join(pkg_dir, 'rviz', '3d_mapping.rviz')
+
+    # Load defaults from common.yaml
+    with open(common_config, 'r') as f:
+        common_params = yaml.safe_load(f)['sonar_3d_mapper']['ros__parameters']
 
     # Launch configurations
     method = LaunchConfiguration('method')
@@ -44,18 +50,25 @@ def generate_launch_description():
     bag_rate = LaunchConfiguration('bag_rate')
     sonar_pitch = LaunchConfiguration('sonar_pitch')
 
-    # Declare arguments
+    # Declare arguments (defaults from common.yaml)
     ld = LaunchDescription([
-        DeclareLaunchArgument('method', default_value='weighted_average',
+        DeclareLaunchArgument('method',
+            default_value=common_params.get('probability_update_method', 'weighted_average'),
             description='Probability update method: weighted_average or log_odds'),
-        DeclareLaunchArgument('use_sim_time', default_value='true'),
-        DeclareLaunchArgument('launch_fast_lio', default_value='true'),
-        DeclareLaunchArgument('launch_rviz', default_value='true'),
-        DeclareLaunchArgument('play_bag', default_value='true'),
+        DeclareLaunchArgument('use_sim_time',
+            default_value=str(common_params.get('use_sim_time', True)).lower()),
+        DeclareLaunchArgument('launch_fast_lio',
+            default_value=str(common_params.get('launch_fast_lio', True)).lower()),
+        DeclareLaunchArgument('launch_rviz',
+            default_value=str(common_params.get('launch_rviz', True)).lower()),
+        DeclareLaunchArgument('play_bag',
+            default_value=str(common_params.get('play_bag', True)).lower()),
         DeclareLaunchArgument('bag_file',
-            default_value='/workspace/data/4_yeondong_hang/20251029_blueboat_sonar_lidar/tilt30-range10_v1'),
-        DeclareLaunchArgument('bag_rate', default_value='1.0'),
-        DeclareLaunchArgument('sonar_pitch', default_value='30.0',
+            default_value=common_params.get('bag_file', '')),
+        DeclareLaunchArgument('bag_rate',
+            default_value=str(common_params.get('bag_playback_rate', 1.0))),
+        DeclareLaunchArgument('sonar_pitch',
+            default_value=str(common_params.get('sonar_orientation', {}).get('pitch', 90.0)),
             description='Sonar pitch angle in degrees'),
     ])
 
@@ -76,6 +89,7 @@ def generate_launch_description():
         parameters=[
             common_config,
             method_weighted_avg,
+            robot_detection_config,
             {'use_sim_time': use_sim_time, 'sonar_orientation.pitch': sonar_pitch}
         ],
         output='screen',
@@ -90,6 +104,7 @@ def generate_launch_description():
         parameters=[
             common_config,
             method_log_odds,
+            robot_detection_config,
             {'use_sim_time': use_sim_time, 'sonar_orientation.pitch': sonar_pitch}
         ],
         output='screen',

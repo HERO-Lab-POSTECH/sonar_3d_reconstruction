@@ -58,7 +58,7 @@ sonar_3d_mapper:
 
     #===== Bag Playback =====
     play_bag: true
-    bag_file: "/workspace/data/4_yeondong_hang/20251029_blueboat_sonar_lidar/tilt90-range3.5_v3"
+    bag_file: "/workspace/data/4_yeondong_hang/20251029_blueboat_sonar_lidar/tilt90-range3.5_v4"
     bag_playback_rate: 1.0
 
     #===== Bag Recording (optional) =====
