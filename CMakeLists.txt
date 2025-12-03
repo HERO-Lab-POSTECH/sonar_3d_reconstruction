@@ -19,6 +19,40 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 find_package(rclpy REQUIRED)
+find_package(pybind11 REQUIRED)
+find_package(Eigen3 REQUIRED)
+find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+
+# Build C++ extension module
+add_library(sonar_3d_reconstruction_cpp MODULE
+  sonar_3d_reconstruction/cpp/python_bindings.cpp
+  sonar_3d_reconstruction/cpp/octree_mapper.cpp
+  sonar_3d_reconstruction/cpp/ray_casting.cpp
+  sonar_3d_reconstruction/cpp/probability_updater.cpp
+  sonar_3d_reconstruction/cpp/ray_processor.cpp
+)
+
+target_include_directories(sonar_3d_reconstruction_cpp PRIVATE
+  sonar_3d_reconstruction/cpp
+  ${EIGEN3_INCLUDE_DIR}
+  ${pybind11_INCLUDE_DIR}
+  ${Python3_INCLUDE_DIRS}
+)
+
+target_link_libraries(sonar_3d_reconstruction_cpp PRIVATE
+  Eigen3::Eigen
+  Python3::Python
+)
+
+# Set proper extension for Python modules
+set_target_properties(sonar_3d_reconstruction_cpp PROPERTIES
+  PREFIX "${PYTHON_MODULE_PREFIX}"
+  SUFFIX "${PYTHON_MODULE_EXT}"
+)
+
+install(TARGETS sonar_3d_reconstruction_cpp
+  LIBRARY DESTINATION lib/${PROJECT_NAME}
+)
 
 # Install Python executable scripts (install(PROGRAMS) automatically sets executable permissions)
 install(PROGRAMS

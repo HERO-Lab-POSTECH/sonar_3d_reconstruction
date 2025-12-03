@@ -79,7 +79,6 @@ class SonarMapperNode(Node):
                 
                 # Octree parameters
                 ('voxel_resolution', 0.05),
-                ('min_probability', 0.6),
                 ('dynamic_expansion', True),
                 ('z_filter_min', -5.0),
                 ('z_filter_enabled', True),
@@ -169,7 +168,6 @@ class SonarMapperNode(Node):
                 np.radians(self.get_parameter('sonar_orientation.yaw').value)  # Convert degrees to radians
             ],
             'voxel_resolution': self.get_parameter('voxel_resolution').value,
-            'min_probability': self.get_parameter('min_probability').value,
             'dynamic_expansion': self.get_parameter('dynamic_expansion').value,
             'z_filter_min': self.get_parameter('z_filter_min').value,
             'z_filter_enabled': self.get_parameter('z_filter_enabled').value,
@@ -302,8 +300,7 @@ class SonarMapperNode(Node):
         self.get_logger().info(f'  Horizontal FOV: {config["horizontal_fov"]}°')
         self.get_logger().info(f'  Vertical aperture: {config["vertical_aperture"]}°')
         self.get_logger().info(f'  Voxel resolution: {config["voxel_resolution"]}m')
-        self.get_logger().info(f'  Min probability: {config["min_probability"]}')
-        self.get_logger().info(f'  Probability update method: {config["probability_update_method"]} (voxelmap_fusion style)')
+        self.get_logger().info(f'  Probability update method: {config["probability_update_method"]}')
         self.get_logger().info(f'  Multi-threshold: occupied>={config["occupied_threshold"]}, free<={config["free_threshold"]}')
         self.get_logger().info(f'  Adaptive update: {config["adaptive_update"]}')
         self.get_logger().info(f'  Robot detection: {config["enable_robot_detection"]} (threshold: >={config["robot_detection"]["min_threshold"]})')

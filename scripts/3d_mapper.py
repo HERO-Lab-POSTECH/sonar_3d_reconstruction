@@ -414,7 +414,6 @@ class SonarTo3DMapper:
 
             # Octree parameters
             'voxel_resolution': 0.05,      # meters
-            'min_probability': 0.6,        # for occupied
             'dynamic_expansion': True,
 
             # Probability update method
@@ -465,7 +464,7 @@ class SonarTo3DMapper:
         self.image_width = default_config['image_width']
         self.image_height = default_config['image_height']
         self.voxel_resolution = default_config['voxel_resolution']
-        self.min_probability = default_config['min_probability']
+        self.occupied_threshold = default_config['occupied_threshold']
         self.dynamic_expansion = default_config['dynamic_expansion']
         
         # Z-axis filtering
@@ -947,7 +946,7 @@ class SonarTo3DMapper:
                 include_free = False
             
             # C++에서 점유 복셀 조회
-            occupied_data = self.octree.get_occupied_voxels(self.min_probability)
+            occupied_data = self.octree.get_occupied_voxels(self.occupied_threshold)
             
             if len(occupied_data) > 0:
                 points = occupied_data[:, :3]  # x, y, z
@@ -992,7 +991,7 @@ class SonarTo3DMapper:
                     'robot_detections': [(point, intensity) for point, intensity, timestamp in self.robot_detections] if self.enable_robot_detection else []
                 }
             else:
-                occupied_voxels = self.octree.get_occupied_voxels(self.min_probability)
+                occupied_voxels = self.octree.get_occupied_voxels(self.occupied_threshold)
                 
                 if occupied_voxels:
                     points = np.array([v[0] for v in occupied_voxels])
@@ -1072,7 +1071,7 @@ if __name__ == "__main__":
     # 기본 설정
     config = {
         'voxel_resolution': 0.1,
-        'min_probability': 0.6,
+        'occupied_threshold': 0.6,
         'intensity_threshold': 30,
         'max_range': 8.0
     }
