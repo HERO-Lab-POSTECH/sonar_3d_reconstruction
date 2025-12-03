@@ -131,7 +131,16 @@ PYBIND11_MODULE(sonar_3d_reconstruction_cpp, m) {
         .def("prune_tree", &sonar_3d_reconstruction::ProbabilityUpdater::prune_tree,
              "Prune unnecessary nodes")
         .def("clear", &sonar_3d_reconstruction::ProbabilityUpdater::clear,
-             "Clear all data");
+             "Clear all data")
+        .def("set_thresholds", &sonar_3d_reconstruction::ProbabilityUpdater::set_thresholds,
+             py::arg("occupied_thresh"), py::arg("free_thresh"),
+             "Set thresholds for weighted average update")
+        .def("set_intensity_params", &sonar_3d_reconstruction::ProbabilityUpdater::set_intensity_params,
+             py::arg("intensity_threshold"), py::arg("intensity_max"),
+             "Set intensity normalization parameters")
+        .def("batch_update_weighted_average", &sonar_3d_reconstruction::ProbabilityUpdater::batch_update_weighted_average,
+             py::arg("points"), py::arg("intensities"), py::arg("is_occupied"),
+             "Batch update with weighted average method (voxelmap_fusion style)");
 
     // Module version info
     m.attr("__version__") = "1.0.0";

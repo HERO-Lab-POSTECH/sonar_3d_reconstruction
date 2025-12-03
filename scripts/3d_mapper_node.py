@@ -60,6 +60,15 @@ class SonarMapperNode(Node):
                 ('min_range', 0.5),
                 ('intensity_threshold', 35),
                 
+                # Terrain detection (for robot detection mode)
+                ('terrain_detection.min_threshold', 80),
+                ('terrain_detection.max_threshold', 180),
+                
+                # Robot detection mode
+                ('enable_robot_detection', False),
+                ('robot_detection.min_threshold', 180),
+                ('robot_detection.topic', '/sonar_robot_detections'),
+                
                 # Sonar mounting (relative to base_link)
                 ('sonar_position.x', 0.0),
                 ('sonar_position.y', 0.0),
@@ -85,6 +94,20 @@ class SonarMapperNode(Node):
                 ('log_odds_free', -2.0),
                 ('log_odds_min', -10.0),
                 ('log_odds_max', 10.0),
+
+                # Probability update method (voxelmap_fusion style)
+                ('probability_update_method', 'weighted_average'),  # 'log_odds' | 'weighted_average'
+                ('intensity_max', 255),  # Maximum intensity value for normalization
+
+                # Multi-threshold classification (voxelmap_fusion style)
+                ('occupied_threshold', 0.7),  # Probability >= 0.7 = occupied
+                ('free_threshold', 0.3),  # Probability <= 0.3 = free
+
+                # Backend selection
+                ('use_cpp_backend', True),  # Use high-performance C++ hierarchical octree by default
+                
+                # Processing parameters
+                ('frame_skip', 1),  # Process every N frames
                 
                 # Publishing parameters
                 ('show_free_space', False),
@@ -121,6 +144,20 @@ class SonarMapperNode(Node):
             'max_range': self.get_parameter('max_range').value,
             'min_range': self.get_parameter('min_range').value,
             'intensity_threshold': self.get_parameter('intensity_threshold').value,
+            
+            # Terrain detection parameters  
+            'terrain_detection': {
+                'min_threshold': self.get_parameter('terrain_detection.min_threshold').value,
+                'max_threshold': self.get_parameter('terrain_detection.max_threshold').value
+            },
+            
+            # Robot detection parameters
+            'enable_robot_detection': self.get_parameter('enable_robot_detection').value,
+            'robot_detection': {
+                'min_threshold': self.get_parameter('robot_detection.min_threshold').value,
+                'topic': self.get_parameter('robot_detection.topic').value
+            },
+            
             'sonar_position': [
                 self.get_parameter('sonar_position.x').value,
                 self.get_parameter('sonar_position.y').value,
@@ -142,7 +179,13 @@ class SonarMapperNode(Node):
             'log_odds_occupied': self.get_parameter('log_odds_occupied').value,
             'log_odds_free': self.get_parameter('log_odds_free').value,
             'log_odds_min': self.get_parameter('log_odds_min').value,
-            'log_odds_max': self.get_parameter('log_odds_max').value
+            'log_odds_max': self.get_parameter('log_odds_max').value,
+            'probability_update_method': self.get_parameter('probability_update_method').value,
+            'intensity_max': self.get_parameter('intensity_max').value,
+            'occupied_threshold': self.get_parameter('occupied_threshold').value,
+            'free_threshold': self.get_parameter('free_threshold').value,
+            'use_cpp_backend': self.get_parameter('use_cpp_backend').value,
+            'frame_skip': self.get_parameter('frame_skip').value
         }
         
         # Get other parameters
@@ -159,8 +202,18 @@ class SonarMapperNode(Node):
         pointcloud_topic = self.get_parameter('pointcloud_topic').value
         marker_topic = self.get_parameter('marker_topic').value
         
+        # Store robot detection settings
+        self.enable_robot_detection = config['enable_robot_detection']
+        self.robot_detection_topic = config['robot_detection']['topic']
+        
         # Initialize mapper
         self.mapper = SonarTo3DMapper(config)
+        
+        # Log backend information
+        backend_info = self.mapper.get_memory_stats()
+        self.get_logger().info(f"Using {backend_info['backend']}")
+        if 'C++' in backend_info['backend']:
+            self.get_logger().info("C++ backend is active for high-performance processing")
         
         # Create CV bridge for image conversion
         self.bridge = CvBridge()
@@ -179,6 +232,7 @@ class SonarMapperNode(Node):
         
         # Frame counter
         self.frame_count = 0
+        self.frame_skip = config['frame_skip']
         self.last_publish_time = time.time()
         
         # QoS profile for best effort subscription
@@ -224,6 +278,18 @@ class SonarMapperNode(Node):
             10
         )
         
+        # Create robot detection publisher if enabled
+        if self.enable_robot_detection:
+            self.robot_pub = self.create_publisher(
+                PointCloud2,
+                self.robot_detection_topic,
+                10
+            )
+            self.get_logger().info(f'Robot detection enabled, publishing to: {self.robot_detection_topic}')
+        else:
+            self.robot_pub = None
+            self.get_logger().info('Robot detection disabled')
+        
         # Create timer for periodic publishing (fixed at 10Hz)
         self.timer = self.create_timer(
             0.1,  # 10Hz publishing rate
@@ -237,7 +303,13 @@ class SonarMapperNode(Node):
         self.get_logger().info(f'  Vertical aperture: {config["vertical_aperture"]}°')
         self.get_logger().info(f'  Voxel resolution: {config["voxel_resolution"]}m')
         self.get_logger().info(f'  Min probability: {config["min_probability"]}')
+        self.get_logger().info(f'  Probability update method: {config["probability_update_method"]} (voxelmap_fusion style)')
+        self.get_logger().info(f'  Multi-threshold: occupied>={config["occupied_threshold"]}, free<={config["free_threshold"]}')
         self.get_logger().info(f'  Adaptive update: {config["adaptive_update"]}')
+        self.get_logger().info(f'  Robot detection: {config["enable_robot_detection"]} (threshold: >={config["robot_detection"]["min_threshold"]})')
+        if config["enable_robot_detection"]:
+            self.get_logger().info(f'  Terrain range: {config["terrain_detection"]["min_threshold"]}-{config["terrain_detection"]["max_threshold"]} (when robot detection enabled)')
+        self.get_logger().info(f'  Frame skip: {config["frame_skip"]} (process every {config["frame_skip"]} frame{"s" if config["frame_skip"] > 1 else ""})')
         self.get_logger().info(f'  Sonar orientation (deg): roll={self.get_parameter("sonar_orientation.roll").value}, '
                               f'pitch={self.get_parameter("sonar_orientation.pitch").value}, '
                               f'yaw={self.get_parameter("sonar_orientation.yaw").value}')
@@ -299,6 +371,24 @@ class SonarMapperNode(Node):
             sonar_msg: Sonar image message
             odom_msg: Odometry message
         """
+        self.frame_count += 1
+        
+        # Frame skipping logic
+        if self.frame_count % self.frame_skip != 0:
+            # Show OpenCV visualization even for skipped frames if enabled
+            if self.show_opencv_visualization:
+                try:
+                    if sonar_msg.encoding == 'mono8' or sonar_msg.encoding == '8UC1':
+                        sonar_image = self.bridge.imgmsg_to_cv2(sonar_msg, desired_encoding='mono8')
+                    elif sonar_msg.encoding == 'mono16' or sonar_msg.encoding == '16UC1':
+                        sonar_image = self.bridge.imgmsg_to_cv2(sonar_msg, desired_encoding='mono16')
+                        sonar_image = (sonar_image / 256).astype(np.uint8)
+                    else:
+                        return
+                    self.visualize_with_threshold(sonar_image)
+                except Exception:
+                    pass
+            return
         # Convert ROS Image to numpy array
         try:
             # Handle different encodings
@@ -331,8 +421,6 @@ class SonarMapperNode(Node):
         
         # Process the sonar image
         stats = self.mapper.process_sonar_image(sonar_image, position, orientation)
-        
-        self.frame_count += 1
         
         # Show OpenCV visualization if enabled
         if self.show_opencv_visualization:
@@ -402,6 +490,12 @@ class SonarMapperNode(Node):
             # Publish as PointCloud2
             if result['num_occupied'] > 0:
                 self.publish_pointcloud2(result['points'], result['probabilities'])
+        
+        # Publish robot detections if enabled
+        if self.enable_robot_detection:
+            robot_detections = result.get('robot_detections', [])
+            if len(robot_detections) > 0:
+                self.publish_robot_detections(robot_detections)
     
     def publish_pointcloud2(self, points: np.ndarray, probabilities: np.ndarray):
         """
@@ -444,6 +538,49 @@ class SonarMapperNode(Node):
         
         # Publish
         self.pc_pub.publish(cloud)
+    
+    def publish_robot_detections(self, robot_points):
+        """
+        Publish robot detection PointCloud2 message
+        
+        Args:
+            robot_points: List of tuples (point, intensity) for robot detections
+        """
+        if not self.robot_pub or len(robot_points) == 0:
+            return
+        
+        header = Header()
+        header.stamp = self.get_clock().now().to_msg()
+        header.frame_id = self.map_frame_id
+        
+        # Create PointCloud2 message
+        fields = [
+            PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
+            PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
+            PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
+            PointField(name='intensity', offset=12, datatype=PointField.FLOAT32, count=1)
+        ]
+        
+        cloud = PointCloud2()
+        cloud.header = header
+        cloud.height = 1
+        cloud.width = len(robot_points)
+        cloud.fields = fields
+        cloud.is_bigendian = False
+        cloud.point_step = 16
+        cloud.row_step = cloud.point_step * cloud.width
+        cloud.is_dense = True
+        
+        # Pack data
+        data = []
+        for point, intensity in robot_points:
+            data.append(struct.pack('ffff',
+                                   point[0], point[1], point[2], intensity))
+        
+        cloud.data = b''.join(data)
+        
+        # Publish
+        self.robot_pub.publish(cloud)
     
     def publish_marker_array(self, result: dict):
         """

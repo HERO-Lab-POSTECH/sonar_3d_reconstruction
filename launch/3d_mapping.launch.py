@@ -43,6 +43,7 @@ def generate_launch_description():
     bag_playback_rate = LaunchConfiguration('bag_playback_rate')
     record_bag = LaunchConfiguration('record_bag')
     record_output_path = LaunchConfiguration('record_output_path')
+    record_topics = LaunchConfiguration('record_topics')
     
     # Sonar orientation parameters
     sonar_roll = LaunchConfiguration('sonar_orientation.roll')
@@ -88,14 +89,20 @@ def generate_launch_description():
     
     declare_record_bag_cmd = DeclareLaunchArgument(
         'record_bag',
-        default_value='false',
+        default_value=str(yaml_params.get('record_bag', False)),
         description='Record ROS2 bag file during mapping'
     )
     
     declare_record_output_path_cmd = DeclareLaunchArgument(
         'record_output_path',
-        default_value='/workspace/data/recorded_mapping',
+        default_value=yaml_params.get('record_output_path', '/workspace/data/recorded_mapping'),
         description='Path to save recorded bag file'
+    )
+    
+    declare_record_topics_cmd = DeclareLaunchArgument(
+        'record_topics',
+        default_value=yaml_params.get('record_topics', 'all'),
+        description='Topics to record: "all" or comma-separated list'
     )
     
     # Declare sonar orientation arguments
@@ -170,11 +177,25 @@ def generate_launch_description():
         condition=IfCondition(play_bag)
     )
     
-    # Bag recorder process
-    bag_recorder = ExecuteProcess(
+    # Bag recorder process for all topics
+    bag_recorder_all = ExecuteProcess(
         cmd=['ros2', 'bag', 'record', '-a', '-o', record_output_path],
         output='screen',
-        condition=IfCondition(record_bag)
+        condition=IfCondition(
+            PythonExpression([record_bag, " and '", record_topics, "' == 'all'"])
+        )
+    )
+    
+    # Bag recorder process for specific topics
+    bag_recorder_specific = ExecuteProcess(
+        cmd=['bash', '-c', [
+            'topics=$(echo "', record_topics, '" | tr "," " "); ',
+            'ros2 bag record $topics -o ', record_output_path
+        ]],
+        output='screen',
+        condition=IfCondition(
+            PythonExpression([record_bag, " and '", record_topics, "' != 'all'"])
+        )
     )
     
     # Create launch description
@@ -189,6 +210,7 @@ def generate_launch_description():
     ld.add_action(declare_bag_playback_rate_cmd)
     ld.add_action(declare_record_bag_cmd)
     ld.add_action(declare_record_output_path_cmd)
+    ld.add_action(declare_record_topics_cmd)
     ld.add_action(declare_sonar_roll_cmd)
     ld.add_action(declare_sonar_pitch_cmd)
     ld.add_action(declare_sonar_yaw_cmd)
@@ -198,6 +220,7 @@ def generate_launch_description():
     ld.add_action(mapper_node)
     ld.add_action(rviz_node)
     ld.add_action(bag_player)
-    ld.add_action(bag_recorder)
+    ld.add_action(bag_recorder_all)
+    ld.add_action(bag_recorder_specific)
     
     return ld

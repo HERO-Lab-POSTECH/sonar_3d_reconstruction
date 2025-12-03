@@ -3,7 +3,7 @@
 <package format="3">
   <name>sonar_3d_reconstruction</name>
   <version>1.0.0</version>
-  <description>소나 센서 융합을 통한 3D 해저 지형 재구성 및 ROV 추적 시스템</description>
+  <description>3D underwater terrain reconstruction and ROV tracking system through sonar sensor fusion</description>
   <maintainer email="luckkim123@gmail.com">root</maintainer>
   <license>MIT</license>
 

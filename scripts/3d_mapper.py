@@ -18,18 +18,28 @@ import warnings
 
 # C++ 모듈 임포트 시도
 try:
-    # ROS2 install 경로에서 모듈 임포트
+    # ROS2 install 경로에서 직접 모듈 임포트
     import sys
-    install_path = "/workspace/ros2_ws/install/sonar_3d_reconstruction/local/lib/python3.10/dist-packages"
-    if install_path not in sys.path:
-        sys.path.insert(0, install_path)
+    import importlib.util
     
-    from sonar_3d_reconstruction.sonar_3d_reconstruction_cpp import ProbabilityUpdater, MemoryStats
+    install_path = "/workspace/ros2_ws/install/sonar_3d_reconstruction/local/lib/python3.10/dist-packages"
+    cpp_file = f"{install_path}/sonar_3d_reconstruction/sonar_3d_reconstruction_cpp.cpython-310-x86_64-linux-gnu.so"
+    
+    # 직접 로드 방식
+    spec = importlib.util.spec_from_file_location("sonar_3d_reconstruction_cpp", cpp_file)
+    cpp_module = importlib.util.module_from_spec(spec)
+    sys.modules["sonar_3d_reconstruction_cpp"] = cpp_module
+    spec.loader.exec_module(cpp_module)
+    
+    ProbabilityUpdater = cpp_module.ProbabilityUpdater
+    MemoryStats = cpp_module.MemoryStats
+    
     CPP_MODULE_AVAILABLE = True
     print("[3D Mapper] C++ ProbabilityUpdater 모듈 로드 성공")
-except ImportError:
+except Exception as e:
     CPP_MODULE_AVAILABLE = False
     print("[3D Mapper] C++ 모듈 없음 - Python SimpleOctree 사용")
+    print(f"  Error: {e}")
 
 
 class SimpleOctree:
@@ -37,30 +47,46 @@ class SimpleOctree:
     Sparse voxel storage using dictionary with dynamic expansion
     Stores log-odds values for each voxel with adaptive updating
     """
-    
-    def __init__(self, resolution: float = 0.03, dynamic_expansion: bool = True):
+
+    def __init__(self, resolution: float = 0.03, dynamic_expansion: bool = True,
+                 probability_update_method: str = 'log_odds', intensity_max: int = 255):
         """
         Initialize octree with given resolution
-        
+
         Args:
             resolution: Size of each voxel in meters
             dynamic_expansion: Enable dynamic map expansion
+            probability_update_method: 'log_odds' or 'weighted_average'
+            intensity_max: Maximum intensity value for normalization (default 255)
         """
         self.resolution = resolution
         self.voxels = defaultdict(float)  # Store log-odds values
+        self.observation_counts = defaultdict(int)  # Track observation counts per voxel
         self.dynamic_expansion = dynamic_expansion
-        
+
+        # Probability update method
+        self.probability_update_method = probability_update_method
+        self.intensity_max = intensity_max
+
         # Map bounds (for dynamic expansion)
         self.min_bounds = np.array([float('inf')] * 3)
         self.max_bounds = np.array([-float('inf')] * 3)
-        
+
         # Log-odds parameters (will be set from config)
         self.log_odds_occupied = 1.5      # Log-odds increment for occupied
         self.log_odds_free = -2.0         # Log-odds decrement for free space
         self.log_odds_min = -10.0         # Minimum log-odds (clamping)
         self.log_odds_max = 10.0          # Maximum log-odds (clamping)
         self.log_odds_threshold = 0.0     # Threshold for considering occupied
-        
+
+        # Multi-threshold parameters
+        self.occupied_threshold = 0.7     # Probability threshold for occupied
+        self.free_threshold = 0.3         # Probability threshold for free
+
+        # Convert thresholds to log-odds
+        self.log_odds_occupied_thresh = np.log(self.occupied_threshold / (1.0 - self.occupied_threshold))
+        self.log_odds_free_thresh = np.log(self.free_threshold / (1.0 - self.free_threshold))
+
         # Adaptive update parameters
         self.adaptive_update = True       # Enable adaptive updating
         self.adaptive_threshold = 0.5     # Protection threshold
@@ -96,45 +122,170 @@ class SimpleOctree:
         z = (key[2] + 0.5) * self.resolution
         return np.array([x, y, z])
     
-    def update_voxel(self, point: np.ndarray, log_odds_update: float, adaptive: bool = True):
+    def update_voxel(self, point: np.ndarray, log_odds_update: float, adaptive: bool = True,
+                     intensity: Optional[float] = None):
         """
         Update voxel log-odds value with optional adaptive updating
-        
+
         Args:
             point: [x, y, z] numpy array in world coordinates
-            log_odds_update: Log-odds increment/decrement
+            log_odds_update: Log-odds increment/decrement (ignored for weighted_average method)
             adaptive: If True, use adaptive updating for occupied updates
+            intensity: Observed intensity value (for weighted_average method)
         """
         key = self.world_to_key(point[0], point[1], point[2])
-        
-        # Adaptive update: reduce occupied updates for voxels that are likely free
-        if adaptive and self.adaptive_update and log_odds_update > 0:
-            current_log_odds = self.voxels.get(key, 0.0)
-            current_prob = 1.0 / (1.0 + np.exp(-current_log_odds))
-            
-            # Linear interpolation for adaptive update
-            if current_prob <= self.adaptive_threshold:
-                update_scale = (current_prob / self.adaptive_threshold) * self.adaptive_max_ratio
-                log_odds_update *= update_scale
-        
-        # Apply update
-        if key not in self.voxels:
-            self.voxels[key] = 0.0
-        self.voxels[key] += log_odds_update
-        
-        # Clamp to prevent overflow
-        self.voxels[key] = np.clip(self.voxels[key], self.log_odds_min, self.log_odds_max)
-        
+
+        # Get current values
+        old_log_odds = self.voxels.get(key, 0.0)
+        old_prob = 1.0 / (1.0 + np.exp(-old_log_odds))
+        n = self.observation_counts.get(key, 0)
+
+        # Use weighted average method if enabled and intensity provided
+        if self.probability_update_method == 'weighted_average' and intensity is not None:
+            # Convert intensity to probability
+            threshold = self.intensity_threshold if hasattr(self, 'intensity_threshold') else 35
+            intensity_clamped = np.clip(intensity, threshold, self.intensity_max)
+
+            # Normalize: [threshold, intensity_max] -> [0.7, 0.95]
+            # More aggressive mapping: threshold intensity -> 0.7 prob, max intensity -> 0.95 prob
+            normalized_ratio = (intensity_clamped - threshold) / (self.intensity_max - threshold)
+            obs_prob = 0.7 + 0.25 * normalized_ratio
+
+            # Weighted average: new_prob = (n * old_prob + obs_prob) / (n + 1)
+            new_prob = (n * old_prob + obs_prob) / (n + 1)
+
+            # Convert back to log-odds
+            if new_prob >= 0.9999:
+                new_log_odds = self.log_odds_max
+            elif new_prob <= 0.0001:
+                new_log_odds = self.log_odds_min
+            else:
+                new_log_odds = np.log(new_prob / (1.0 - new_prob))
+
+            # Set the new value (not increment)
+            self.voxels[key] = np.clip(new_log_odds, self.log_odds_min, self.log_odds_max)
+
+        else:
+            # Standard log-odds update (additive)
+            # Adaptive update: reduce occupied updates for voxels that are likely free
+            if adaptive and self.adaptive_update and log_odds_update > 0:
+                current_prob = 1.0 / (1.0 + np.exp(-old_log_odds))
+
+                # Linear interpolation for adaptive update
+                if current_prob <= self.adaptive_threshold:
+                    update_scale = (current_prob / self.adaptive_threshold) * self.adaptive_max_ratio
+                    log_odds_update *= update_scale
+
+            # Apply update
+            if key not in self.voxels:
+                self.voxels[key] = 0.0
+            self.voxels[key] += log_odds_update
+
+            # Clamp to prevent overflow
+            self.voxels[key] = np.clip(self.voxels[key], self.log_odds_min, self.log_odds_max)
+
+        # Increment observation count after update
+        self.observation_counts[key] = n + 1
+
         # Update bounds for dynamic expansion
         if self.dynamic_expansion:
             self.min_bounds = np.minimum(self.min_bounds, point)
             self.max_bounds = np.maximum(self.max_bounds, point)
     
+    def calculate_weighted_average_update(self, intensity: float, observation_count: int) -> float:
+        """
+        Calculate weighted average log-odds update based on intensity and observation count
+        Based on voxelmap_fusion approach (Voxel.py:71-72)
+
+        Args:
+            intensity: Observed intensity value (threshold ~ intensity_max range)
+            observation_count: Number of times this voxel has been observed
+
+        Returns:
+            Log-odds update value
+        """
+        # Normalize intensity to probability range [0.5, 1.0]
+        # intensity_threshold is stored as self.intensity_threshold in parent mapper
+        threshold = self.intensity_threshold if hasattr(self, 'intensity_threshold') else 35
+
+        # Clamp intensity to valid range
+        intensity = np.clip(intensity, threshold, self.intensity_max)
+
+        # Normalize: [threshold, intensity_max] -> [0.5, 1.0]
+        normalized_prob = 0.5 + 0.5 * (intensity - threshold) / (self.intensity_max - threshold)
+
+        # Calculate weight: decreases with more observations
+        # weight = 1/(n+1) means first observation has weight 1, second has 1/2, etc.
+        weight = 1.0 / observation_count
+
+        # Convert normalized probability to log-odds
+        if normalized_prob >= 1.0:
+            normalized_log_odds = self.log_odds_occupied
+        elif normalized_prob <= 0.0:
+            normalized_log_odds = self.log_odds_free
+        else:
+            normalized_log_odds = np.log(normalized_prob / (1.0 - normalized_prob))
+
+        # Apply weight to the update
+        log_odds_update = normalized_log_odds * weight
+
+        return log_odds_update
+
+    def _classify_state(self, log_odds: float) -> str:
+        """
+        Classify voxel state based on log-odds value
+
+        Args:
+            log_odds: Log-odds value
+
+        Returns:
+            'free', 'unknown', or 'occupied'
+        """
+        if log_odds < self.log_odds_free_thresh:
+            return 'free'
+        elif log_odds > self.log_odds_occupied_thresh:
+            return 'occupied'
+        else:
+            return 'unknown'
+
+    def update_voxel_with_state_tracking(self, point: np.ndarray, log_odds_update: float,
+                                         adaptive: bool = True, intensity: Optional[float] = None) -> str:
+        """
+        Update voxel with state change tracking
+
+        Args:
+            point: [x, y, z] numpy array in world coordinates
+            log_odds_update: Log-odds increment/decrement
+            adaptive: If True, use adaptive updating
+            intensity: Observed intensity value
+
+        Returns:
+            State change: 'free->occupied', 'occupied->free', or 'no_change'
+        """
+        key = self.world_to_key(point[0], point[1], point[2])
+
+        # Get previous state
+        old_log_odds = self.voxels.get(key, 0.0)
+        old_state = self._classify_state(old_log_odds)
+
+        # Update voxel
+        self.update_voxel(point, log_odds_update, adaptive, intensity)
+
+        # Get new state
+        new_log_odds = self.voxels[key]
+        new_state = self._classify_state(new_log_odds)
+
+        # Detect state change
+        if old_state != new_state:
+            return f"{old_state}->{new_state}"
+        else:
+            return "no_change"
+
     def get_log_odds(self, x: float, y: float, z: float) -> float:
         """Get log-odds value for a voxel"""
         key = self.world_to_key(x, y, z)
         return self.voxels.get(key, 0.0)
-    
+
     def get_probability(self, x: float, y: float, z: float) -> float:
         """Get probability from log-odds value"""
         log_odds = self.get_log_odds(x, y, z)
@@ -168,35 +319,43 @@ class SimpleOctree:
         
         return occupied
     
-    def get_all_voxels_classified(self, min_probability: float = 0.7) -> Dict[str, List]:
+    def get_all_voxels_classified(self, occupied_threshold: Optional[float] = None,
+                                   free_threshold: Optional[float] = None) -> Dict[str, List]:
         """
         Get all voxels classified as free, unknown, or occupied
-        
+
         Args:
-            min_probability: Minimum probability to consider occupied
-            
+            occupied_threshold: Probability threshold for occupied (uses self.occupied_threshold if None)
+            free_threshold: Probability threshold for free (uses self.free_threshold if None)
+
         Returns:
             Dictionary with 'free', 'unknown', 'occupied' lists
         """
         free = []
         unknown = []
         occupied = []
-        
-        # Thresholds
-        free_threshold = np.log(0.3 / 0.7)  # prob < 0.3 = free
-        occupied_threshold = np.log(min_probability / (1.0 - min_probability))
-        
+
+        # Use instance thresholds if not provided
+        if occupied_threshold is None:
+            occupied_threshold = self.occupied_threshold
+        if free_threshold is None:
+            free_threshold = self.free_threshold
+
+        # Convert probability thresholds to log-odds
+        log_odds_occupied_thresh = np.log(occupied_threshold / (1.0 - occupied_threshold))
+        log_odds_free_thresh = np.log(free_threshold / (1.0 - free_threshold))
+
         for key, log_odds in self.voxels.items():
             point = self.key_to_world(key)
             probability = 1.0 / (1.0 + np.exp(-log_odds))
-            
-            if log_odds < free_threshold:
+
+            if log_odds < log_odds_free_thresh:
                 free.append((point, probability))
-            elif log_odds > occupied_threshold:
+            elif log_odds > log_odds_occupied_thresh:
                 occupied.append((point, probability))
             else:
                 unknown.append((point, probability))
-        
+
         return {
             'free': free,
             'unknown': unknown,
@@ -204,8 +363,9 @@ class SimpleOctree:
         }
     
     def clear(self):
-        """Clear all voxels"""
+        """Clear all voxels and observation counts"""
         self.voxels.clear()
+        self.observation_counts.clear()
         self.min_bounds = np.array([float('inf')] * 3)
         self.max_bounds = np.array([-float('inf')] * 3)
 
@@ -231,28 +391,53 @@ class SonarTo3DMapper:
             'max_range': 10.0,             # meters
             'min_range': 0.5,              # meters
             'intensity_threshold': 35,     # 0-255 scale
+
+            # Terrain detection parameters (for robot detection mode)
+            'terrain_detection': {
+                'min_threshold': 80,
+                'max_threshold': 180
+            },
+
+            # Robot detection parameters
+            'enable_robot_detection': False,
+            'robot_detection': {
+                'min_threshold': 180,
+                'topic': '/sonar_robot_detections'
+            },
+
             'image_width': 512,            # bearings
             'image_height': 500,           # ranges
-            
+
             # Sonar mounting (relative to base_link)
             'sonar_position': [0.0, 0.0, -0.5],  # xyz
             'sonar_orientation': [0.0, 1.5708, 0.0],  # rpy (0, 90deg, 0)
-            
+
             # Octree parameters
             'voxel_resolution': 0.05,      # meters
             'min_probability': 0.6,        # for occupied
             'dynamic_expansion': True,
-            
+
+            # Probability update method
+            'probability_update_method': 'log_odds',  # 'log_odds' or 'weighted_average'
+            'intensity_max': 255,          # Maximum intensity value for normalization
+
+            # Multi-threshold parameters
+            'occupied_threshold': 0.7,     # Probability threshold for occupied
+            'free_threshold': 0.3,         # Probability threshold for free
+
             # Adaptive update
             'adaptive_update': True,
             'adaptive_threshold': 0.5,
             'adaptive_max_ratio': 0.3,
-            
+
             # Log-odds parameters
             'log_odds_occupied': 1.5,
             'log_odds_free': -2.0,
             'log_odds_min': -10.0,
             'log_odds_max': 10.0,
+
+            # Processing parameters
+            'frame_skip': 1,  # Process every N frames
         }
         
         # Update with provided config
@@ -265,6 +450,18 @@ class SonarTo3DMapper:
         self.max_range = default_config['max_range']
         self.min_range = default_config['min_range']
         self.intensity_threshold = default_config['intensity_threshold']
+        
+        # Terrain detection parameters  
+        self.terrain_min_threshold = default_config['terrain_detection']['min_threshold']
+        self.terrain_max_threshold = default_config['terrain_detection']['max_threshold']
+        
+        # Robot detection parameters
+        self.enable_robot_detection = default_config['enable_robot_detection']
+        self.robot_min_threshold = default_config['robot_detection']['min_threshold']
+        
+        # Processing parameters
+        self.frame_skip = default_config['frame_skip']
+        
         self.image_width = default_config['image_width']
         self.image_height = default_config['image_height']
         self.voxel_resolution = default_config['voxel_resolution']
@@ -291,11 +488,11 @@ class SonarTo3DMapper:
         if self.use_cpp and CPP_MODULE_AVAILABLE:
             # Initialize C++ ProbabilityUpdater
             self.octree = ProbabilityUpdater(self.voxel_resolution)
-            
+
             # Store log-odds values for ray processing
             self.log_odds_occupied = default_config['log_odds_occupied']
             self.log_odds_free = default_config['log_odds_free']
-            
+
             # Configure C++ octree parameters
             self.octree.set_log_odds_params(
                 self.log_odds_occupied,
@@ -306,31 +503,50 @@ class SonarTo3DMapper:
                 default_config['adaptive_threshold'],
                 default_config['adaptive_max_ratio']
             )
-            
+
             # Set clamping thresholds based on log-odds
             min_prob = 1.0 / (1.0 + np.exp(-default_config['log_odds_min']))
             max_prob = 1.0 / (1.0 + np.exp(-default_config['log_odds_max']))
             self.octree.set_clamping_thresholds(min_prob, max_prob)
-            
+
             print(f"[3D Mapper] C++ ProbabilityUpdater 사용 (해상도: {self.voxel_resolution}m)")
         else:
-            # Initialize Python SimpleOctree  
-            self.octree = SimpleOctree(self.voxel_resolution, self.dynamic_expansion)
-            
+            # Initialize Python SimpleOctree
+            self.octree = SimpleOctree(
+                self.voxel_resolution,
+                self.dynamic_expansion,
+                default_config['probability_update_method'],
+                default_config['intensity_max']
+            )
+
             # Store log-odds values for both approaches
             self.log_odds_occupied = default_config['log_odds_occupied']
             self.log_odds_free = default_config['log_odds_free']
-            
+
             # Configure Python octree parameters
             self.octree.log_odds_occupied = self.log_odds_occupied
             self.octree.log_odds_free = self.log_odds_free
             self.octree.log_odds_min = default_config['log_odds_min']
             self.octree.log_odds_max = default_config['log_odds_max']
+            self.octree.occupied_threshold = default_config['occupied_threshold']
+            self.octree.free_threshold = default_config['free_threshold']
             self.octree.adaptive_update = default_config['adaptive_update']
             self.octree.adaptive_threshold = default_config['adaptive_threshold']
             self.octree.adaptive_max_ratio = default_config['adaptive_max_ratio']
-            
+
+            # Store intensity threshold for weighted average method
+            self.octree.intensity_threshold = self.intensity_threshold
+
+            # Recalculate log-odds thresholds
+            self.octree.log_odds_occupied_thresh = np.log(
+                default_config['occupied_threshold'] / (1.0 - default_config['occupied_threshold'])
+            )
+            self.octree.log_odds_free_thresh = np.log(
+                default_config['free_threshold'] / (1.0 - default_config['free_threshold'])
+            )
+
             print(f"[3D Mapper] Python SimpleOctree 사용 (해상도: {self.voxel_resolution}m)")
+            print(f"  업데이트 방식: {default_config['probability_update_method']}")
             if self.use_cpp:
                 print("  주의: C++ 모듈을 요청했지만 사용할 수 없음")
         
@@ -344,6 +560,10 @@ class SonarTo3DMapper:
         # Frame counter
         self.frame_count = 0
         self.processed_frame_count = 0
+        
+        # Robot detection storage
+        self.robot_detections = []  # List of (point, intensity, timestamp) tuples
+        self.robot_detection_timeout = 10.0  # seconds
         
         # Processing statistics
         self.last_processing_time = 0.0
@@ -452,18 +672,18 @@ class SonarTo3DMapper:
         z = (key[2] + 0.5) * self.voxel_resolution
         return np.array([x, y, z])
     
-    def process_sonar_ray(self, bearing_angle: float, intensity_profile: np.ndarray, 
-                          T_sonar_to_world: np.ndarray) -> List[Tuple[np.ndarray, float, str]]:
+    def process_sonar_ray(self, bearing_angle: float, intensity_profile: np.ndarray,
+                          T_sonar_to_world: np.ndarray) -> List[Tuple[np.ndarray, float, str, Optional[float]]]:
         """
         Process a single sonar ray and return voxel updates
-        
+
         Args:
             bearing_angle: Horizontal angle in radians
             intensity_profile: 1D array of intensities along range
             T_sonar_to_world: 4x4 transform matrix
-            
+
         Returns:
-            List of (point, log_odds_update, type) tuples
+            List of (point, log_odds_update, type, intensity) tuples
         """
         updates = []
         
@@ -472,13 +692,14 @@ class SonarTo3DMapper:
         range_resolution = self.max_range / len(intensity_profile)
         
         for r_idx, intensity in enumerate(intensity_profile):
-            if intensity > self.intensity_threshold:
+            range_m = r_idx * range_resolution
+            if intensity > self.intensity_threshold and range_m >= self.min_range:
                 first_hit_idx = r_idx
                 break
         
-        # If no hit, process entire ray as free
+        # If no hit, skip this ray (no update)
         if first_hit_idx == -1:
-            first_hit_idx = len(intensity_profile)
+            return updates  # Return empty updates - no information available
         
         # Calculate vertical aperture parameters
         half_aperture = self.vertical_aperture / 2
@@ -509,14 +730,21 @@ class SonarTo3DMapper:
                 # Apply Z-axis filter if enabled
                 if self.z_filter_enabled and pt_world[2] < self.z_filter_min:
                     continue
-                
-                updates.append((pt_world[:3], self.log_odds_free, 'free'))
+
+                updates.append((pt_world[:3], self.log_odds_free, 'free', None))
         
         # Process occupied regions (dense)
         if first_hit_idx < len(intensity_profile):
             # Find all high intensity regions
             for r_idx in range(first_hit_idx, min(first_hit_idx + 50, len(intensity_profile))):
-                if intensity_profile[r_idx] > self.intensity_threshold:
+                intensity = intensity_profile[r_idx]
+                
+                # Multi-threshold processing
+                is_robot = (self.enable_robot_detection and intensity >= self.robot_min_threshold)
+                is_terrain = (self.terrain_min_threshold <= intensity <= self.terrain_max_threshold if self.enable_robot_detection 
+                             else intensity > self.intensity_threshold)
+                
+                if is_robot or is_terrain:
                     range_m = r_idx * range_resolution
                     
                     # Check both min and max range
@@ -544,8 +772,14 @@ class SonarTo3DMapper:
                         # Apply Z-axis filter if enabled
                         if self.z_filter_enabled and pt_world[2] < self.z_filter_min:
                             continue
-                        
-                        updates.append((pt_world[:3], self.log_odds_occupied, 'occupied'))
+
+                        # Add to regular map updates with intensity value
+                        updates.append((pt_world[:3], self.log_odds_occupied, 'occupied', float(intensity)))
+
+                        # Store robot detection separately if enabled
+                        if is_robot:
+                            current_time = time.time()
+                            self.robot_detections.append((pt_world[:3].copy(), intensity, current_time))
         
         return updates
     
@@ -566,6 +800,14 @@ class SonarTo3DMapper:
         self.frame_count += 1
         start_time = time.time()
         self.processed_frame_count += 1
+        
+        # Clean up old robot detections (older than 10 seconds)
+        if self.enable_robot_detection and self.robot_detections:
+            current_time = start_time
+            self.robot_detections = [
+                (point, intensity, timestamp) for point, intensity, timestamp in self.robot_detections
+                if current_time - timestamp <= self.robot_detection_timeout
+            ]
         
         # Ensure image is numpy array
         if not isinstance(polar_image, np.ndarray):
@@ -588,27 +830,30 @@ class SonarTo3DMapper:
         T_sonar_to_world = T_base_to_world @ self.T_sonar_to_base
         
         # Accumulate updates per voxel
-        voxel_updates = defaultdict(lambda: {'sum': 0.0, 'count': 0, 'type': 'unknown'})
-        
+        voxel_updates = defaultdict(lambda: {'sum': 0.0, 'count': 0, 'type': 'unknown', 'intensity': None})
+
         # Process subset of bearings for efficiency
         bearing_step = max(1, bearing_bins // 256)
-        
+
         for b_idx in range(0, bearing_bins, bearing_step):
             bearing_angle = self.bearing_angles[b_idx]
-            
+
             # Skip bearings outside valid FOV
             if not self.is_bearing_in_valid_fov(bearing_angle):
                 continue
-            
+
             # Process this ray
             intensity_profile = polar_image[:, b_idx]
             ray_updates = self.process_sonar_ray(bearing_angle, intensity_profile, T_sonar_to_world)
-            
+
             # Accumulate updates
-            for point, log_odds, update_type in ray_updates:
+            for point, log_odds, update_type, intensity in ray_updates:
                 key = self.world_to_key(point[0], point[1], point[2])
                 if voxel_updates[key]['type'] != 'occupied':  # Occupied has priority
                     voxel_updates[key]['type'] = update_type
+                    # Store intensity for weighted average method
+                    if intensity is not None:
+                        voxel_updates[key]['intensity'] = intensity
                 voxel_updates[key]['sum'] += log_odds
                 voxel_updates[key]['count'] += 1
         
@@ -655,12 +900,13 @@ class SonarTo3DMapper:
                 if update_info['count'] > 0:
                     avg_update = update_info['sum'] / update_info['count']
                     point = self.key_to_world(key)
-                    
+                    intensity_val = update_info.get('intensity', None)
+
                     if update_info['type'] == 'occupied':
-                        self.octree.update_voxel(point, avg_update, adaptive=True)
+                        self.octree.update_voxel(point, avg_update, adaptive=True, intensity=intensity_val)
                         num_occupied += 1
                     elif update_info['type'] == 'free':
-                        self.octree.update_voxel(point, avg_update, adaptive=False)
+                        self.octree.update_voxel(point, avg_update, adaptive=False, intensity=None)
                         num_free += 1
         
         # Calculate processing time
@@ -721,13 +967,14 @@ class SonarTo3DMapper:
                 'frame_count': self.frame_count,
                 'processed_count': self.processed_frame_count,
                 'memory_mb': memory_stats.memory_mb,
-                'memory_efficiency': memory_stats.memory_efficiency
+                'memory_efficiency': memory_stats.memory_efficiency,
+                'robot_detections': [(point, intensity) for point, intensity, timestamp in self.robot_detections] if self.enable_robot_detection else []
             }
         else:
             # Python SimpleOctree 사용
             if include_free:
-                classified = self.octree.get_all_voxels_classified(self.min_probability)
-                
+                classified = self.octree.get_all_voxels_classified()
+
                 return {
                     'occupied': classified['occupied'],
                     'free': classified['free'],
@@ -741,7 +988,8 @@ class SonarTo3DMapper:
                     'bounds': {
                         'min': self.octree.min_bounds.copy() if self.octree.dynamic_expansion else None,
                         'max': self.octree.max_bounds.copy() if self.octree.dynamic_expansion else None
-                    }
+                    },
+                    'robot_detections': [(point, intensity) for point, intensity, timestamp in self.robot_detections] if self.enable_robot_detection else []
                 }
             else:
                 occupied_voxels = self.octree.get_occupied_voxels(self.min_probability)
@@ -759,12 +1007,14 @@ class SonarTo3DMapper:
                     'num_voxels': len(self.octree.voxels),
                     'num_occupied': len(occupied_voxels),
                     'frame_count': self.frame_count,
-                    'processed_count': self.processed_frame_count
+                    'processed_count': self.processed_frame_count,
+                    'robot_detections': [(point, intensity) for point, intensity, timestamp in self.robot_detections] if self.enable_robot_detection else []
                 }
     
     def reset_map(self):
         """Reset the probabilistic map"""
         self.octree.clear()
+        self.robot_detections.clear()  # Clear robot detections as well
         self.frame_count = 0
         self.processed_frame_count = 0
         self.total_processing_time = 0.0

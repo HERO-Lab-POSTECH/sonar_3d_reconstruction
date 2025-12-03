@@ -91,25 +91,65 @@ public:
      */
     void clear();
 
+    /**
+     * Set thresholds for weighted average probability update
+     * @param occupied_thresh Occupied threshold (default: 0.7)
+     * @param free_thresh Free threshold (default: 0.3)
+     */
+    void set_thresholds(double occupied_thresh, double free_thresh);
+
+    /**
+     * Set intensity normalization parameters
+     * @param intensity_threshold Minimum intensity to consider (default: 35.0)
+     * @param intensity_max Maximum intensity value (default: 255.0)
+     */
+    void set_intensity_params(double intensity_threshold, double intensity_max);
+
+    /**
+     * Batch update using weighted average method (voxelmap_fusion style)
+     * @param points Nx3 matrix of point coordinates
+     * @param intensities N-vector of intensity values
+     * @param is_occupied N-vector of boolean flags (currently unused but kept for interface compatibility)
+     */
+    void batch_update_weighted_average(
+        const Eigen::MatrixXd& points,
+        const Eigen::VectorXd& intensities,
+        const std::vector<bool>& is_occupied
+    );
+
+    /**
+     * Get observation count for a voxel
+     * @param key Voxel key
+     * @return Observation count
+     */
+    int get_observation_count(const std::string& key) const;
+
 private:
     std::unique_ptr<OctreeMapper> octree_mapper_;
-    
+
     // Alternative: Direct log-odds storage (like Python SimpleOctree)
     std::unordered_map<std::string, double> voxels_log_odds_;  // key -> log_odds
     double resolution_;
-    
+
     // Log-odds parameters
     double log_odds_occupied_;
     double log_odds_free_;
-    
+
     // Adaptive update parameters
     bool adaptive_enabled_;
     double adaptive_threshold_;
     double adaptive_max_ratio_;
-    
+
     // Clamping thresholds
     double min_probability_;
     double max_probability_;
+
+    // Weighted average parameters
+    std::unordered_map<std::string, int> observation_counts_;  // key -> observation count
+    double occupied_threshold_;  // Occupied threshold (0.7)
+    double free_threshold_;  // Free threshold (0.3)
+    double intensity_max_;  // Maximum intensity value (255.0)
+    double intensity_threshold_;  // Minimum intensity threshold (35.0)
     
     /**
      * Convert log-odds to probability
