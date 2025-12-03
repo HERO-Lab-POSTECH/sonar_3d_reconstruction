@@ -1,0 +1,18 @@
+# Launch Configuration for Bag Playback
+# These are launch-file only parameters (not node parameters)
+
+sonar_3d_mapper:
+  ros__parameters:
+    # Launch options
+    launch_fast_lio: true
+    launch_rviz: true
+
+    # Bag playback
+    play_bag: true
+    bag_file: "/workspace/data/4_yeondong_hang/20251029_blueboat_sonar_lidar/tilt30-range10_v1"
+    bag_playback_rate: 1.0
+
+    # Bag recording (optional)
+    record_bag: false
+    record_output_path: "/workspace/data/recorded_mapping"
+    record_topics: "all"

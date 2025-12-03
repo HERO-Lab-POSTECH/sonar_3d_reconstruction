@@ -1,0 +1,49 @@
+# Common Parameters for 3D Sonar Mapper
+# These are shared across all probability update methods
+
+sonar_3d_mapper:
+  ros__parameters:
+    #===== Sonar Sensor =====
+    horizontal_fov: 130.0        # degrees
+    vertical_aperture: 20.0      # degrees
+    max_range: 10.0              # meters
+    min_range: 1.0               # meters
+    intensity_threshold: 120     # 0-255
+
+    #===== Sonar Mounting (relative to base_link) =====
+    sonar_position:
+      x: 0.0
+      y: 0.0
+      z: -0.1
+    sonar_orientation:
+      roll: 0.0                  # degrees
+      pitch: 30.0                # degrees (90 = pointing down)
+      yaw: 0.0                   # degrees
+
+    #===== Voxel Map =====
+    voxel_resolution: 0.05       # meters
+    min_probability: 0.7
+    use_cpp_backend: true
+
+    #===== Multi-threshold Classification =====
+    occupied_threshold: 0.7      # prob >= this = occupied
+    free_threshold: 0.3          # prob <= this = free
+
+    #===== Processing =====
+    frame_skip: 5                # process every N frames
+
+    #===== ROS2 Interface =====
+    sonar_frame_id: "sonar_link"
+    base_frame_id: "body"
+    map_frame_id: "camera_init"
+    publish_tf: false
+
+    sonar_topic: "/sensor/sonar/oculus/m3000d/image"
+    odometry_topic: "/fast_lio/odometry"
+    pointcloud_topic: "/sonar_3d_map"
+    marker_topic: "/sonar_3d_map_markers"
+
+    #===== Visualization =====
+    show_free_space: false
+    show_opencv_visualization: true
+    use_sim_time: true
