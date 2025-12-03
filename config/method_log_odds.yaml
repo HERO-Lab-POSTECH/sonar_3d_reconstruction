@@ -1,10 +1,9 @@
 # Log-Odds Bayesian Method (traditional)
 # Use with: --params-file common.yaml --params-file method_log_odds.yaml
+# Set probability_update_method in common.yaml
 
 sonar_3d_mapper:
   ros__parameters:
-    probability_update_method: "log_odds"
-
     # Log-odds parameters
     log_odds_occupied: 0.5
     log_odds_free: -1.0

@@ -1,9 +1,9 @@
 # Weighted Average Method (voxelmap_fusion style)
 # Use with: --params-file common.yaml --params-file method_weighted_average.yaml
+# Set probability_update_method in common.yaml
 
 sonar_3d_mapper:
   ros__parameters:
-    probability_update_method: "weighted_average"
     intensity_max: 255
 
     # Adaptive update (recommended for weighted average)
