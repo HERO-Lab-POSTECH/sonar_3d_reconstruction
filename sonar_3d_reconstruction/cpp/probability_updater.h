@@ -4,6 +4,7 @@
 #include "octree_mapper.h"
 #include <Eigen/Dense>
 #include <vector>
+#include <unordered_set>
 
 namespace sonar_3d_reconstruction
 {
@@ -124,6 +125,17 @@ public:
      */
     int get_observation_count(const std::string& key) const;
 
+    /**
+     * Enable or disable incremental synchronization
+     * @param enable True to enable incremental sync, false for full sync
+     */
+    void set_incremental_sync(bool enable);
+
+    /**
+     * Force full synchronization from voxels_log_odds_ to octree_mapper_
+     */
+    void force_full_sync();
+
 private:
     std::unique_ptr<OctreeMapper> octree_mapper_;
 
@@ -150,7 +162,11 @@ private:
     double free_threshold_;  // Free threshold (0.3)
     double intensity_max_;  // Maximum intensity value (255.0)
     double intensity_threshold_;  // Minimum intensity threshold (35.0)
-    
+
+    // Incremental sync parameters
+    std::unordered_set<std::string> modified_keys_;  // Track modified voxels for incremental sync
+    bool enable_incremental_sync_;  // Enable incremental synchronization (default: true)
+
     /**
      * Convert log-odds to probability
      * @param log_odds Log-odds value
@@ -180,6 +196,18 @@ private:
      * @return String key for hash map
      */
     std::string world_to_key(double x, double y, double z) const;
+
+    /**
+     * Synchronize only modified voxels to octree_mapper_
+     * Complexity: O(N) where N = number of modified voxels
+     */
+    void sync_modified_voxels_to_octree();
+
+    /**
+     * Synchronize all voxels to octree_mapper_
+     * Complexity: O(M) where M = total map size
+     */
+    void sync_all_voxels_to_octree();
 };
 
 }  // namespace sonar_3d_reconstruction

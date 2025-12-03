@@ -109,28 +109,25 @@ void OctreeMapper::batch_update_with_log_odds(const Eigen::MatrixXd& points,
     // Store log-odds updates in our map for later probability calculation
     for (int i = 0; i < points.rows(); ++i) {
         double x = points(i, 0);
-        double y = points(i, 1); 
+        double y = points(i, 1);
         double z = points(i, 2);
-        
+
         // Check for valid coordinates
         if (std::isfinite(x) && std::isfinite(y) && std::isfinite(z)) {
             octomap::point3d octo_point(x, y, z);
-            
-            // Get current log-odds or initialize to 0
-            double current_log_odds = 0.0;
-            auto it = log_odds_map_.find(octo_point);
-            if (it != log_odds_map_.end()) {
-                current_log_odds = it->second;
-            }
-            
+
+            // Optimized: single hash lookup using insert_or_assign pattern
+            auto [it, inserted] = log_odds_map_.try_emplace(octo_point, 0.0);
+            double current_log_odds = it->second;
+
             // Apply update
             double new_log_odds = current_log_odds + log_odds_updates(i);
-            
+
             // Clamp to prevent overflow
             new_log_odds = std::max(log_odds_min_, std::min(log_odds_max_, new_log_odds));
-            
-            // Store in our map
-            log_odds_map_[octo_point] = new_log_odds;
+
+            // Update in place (single lookup already done)
+            it->second = new_log_odds;
             
             // Also update OctoMap for spatial queries (using probability from log-odds)
             double probability = 1.0 / (1.0 + std::exp(-new_log_odds));

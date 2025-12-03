@@ -140,7 +140,12 @@ PYBIND11_MODULE(sonar_3d_reconstruction_cpp, m) {
              "Set intensity normalization parameters")
         .def("batch_update_weighted_average", &sonar_3d_reconstruction::ProbabilityUpdater::batch_update_weighted_average,
              py::arg("points"), py::arg("intensities"), py::arg("is_occupied"),
-             "Batch update with weighted average method (voxelmap_fusion style)");
+             "Batch update with weighted average method (voxelmap_fusion style)")
+        .def("set_incremental_sync", &sonar_3d_reconstruction::ProbabilityUpdater::set_incremental_sync,
+             py::arg("enable") = true,
+             "Enable or disable incremental synchronization")
+        .def("force_full_sync", &sonar_3d_reconstruction::ProbabilityUpdater::force_full_sync,
+             "Force full synchronization from internal storage to octree");
 
     // Module version info
     m.attr("__version__") = "1.0.0";

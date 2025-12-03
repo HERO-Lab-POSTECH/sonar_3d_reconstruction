@@ -262,9 +262,11 @@ std::vector<Eigen::Vector3d> RayCasting::generate_beam_voxels(
 
 double RayCasting::normalize_angle(double angle) const
 {
-    while (angle > M_PI) angle -= 2.0 * M_PI;
-    while (angle < -M_PI) angle += 2.0 * M_PI;
-    return angle;
+    // Optimized: single fmod operation instead of while loops
+    // Handles any angle range efficiently
+    angle = std::fmod(angle + M_PI, 2.0 * M_PI);
+    if (angle < 0) angle += 2.0 * M_PI;
+    return angle - M_PI;
 }
 
 Eigen::Vector3d RayCasting::lerp(const Eigen::Vector3d& a, const Eigen::Vector3d& b, double t) const

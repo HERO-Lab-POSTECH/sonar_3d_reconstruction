@@ -21,6 +21,7 @@ ProbabilityUpdater::ProbabilityUpdater(double resolution)
     , free_threshold_(0.3)
     , intensity_max_(255.0)
     , intensity_threshold_(35.0)
+    , enable_incremental_sync_(true)
 {
     // Use direct log-odds storage (Python SimpleOctree style) for exact compatibility
     // octree_mapper_ is kept for fallback but not used
@@ -152,6 +153,8 @@ void ProbabilityUpdater::clear()
 {
     octree_mapper_->clear();
     observation_counts_.clear();
+    voxels_log_odds_.clear();
+    modified_keys_.clear();
 }
 
 void ProbabilityUpdater::set_thresholds(double occupied_thresh, double free_thresh)
@@ -226,49 +229,20 @@ void ProbabilityUpdater::batch_update_weighted_average(
         // Convert back to log-odds and store
         double new_log_odds = probability_to_log_odds(new_prob);
         voxels_log_odds_[key] = new_log_odds;
+
+        // Track modified voxel for incremental sync
+        modified_keys_.insert(key);
     }
 
     // Sync with octree_mapper_ for visualization
-    // Convert voxels_log_odds_ to batch update format
-    int num_voxels = voxels_log_odds_.size();
-    Eigen::MatrixXd voxel_points(num_voxels, 3);
-    Eigen::VectorXd voxel_log_odds(num_voxels);
-
-    int idx = 0;
-    for (const auto& pair : voxels_log_odds_) {
-        // Parse key back to coordinates
-        std::string key = pair.first;
-        double log_odds_val = pair.second;
-
-        // Key format: "x_y_z"
-        std::istringstream ss(key);
-        std::string token;
-        std::vector<double> coords;
-
-        while (std::getline(ss, token, '_')) {
-            coords.push_back(std::stod(token));
-        }
-
-        if (coords.size() == 3) {
-            voxel_points(idx, 0) = coords[0] * resolution_;  // Reconstruct world coordinates
-            voxel_points(idx, 1) = coords[1] * resolution_;
-            voxel_points(idx, 2) = coords[2] * resolution_;
-            voxel_log_odds(idx) = log_odds_val;
-            idx++;
-        }
+    if (enable_incremental_sync_) {
+        sync_modified_voxels_to_octree();
+    } else {
+        sync_all_voxels_to_octree();
     }
 
-    // Update octree mapper for visualization
-    if (idx > 0) {
-        voxel_points.conservativeResize(idx, 3);
-        voxel_log_odds.conservativeResize(idx);
-
-        try {
-            octree_mapper_->batch_update_with_log_odds(voxel_points, voxel_log_odds);
-        } catch (const std::exception& e) {
-            std::cerr << "[ProbabilityUpdater] Failed to sync with octree_mapper: " << e.what() << std::endl;
-        }
-    }
+    // Clear modified keys after sync
+    modified_keys_.clear();
 }
 
 int ProbabilityUpdater::get_observation_count(const std::string& key) const
@@ -318,6 +292,116 @@ std::string ProbabilityUpdater::world_to_key(double x, double y, double z) const
     std::ostringstream oss;
     oss << ix << "_" << iy << "_" << iz;
     return oss.str();
+}
+
+void ProbabilityUpdater::set_incremental_sync(bool enable)
+{
+    enable_incremental_sync_ = enable;
+}
+
+void ProbabilityUpdater::force_full_sync()
+{
+    sync_all_voxels_to_octree();
+    modified_keys_.clear();
+}
+
+void ProbabilityUpdater::sync_modified_voxels_to_octree()
+{
+    // Sync only modified voxels - O(N) complexity where N = modified voxels
+    if (modified_keys_.empty()) {
+        return;
+    }
+
+    int num_modified = modified_keys_.size();
+    Eigen::MatrixXd voxel_points(num_modified, 3);
+    Eigen::VectorXd voxel_log_odds(num_modified);
+
+    int idx = 0;
+    for (const std::string& key : modified_keys_) {
+        // Get log-odds value
+        auto it = voxels_log_odds_.find(key);
+        if (it == voxels_log_odds_.end()) {
+            continue;  // Skip if not found (should not happen)
+        }
+        double log_odds_val = it->second;
+
+        // Parse key back to coordinates
+        std::istringstream ss(key);
+        std::string token;
+        std::vector<double> coords;
+
+        while (std::getline(ss, token, '_')) {
+            coords.push_back(std::stod(token));
+        }
+
+        if (coords.size() == 3) {
+            voxel_points(idx, 0) = coords[0] * resolution_;  // Reconstruct world coordinates
+            voxel_points(idx, 1) = coords[1] * resolution_;
+            voxel_points(idx, 2) = coords[2] * resolution_;
+            voxel_log_odds(idx) = log_odds_val;
+            idx++;
+        }
+    }
+
+    // Update octree mapper for visualization
+    if (idx > 0) {
+        voxel_points.conservativeResize(idx, 3);
+        voxel_log_odds.conservativeResize(idx);
+
+        try {
+            octree_mapper_->batch_update_with_log_odds(voxel_points, voxel_log_odds);
+        } catch (const std::exception& e) {
+            std::cerr << "[ProbabilityUpdater] Failed to sync modified voxels: " << e.what() << std::endl;
+        }
+    }
+}
+
+void ProbabilityUpdater::sync_all_voxels_to_octree()
+{
+    // Sync all voxels - O(M) complexity where M = total map size
+    int num_voxels = voxels_log_odds_.size();
+    if (num_voxels == 0) {
+        return;
+    }
+
+    Eigen::MatrixXd voxel_points(num_voxels, 3);
+    Eigen::VectorXd voxel_log_odds(num_voxels);
+
+    int idx = 0;
+    for (const auto& pair : voxels_log_odds_) {
+        // Parse key back to coordinates
+        std::string key = pair.first;
+        double log_odds_val = pair.second;
+
+        // Key format: "x_y_z"
+        std::istringstream ss(key);
+        std::string token;
+        std::vector<double> coords;
+
+        while (std::getline(ss, token, '_')) {
+            coords.push_back(std::stod(token));
+        }
+
+        if (coords.size() == 3) {
+            voxel_points(idx, 0) = coords[0] * resolution_;  // Reconstruct world coordinates
+            voxel_points(idx, 1) = coords[1] * resolution_;
+            voxel_points(idx, 2) = coords[2] * resolution_;
+            voxel_log_odds(idx) = log_odds_val;
+            idx++;
+        }
+    }
+
+    // Update octree mapper for visualization
+    if (idx > 0) {
+        voxel_points.conservativeResize(idx, 3);
+        voxel_log_odds.conservativeResize(idx);
+
+        try {
+            octree_mapper_->batch_update_with_log_odds(voxel_points, voxel_log_odds);
+        } catch (const std::exception& e) {
+            std::cerr << "[ProbabilityUpdater] Failed to sync all voxels: " << e.what() << std::endl;
+        }
+    }
 }
 
 }  // namespace sonar_3d_reconstruction
