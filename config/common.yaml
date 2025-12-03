@@ -29,9 +29,8 @@ sonar_3d_mapper:
     # Note: Method-specific params are in method_*.yaml files, loaded via launch arg
     probability_update_method: "weighted_average"
 
-    #===== Probability Thresholds =====
-    occupied_threshold: 0.7      # prob >= this = occupied (also used for visualization)
-    free_threshold: 0.3          # prob <= this = free
+    #===== Probability Threshold =====
+    occupied_threshold: 0.7      # prob >= this = occupied, prob < this = free
 
     #===== Processing =====
     frame_skip: 5                # process every N frames

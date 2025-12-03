@@ -79,13 +79,11 @@ class SimpleOctree:
         self.log_odds_max = 10.0          # Maximum log-odds (clamping)
         self.log_odds_threshold = 0.0     # Threshold for considering occupied
 
-        # Multi-threshold parameters
-        self.occupied_threshold = 0.7     # Probability threshold for occupied
-        self.free_threshold = 0.3         # Probability threshold for free
+        # Probability threshold (2-class classification)
+        self.occupied_threshold = 0.7     # Probability threshold for occupied (< this = free)
 
-        # Convert thresholds to log-odds
+        # Convert threshold to log-odds
         self.log_odds_occupied_thresh = np.log(self.occupied_threshold / (1.0 - self.occupied_threshold))
-        self.log_odds_free_thresh = np.log(self.free_threshold / (1.0 - self.free_threshold))
 
         # Adaptive update parameters
         self.adaptive_update = True       # Enable adaptive updating
@@ -319,46 +317,37 @@ class SimpleOctree:
         
         return occupied
     
-    def get_all_voxels_classified(self, occupied_threshold: Optional[float] = None,
-                                   free_threshold: Optional[float] = None) -> Dict[str, List]:
+    def get_all_voxels_classified(self, occupied_threshold: Optional[float] = None) -> Dict[str, List]:
         """
-        Get all voxels classified as free, unknown, or occupied
+        Get all voxels classified as free or occupied (2-class)
 
         Args:
             occupied_threshold: Probability threshold for occupied (uses self.occupied_threshold if None)
-            free_threshold: Probability threshold for free (uses self.free_threshold if None)
 
         Returns:
-            Dictionary with 'free', 'unknown', 'occupied' lists
+            Dictionary with 'free', 'occupied' lists
         """
         free = []
-        unknown = []
         occupied = []
 
-        # Use instance thresholds if not provided
+        # Use instance threshold if not provided
         if occupied_threshold is None:
             occupied_threshold = self.occupied_threshold
-        if free_threshold is None:
-            free_threshold = self.free_threshold
 
-        # Convert probability thresholds to log-odds
+        # Convert probability threshold to log-odds
         log_odds_occupied_thresh = np.log(occupied_threshold / (1.0 - occupied_threshold))
-        log_odds_free_thresh = np.log(free_threshold / (1.0 - free_threshold))
 
         for key, log_odds in self.voxels.items():
             point = self.key_to_world(key)
             probability = 1.0 / (1.0 + np.exp(-log_odds))
 
-            if log_odds < log_odds_free_thresh:
-                free.append((point, probability))
-            elif log_odds > log_odds_occupied_thresh:
+            if log_odds >= log_odds_occupied_thresh:
                 occupied.append((point, probability))
             else:
-                unknown.append((point, probability))
+                free.append((point, probability))
 
         return {
             'free': free,
-            'unknown': unknown,
             'occupied': occupied
         }
     
@@ -420,9 +409,8 @@ class SonarTo3DMapper:
             'probability_update_method': 'log_odds',  # 'log_odds' or 'weighted_average'
             'intensity_max': 255,          # Maximum intensity value for normalization
 
-            # Multi-threshold parameters
-            'occupied_threshold': 0.7,     # Probability threshold for occupied
-            'free_threshold': 0.3,         # Probability threshold for free
+            # Probability threshold (2-class: occupied vs free)
+            'occupied_threshold': 0.7,     # prob >= this = occupied, < this = free
 
             # Adaptive update
             'adaptive_update': True,
@@ -528,7 +516,6 @@ class SonarTo3DMapper:
             self.octree.log_odds_min = default_config['log_odds_min']
             self.octree.log_odds_max = default_config['log_odds_max']
             self.octree.occupied_threshold = default_config['occupied_threshold']
-            self.octree.free_threshold = default_config['free_threshold']
             self.octree.adaptive_update = default_config['adaptive_update']
             self.octree.adaptive_threshold = default_config['adaptive_threshold']
             self.octree.adaptive_max_ratio = default_config['adaptive_max_ratio']
@@ -536,12 +523,9 @@ class SonarTo3DMapper:
             # Store intensity threshold for weighted average method
             self.octree.intensity_threshold = self.intensity_threshold
 
-            # Recalculate log-odds thresholds
+            # Recalculate log-odds threshold
             self.octree.log_odds_occupied_thresh = np.log(
                 default_config['occupied_threshold'] / (1.0 - default_config['occupied_threshold'])
-            )
-            self.octree.log_odds_free_thresh = np.log(
-                default_config['free_threshold'] / (1.0 - default_config['free_threshold'])
             )
 
             print(f"[3D Mapper] Python SimpleOctree 사용 (해상도: {self.voxel_resolution}m)")

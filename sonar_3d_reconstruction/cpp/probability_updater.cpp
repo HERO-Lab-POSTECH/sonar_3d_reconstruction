@@ -18,7 +18,6 @@ ProbabilityUpdater::ProbabilityUpdater(double resolution)
     , min_probability_(0.12)
     , max_probability_(0.97)
     , occupied_threshold_(0.7)
-    , free_threshold_(0.3)
     , intensity_max_(255.0)
     , intensity_threshold_(35.0)
     , enable_incremental_sync_(true)
@@ -157,10 +156,9 @@ void ProbabilityUpdater::clear()
     modified_keys_.clear();
 }
 
-void ProbabilityUpdater::set_thresholds(double occupied_thresh, double free_thresh)
+void ProbabilityUpdater::set_occupied_threshold(double occupied_thresh)
 {
     occupied_threshold_ = occupied_thresh;
-    free_threshold_ = free_thresh;
 }
 
 void ProbabilityUpdater::set_intensity_params(double intensity_threshold, double intensity_max)

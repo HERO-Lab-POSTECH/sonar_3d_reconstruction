@@ -93,11 +93,10 @@ public:
     void clear();
 
     /**
-     * Set thresholds for weighted average probability update
-     * @param occupied_thresh Occupied threshold (default: 0.7)
-     * @param free_thresh Free threshold (default: 0.3)
+     * Set threshold for probability classification (2-class: occupied vs free)
+     * @param occupied_thresh Occupied threshold (default: 0.7), prob >= this = occupied
      */
-    void set_thresholds(double occupied_thresh, double free_thresh);
+    void set_occupied_threshold(double occupied_thresh);
 
     /**
      * Set intensity normalization parameters
@@ -158,8 +157,7 @@ private:
 
     // Weighted average parameters
     std::unordered_map<std::string, int> observation_counts_;  // key -> observation count
-    double occupied_threshold_;  // Occupied threshold (0.7)
-    double free_threshold_;  // Free threshold (0.3)
+    double occupied_threshold_;  // Occupied threshold (0.7), prob >= this = occupied
     double intensity_max_;  // Maximum intensity value (255.0)
     double intensity_threshold_;  // Minimum intensity threshold (35.0)
 

@@ -98,9 +98,8 @@ class SonarMapperNode(Node):
                 ('probability_update_method', 'weighted_average'),  # 'log_odds' | 'weighted_average'
                 ('intensity_max', 255),  # Maximum intensity value for normalization
 
-                # Multi-threshold classification (voxelmap_fusion style)
-                ('occupied_threshold', 0.7),  # Probability >= 0.7 = occupied
-                ('free_threshold', 0.3),  # Probability <= 0.3 = free
+                # Probability threshold (2-class: occupied vs free)
+                ('occupied_threshold', 0.7),  # Probability >= 0.7 = occupied, < 0.7 = free
 
                 # Backend selection
                 ('use_cpp_backend', True),  # Use high-performance C++ hierarchical octree by default
@@ -181,7 +180,6 @@ class SonarMapperNode(Node):
             'probability_update_method': self.get_parameter('probability_update_method').value,
             'intensity_max': self.get_parameter('intensity_max').value,
             'occupied_threshold': self.get_parameter('occupied_threshold').value,
-            'free_threshold': self.get_parameter('free_threshold').value,
             'use_cpp_backend': self.get_parameter('use_cpp_backend').value,
             'frame_skip': self.get_parameter('frame_skip').value
         }
@@ -301,7 +299,7 @@ class SonarMapperNode(Node):
         self.get_logger().info(f'  Vertical aperture: {config["vertical_aperture"]}°')
         self.get_logger().info(f'  Voxel resolution: {config["voxel_resolution"]}m')
         self.get_logger().info(f'  Probability update method: {config["probability_update_method"]}')
-        self.get_logger().info(f'  Multi-threshold: occupied>={config["occupied_threshold"]}, free<={config["free_threshold"]}')
+        self.get_logger().info(f'  Occupied threshold: {config["occupied_threshold"]}')
         self.get_logger().info(f'  Adaptive update: {config["adaptive_update"]}')
         self.get_logger().info(f'  Robot detection: {config["enable_robot_detection"]} (threshold: >={config["robot_detection"]["min_threshold"]})')
         if config["enable_robot_detection"]:

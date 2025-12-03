@@ -132,9 +132,9 @@ PYBIND11_MODULE(sonar_3d_reconstruction_cpp, m) {
              "Prune unnecessary nodes")
         .def("clear", &sonar_3d_reconstruction::ProbabilityUpdater::clear,
              "Clear all data")
-        .def("set_thresholds", &sonar_3d_reconstruction::ProbabilityUpdater::set_thresholds,
-             py::arg("occupied_thresh"), py::arg("free_thresh"),
-             "Set thresholds for weighted average update")
+        .def("set_occupied_threshold", &sonar_3d_reconstruction::ProbabilityUpdater::set_occupied_threshold,
+             py::arg("occupied_thresh"),
+             "Set occupied threshold (prob >= this = occupied)")
         .def("set_intensity_params", &sonar_3d_reconstruction::ProbabilityUpdater::set_intensity_params,
              py::arg("intensity_threshold"), py::arg("intensity_max"),
              "Set intensity normalization parameters")
