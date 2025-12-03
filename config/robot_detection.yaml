@@ -1,0 +1,12 @@
+# Robot Detection Parameters
+# Loaded by default in launch file
+# Set enable_robot_detection in common.yaml to activate
+
+sonar_3d_mapper:
+  ros__parameters:
+    robot_detection:
+      min_threshold: 180         # intensity >= this = robot (high reflectivity)
+      topic: "/sonar_robot_detections"
+    terrain_detection:
+      min_threshold: 30          # terrain intensity range
+      max_threshold: 179

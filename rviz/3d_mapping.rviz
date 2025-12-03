@@ -6,6 +6,7 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
+        - /Sonar3DMap1
         - /Sonar3DMap1/Autocompute Value Bounds1
       Splitter Ratio: 0.5
     Tree Height: 1112
@@ -92,8 +93,8 @@ Visualization Manager:
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
-        Max Value: 60.41447067260742
-        Min Value: -10.939796447753906
+        Max Value: 38.50102233886719
+        Min Value: -5.275296688079834
         Value: true
       Axis: Z
       Channel Name: intensity
@@ -126,8 +127,8 @@ Visualization Manager:
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
-        Max Value: -0.875
-        Min Value: -2.325000047683716
+        Max Value: 0.15000000596046448
+        Min Value: -1.0499999523162842
         Value: true
       Axis: Z
       Channel Name: intensity
@@ -145,7 +146,7 @@ Visualization Manager:
       Position Transformer: XYZ
       Selectable: true
       Size (Pixels): 5
-      Size (m): 0.05000000074505806
+      Size (m): 0.10000000149011612
       Style: Squares
       Topic:
         Depth: 5

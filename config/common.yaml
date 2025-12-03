@@ -34,6 +34,7 @@ sonar_3d_mapper:
 
     #===== Processing =====
     frame_skip: 5                # process every N frames
+    enable_robot_detection: false
 
     #===== ROS2 Interface =====
     sonar_frame_id: "sonar_link"
