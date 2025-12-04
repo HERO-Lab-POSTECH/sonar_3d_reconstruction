@@ -4,11 +4,11 @@
 sonar_3d_mapper:
   ros__parameters:
     #===== Sonar Sensor =====
-    horizontal_fov: 180.0        # degrees
+    horizontal_fov: 130.0        # degrees
     vertical_aperture: 20.0      # degrees
     max_range: 3.5              # meters
     min_range: 1.0               # meters
-    intensity_threshold: 120     # 0-255
+    intensity_threshold: 180     # 0-255
 
     #===== Sonar Mounting (relative to base_link) =====
     sonar_position:
