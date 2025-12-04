@@ -16,6 +16,14 @@ from typing import Tuple, List, Dict, Any, Optional
 import time
 import warnings
 
+# OpenCV for cross-talk filtering
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
+    print("[3D Mapper] OpenCV 없음 - crosstalk filter 비활성화")
+
 # C++ 모듈 임포트 시도
 try:
     # ROS2 install 경로에서 직접 모듈 임포트
@@ -40,6 +48,112 @@ except Exception as e:
     CPP_MODULE_AVAILABLE = False
     print("[3D Mapper] C++ 모듈 없음 - Python SimpleOctree 사용")
     print(f"  Error: {e}")
+
+
+class CrosstalkFilter:
+    """
+    Cross-talk 노이즈 필터 (가로 줄무늬 제거)
+
+    멀티빔 소나에서 발생하는 cross-talk 노이즈는 모든 방위각에서 동일한 range에
+    높은 강도가 나타나는 가로 줄무늬 형태로 나타남.
+    """
+
+    def __init__(self, kernel_size=5, kernel_shape="rect",
+                 consistency_threshold=0.5, intensity_threshold=150,
+                 morpho_enabled=True, azimuth_check_enabled=True):
+        """
+        Initialize cross-talk filter
+
+        Args:
+            kernel_size: Morphological kernel size (홀수 권장)
+            kernel_shape: Kernel shape ("rect", "ellipse", "cross")
+            consistency_threshold: 전체 beam 중 몇 %가 threshold 이상이면 노이즈
+            intensity_threshold: 높은 강도 판정 기준
+            morpho_enabled: Enable morphological filtering
+            azimuth_check_enabled: Enable azimuth consistency check
+        """
+        self.kernel_size = kernel_size
+        self.kernel_shape = kernel_shape
+        self.consistency_threshold = consistency_threshold
+        self.intensity_threshold = intensity_threshold
+        self.morpho_enabled = morpho_enabled
+        self.azimuth_check_enabled = azimuth_check_enabled
+
+        if not CV2_AVAILABLE and morpho_enabled:
+            print("[CrosstalkFilter] OpenCV 없음, morphological filter 비활성화")
+            self.morpho_enabled = False
+
+    def filter(self, polar_img):
+        """
+        Apply cross-talk filter to polar sonar image
+
+        Args:
+            polar_img: Polar sonar image (range_bins x bearing_bins)
+
+        Returns:
+            Filtered image
+        """
+        filtered = polar_img.copy()
+
+        # 1. Morphological opening (가로 줄무늬 제거)
+        if self.morpho_enabled:
+            filtered = self._morphological_filter(filtered)
+
+        # 2. Azimuth consistency check (방위각 일관성 검사)
+        if self.azimuth_check_enabled:
+            mask = self._generate_crosstalk_mask(filtered)
+            filtered = filtered * mask
+
+        return filtered
+
+    def _morphological_filter(self, img):
+        """
+        가로 줄무늬 제거를 위한 morphological opening
+
+        세로 방향 커널을 사용하여 가로 줄무늬를 제거.
+        Opening = Erosion -> Dilation
+        """
+        if not CV2_AVAILABLE:
+            return img
+
+        # 세로 방향 커널 (가로 줄무늬 제거)
+        if self.kernel_shape == "rect":
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, self.kernel_size))
+        elif self.kernel_shape == "ellipse":
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (1, self.kernel_size))
+        else:
+            kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (1, self.kernel_size))
+
+        # Opening = Erosion -> Dilation
+        return cv2.morphologyEx(img.astype(np.uint8), cv2.MORPH_OPEN, kernel).astype(img.dtype)
+
+    def _generate_crosstalk_mask(self, polar_img):
+        """
+        방위각 일관성 검사로 cross-talk 마스크 생성
+
+        모든 방위각에서 동일한 range에 높은 강도가 나타나면 노이즈로 판정.
+
+        Args:
+            polar_img: Polar sonar image (range_bins x bearing_bins)
+
+        Returns:
+            Binary mask (1 = valid, 0 = noise)
+        """
+        num_beams, num_ranges = polar_img.shape
+        mask = np.ones_like(polar_img, dtype=np.float32)
+
+        # 각 range에 대해 검사
+        for r in range(num_ranges):
+            range_slice = polar_img[:, r]
+
+            # 높은 강도를 가진 beam의 비율 계산
+            high_ratio = np.sum(range_slice > self.intensity_threshold) / num_beams
+
+            # Threshold 이상이면 해당 range를 노이즈로 판정
+            if high_ratio > self.consistency_threshold:
+                mask[:, r] = 0.0
+
+        return mask
 
 
 class SimpleOctree:
@@ -622,14 +736,29 @@ class SonarTo3DMapper:
         # Frame counter
         self.frame_count = 0
         self.processed_frame_count = 0
-        
+
         # Robot detection storage
         self.robot_detections = []  # List of (point, intensity, timestamp) tuples
         self.robot_detection_timeout = 10.0  # seconds
-        
+
         # Processing statistics
         self.last_processing_time = 0.0
         self.total_processing_time = 0.0
+
+        # Cross-talk filter
+        crosstalk_enabled = default_config.get('crosstalk_filter_enabled', False)
+        if crosstalk_enabled:
+            self.crosstalk_filter = CrosstalkFilter(
+                kernel_size=default_config.get('morpho_kernel_size', 5),
+                kernel_shape=default_config.get('morpho_kernel_shape', 'rect'),
+                consistency_threshold=default_config.get('azimuth_consistency_threshold', 0.5),
+                intensity_threshold=default_config.get('crosstalk_intensity_threshold', 150),
+                morpho_enabled=default_config.get('morpho_filter_enabled', True),
+                azimuth_check_enabled=default_config.get('azimuth_check_enabled', True)
+            )
+            print(f"[3D Mapper] Cross-talk filter 활성화")
+        else:
+            self.crosstalk_filter = None
     
     def create_transform_matrix(self, position: np.ndarray, rpy: np.ndarray) -> np.ndarray:
         """
@@ -845,24 +974,24 @@ class SonarTo3DMapper:
         
         return updates
     
-    def process_sonar_image(self, polar_image: np.ndarray, 
-                           robot_position: List[float], 
+    def process_sonar_image(self, polar_image: np.ndarray,
+                           robot_position: List[float],
                            robot_orientation: List[float]) -> Dict[str, Any]:
         """
         Process sonar image and update probabilistic map
-        
+
         Args:
             polar_image: 2D numpy array (height x width) with intensity values
             robot_position: [x, y, z] position from odometry
             robot_orientation: [x, y, z, w] quaternion from odometry
-            
+
         Returns:
             Processing statistics dictionary
         """
         self.frame_count += 1
         start_time = time.time()
         self.processed_frame_count += 1
-        
+
         # Clean up old robot detections (older than 10 seconds)
         if self.enable_robot_detection and self.robot_detections:
             current_time = start_time
@@ -870,10 +999,14 @@ class SonarTo3DMapper:
                 (point, intensity, timestamp) for point, intensity, timestamp in self.robot_detections
                 if current_time - timestamp <= self.robot_detection_timeout
             ]
-        
+
         # Ensure image is numpy array
         if not isinstance(polar_image, np.ndarray):
             polar_image = np.array(polar_image)
+
+        # Apply cross-talk filter if enabled
+        if self.crosstalk_filter is not None:
+            polar_image = self.crosstalk_filter.filter(polar_image)
         
         # Get image dimensions
         range_bins, bearing_bins = polar_image.shape

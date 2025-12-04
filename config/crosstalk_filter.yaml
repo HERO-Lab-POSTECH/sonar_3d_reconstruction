@@ -1,0 +1,25 @@
+# Cross-talk Noise Filter Configuration
+# 멀티빔 소나의 가로 줄무늬 노이즈 억제 설정
+
+sonar_3d_mapper:
+  ros__parameters:
+    #===== Cross-talk Filter =====
+    crosstalk_filter_enabled: true
+
+    #===== Morphological Filter =====
+    # 가로 줄무늬 제거를 위한 형태학적 필터 (세로 커널)
+    morpho_filter_enabled: true
+    morpho_kernel_size: 5            # 커널 크기 (홀수 추천: 3, 5, 7)
+    morpho_kernel_shape: "rect"      # rect, ellipse, cross
+
+    #===== Azimuth Consistency Check =====
+    # 방위각 일관성 검사: 모든 방위각에서 동일하게 높은 강도 = 노이즈
+    azimuth_check_enabled: true
+    azimuth_consistency_threshold: 0.5  # 전체 beam 중 몇 %가 threshold 이상이면 노이즈
+    crosstalk_intensity_threshold: 150   # 높은 강도 판정 기준
+
+    #===== Advanced Options =====
+    # 적응형 threshold (실험적)
+    adaptive_threshold_enabled: false
+    adaptive_block_size: 11
+    adaptive_c: 2

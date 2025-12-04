@@ -38,6 +38,7 @@ def generate_launch_description():
     method_log_odds = os.path.join(pkg_dir, 'config', 'method_log_odds.yaml')
     method_iwlo = os.path.join(pkg_dir, 'config', 'method_iwlo.yaml')
     robot_detection_config = os.path.join(pkg_dir, 'config', 'robot_detection.yaml')
+    crosstalk_config = os.path.join(pkg_dir, 'config', 'crosstalk_filter.yaml')
     rviz_config = os.path.join(pkg_dir, 'rviz', '3d_mapping.rviz')
 
     # Load defaults from common.yaml
@@ -94,6 +95,7 @@ def generate_launch_description():
             common_config,
             method_weighted_avg,
             robot_detection_config,
+            crosstalk_config,
             {'use_sim_time': use_sim_time, 'sonar_orientation.pitch': sonar_pitch}
         ],
         output='screen',
@@ -109,6 +111,7 @@ def generate_launch_description():
             common_config,
             method_log_odds,
             robot_detection_config,
+            crosstalk_config,
             {'use_sim_time': use_sim_time, 'sonar_orientation.pitch': sonar_pitch}
         ],
         output='screen',
@@ -124,6 +127,7 @@ def generate_launch_description():
             common_config,
             method_iwlo,
             robot_detection_config,
+            crosstalk_config,
             {'use_sim_time': use_sim_time, 'sonar_orientation.pitch': sonar_pitch}
         ],
         output='screen',
