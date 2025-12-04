@@ -752,7 +752,7 @@ class SonarTo3DMapper:
                 kernel_size=default_config.get('morpho_kernel_size', 5),
                 kernel_shape=default_config.get('morpho_kernel_shape', 'rect'),
                 consistency_threshold=default_config.get('azimuth_consistency_threshold', 0.5),
-                intensity_threshold=default_config.get('crosstalk_intensity_threshold', 150),
+                intensity_threshold=self.intensity_threshold,  # common.yaml의 intensity_threshold 사용
                 morpho_enabled=default_config.get('morpho_filter_enabled', True),
                 azimuth_check_enabled=default_config.get('azimuth_check_enabled', True)
             )

@@ -8,7 +8,7 @@ sonar_3d_mapper:
     vertical_aperture: 20.0      # degrees
     max_range: 3.5              # meters
     min_range: 1.0               # meters
-    intensity_threshold: 150     # 0-255
+    intensity_threshold: 120     # 0-255
 
     #===== Sonar Mounting (relative to base_link) =====
     sonar_position:

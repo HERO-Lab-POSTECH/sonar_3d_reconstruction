@@ -118,7 +118,6 @@ class SonarMapperNode(Node):
                 ('morpho_kernel_shape', 'rect'),
                 ('azimuth_check_enabled', True),
                 ('azimuth_consistency_threshold', 0.5),
-                ('crosstalk_intensity_threshold', 150),
 
                 # Processing parameters
                 ('frame_skip', 1),  # Process every N frames
@@ -210,8 +209,7 @@ class SonarMapperNode(Node):
             'morpho_kernel_size': self.get_parameter('morpho_kernel_size').value,
             'morpho_kernel_shape': self.get_parameter('morpho_kernel_shape').value,
             'azimuth_check_enabled': self.get_parameter('azimuth_check_enabled').value,
-            'azimuth_consistency_threshold': self.get_parameter('azimuth_consistency_threshold').value,
-            'crosstalk_intensity_threshold': self.get_parameter('crosstalk_intensity_threshold').value
+            'azimuth_consistency_threshold': self.get_parameter('azimuth_consistency_threshold').value
         }
         
         # Get other parameters
