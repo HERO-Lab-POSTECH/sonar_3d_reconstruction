@@ -7,6 +7,8 @@
 Oculus M750D 멀티빔 소나와 Livox MID360 LiDAR를 활용한 실시간 3D 해저 지형 매핑 시스템입니다. feature_extraction_3d 알고리즘 기반으로 완전히 재구현되어 향상된 확률적 매핑과 메모리 효율성을 제공합니다.
 
 **주요 특징**:
+- **IWLO 확률 업데이트**: Log-Odds와 강도 기반 가중치 융합 알고리즘
+- **Cross-talk 노이즈 필터**: 멀티빔 소나의 가로 줄무늬 노이즈 제거
 - **Adaptive Bayesian Update**: 자유 공간 보호 및 노이즈 감소
 - **Sparse Octree Storage**: 메모리 효율적인 동적 맵 확장
 - **TF Integration**: Fast-LIO와 완전 통합된 좌표 변환
@@ -234,6 +236,19 @@ ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py \
 - **Free Space Protection**: 높은 확신도의 자유 공간 보호
 - **Noise Reduction**: 적응형 업데이트로 노이즈 감소
 
+### IWLO (Intensity-Weighted Log-Odds) 확률 업데이트
+- **하이브리드 업데이트**: Log-Odds Bayesian과 Weighted Average 방식 융합
+- **강도 기반 가중치**: 시그모이드 함수를 통한 동적 가중치 변환
+- **학습률 감쇠**: 관측 횟수에 따른 적응형 학습률 조정
+- **Saturation 방지**: log-odds 범위 제한으로 수렴 안정성 확보
+- **설정 파일**: `config/method_iwlo.yaml`에서 커스터마이징 가능
+
+### Cross-talk 노이즈 필터
+- **줄무늬 노이즈 억제**: Morphological Opening 필터로 가로 줄무늬 제거
+- **방위각 일관성 검사**: 인접 방위각 값 비교로 이상치 제거
+- **멀티빔 최적화**: 멀티빔 소나의 전기적 간섭 노이즈 감소
+- **설정 파일**: `config/crosstalk_filter.yaml`에서 필터 파라미터 조정
+
 ### Memory Efficiency
 - **Sparse Storage**: 관측된 복셀만 저장
 - **Dynamic Expansion**: 고정 경계 없이 자동 확장
@@ -454,6 +469,27 @@ from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 import yaml                     # YAML 설정 파일 파싱
 ```
+
+## Recent Updates (2025-12-04)
+
+### IWLO 확률 업데이트 방법 구현
+- **하이브리드 확률 업데이트**: Log-Odds Bayesian 방식과 Weighted Average 방식 융합
+- **강도 기반 가중치 변환**: 소나 강도 신호의 시그모이드 함수 가중치
+- **적응형 학습률**: 관측 횟수에 따른 감쇠 함수 (saturation 방지)
+- **설정 파일**: `config/method_iwlo.yaml`로 모든 파라미터 커스터마이징 가능
+- **구현 위치**: `scripts/3d_mapper.py`, `cpp/probability_updater.cpp`
+
+### Cross-talk 노이즈 필터 추가
+- **줄무늬 노이즈 억제**: Morphological Opening 필터 (세로 커널)
+- **방위각 일관성 검사**: 인접 방위각(azimuth) 값 비교로 이상치 제거
+- **멀티빔 소나 최적화**: 전기적 간섭(cross-talk) 노이즈 감소
+- **설정 파일**: `config/crosstalk_filter.yaml`
+- **구현 위치**: `scripts/3d_mapper.py`
+
+### C++ 백엔드 개선
+- **OctoMap 링크 수정**: CMakeLists.txt에서 라이브러리 명시적 링크
+- **PYTHONPATH 환경 후크**: `env-hooks/`에서 Python 경로 자동 설정
+- **빌드 최적화**: CMAKE 설정 개선으로 안정성 강화
 
 ## Recent Updates (2025-11-27)
 

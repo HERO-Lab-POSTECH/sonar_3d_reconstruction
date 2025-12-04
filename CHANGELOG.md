@@ -2,14 +2,29 @@
 
 ## [2025-12-04]
 
-### Build Verification
-- sonar_3d_reconstruction 패키지 빌드 완료
-- C++ ProbabilityUpdater 모듈 정상 작동 확인
-- Python 노드 (3d_mapper.py) 기능 검증 완료
-- 메모리 효율성: 0.56배율, 400개 노드 정상 처리
+### Added
+- **IWLO (Intensity-Weighted Log-Odds) 확률 업데이트 방법**
+  - Log-Odds Bayesian과 Weighted Average 방식 융합
+  - 강도 기반 시그모이드 가중치 변환
+  - 관측 횟수 기반 학습률 감쇠
+  - Saturation 방지를 위한 log-odds 범위 제한
+  - 파일: `config/method_iwlo.yaml`, `scripts/3d_mapper.py`, `cpp/probability_updater.cpp`
+
+- **Cross-talk 노이즈 필터**
+  - 멀티빔 소나의 가로 줄무늬 노이즈 억제
+  - Morphological Opening 필터 (세로 커널)
+  - 방위각 일관성 검사 (Azimuth Consistency Check)
+  - 파일: `config/crosstalk_filter.yaml`, `scripts/3d_mapper.py`
+
+### Changed
+- **C++ 백엔드 개선**
+  - OctoMap 라이브러리 링크 수정 (CMakeLists.txt)
+  - PYTHONPATH 환경 후크 추가 (env-hooks/)
+  - CMakeLists.txt 최적화
 
 ### System Status
 - Build Status: ✅ SUCCESS
 - Build Time: 0.30s
 - Test Result: ✅ All tests passed
 - C++ Module: ✅ Properly loaded and functional
+- Memory Efficiency: 0.56배율, 400개 노드 정상 처리
