@@ -22,6 +22,7 @@ find_package(rclpy REQUIRED)
 find_package(pybind11 REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+find_package(octomap REQUIRED)
 
 # Build C++ extension module
 add_library(sonar_3d_reconstruction_cpp MODULE
@@ -37,21 +38,45 @@ target_include_directories(sonar_3d_reconstruction_cpp PRIVATE
   ${EIGEN3_INCLUDE_DIR}
   ${pybind11_INCLUDE_DIR}
   ${Python3_INCLUDE_DIRS}
+  ${OCTOMAP_INCLUDE_DIRS}
 )
 
 target_link_libraries(sonar_3d_reconstruction_cpp PRIVATE
   Eigen3::Eigen
   Python3::Python
+  ${OCTOMAP_LIBRARIES}
 )
 
 # Set proper extension for Python modules
+execute_process(
+  COMMAND ${Python3_EXECUTABLE} -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))"
+  OUTPUT_VARIABLE PYTHON_EXT_SUFFIX
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
 set_target_properties(sonar_3d_reconstruction_cpp PROPERTIES
-  PREFIX "${PYTHON_MODULE_PREFIX}"
-  SUFFIX "${PYTHON_MODULE_EXT}"
+  PREFIX ""
+  SUFFIX "${PYTHON_EXT_SUFFIX}"
 )
 
+# Install to Python package directory
 install(TARGETS sonar_3d_reconstruction_cpp
-  LIBRARY DESTINATION lib/${PROJECT_NAME}
+  LIBRARY DESTINATION local/lib/python3.10/dist-packages/sonar_3d_reconstruction
+)
+
+# Also create __init__.py for the package
+install(CODE "
+  file(WRITE \"\${CMAKE_INSTALL_PREFIX}/local/lib/python3.10/dist-packages/sonar_3d_reconstruction/__init__.py\"
+    \"# C++ acceleration module for sonar 3D reconstruction\\n\"
+    \"try:\\n\"
+    \"    from .sonar_3d_reconstruction_cpp import *\\n\"
+    \"except ImportError:\\n\"
+    \"    pass\\n\"
+  )
+")
+
+# Add environment hook to set PYTHONPATH
+ament_environment_hooks(
+  "${CMAKE_CURRENT_SOURCE_DIR}/env-hooks/${PROJECT_NAME}.dsv.in"
 )
 
 # Install Python executable scripts (install(PROGRAMS) automatically sets executable permissions)

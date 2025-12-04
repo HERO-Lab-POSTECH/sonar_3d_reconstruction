@@ -20,14 +20,20 @@ ProbabilityUpdater::ProbabilityUpdater(double resolution)
     , occupied_threshold_(0.7)
     , intensity_max_(255.0)
     , intensity_threshold_(35.0)
+    , sharpness_(3.0)
+    , decay_rate_(0.1)
+    , min_alpha_(0.1)
+    , L_min_(-2.0)
+    , L_max_(3.5)
     , enable_incremental_sync_(true)
 {
     // Use direct log-odds storage (Python SimpleOctree style) for exact compatibility
     // octree_mapper_ is kept for fallback but not used
+    // Note: log_odds_free_ is already negative (-2.0), so prob_miss = sigmoid(-2.0) = 0.12
     octree_mapper_ = std::make_unique<OctreeMapper>(
         resolution,
-        log_odds_to_probability(log_odds_occupied_),  // prob_hit
-        log_odds_to_probability(-log_odds_free_),     // prob_miss
+        log_odds_to_probability(log_odds_occupied_),  // prob_hit = sigmoid(1.5) = 0.82
+        log_odds_to_probability(log_odds_free_),      // prob_miss = sigmoid(-2.0) = 0.12
         min_probability_,                             // prob_thres_min
         max_probability_                              // prob_thres_max
     );
@@ -42,11 +48,12 @@ void ProbabilityUpdater::set_log_odds_params(double log_odds_occupied, double lo
 {
     log_odds_occupied_ = log_odds_occupied;
     log_odds_free_ = log_odds_free;
-    
+
     // Update underlying octree parameters
+    // log_odds_free is already negative, so prob_miss = sigmoid(log_odds_free) < 0.5
     double prob_hit = log_odds_to_probability(log_odds_occupied);
-    double prob_miss = log_odds_to_probability(-log_odds_free);  // Note: negate for miss probability
-    
+    double prob_miss = log_odds_to_probability(log_odds_free);
+
     octree_mapper_->set_probability_params(prob_hit, prob_miss);
 }
 
@@ -400,6 +407,117 @@ void ProbabilityUpdater::sync_all_voxels_to_octree()
             std::cerr << "[ProbabilityUpdater] Failed to sync all voxels: " << e.what() << std::endl;
         }
     }
+}
+
+void ProbabilityUpdater::set_iwlo_params(double sharpness, double decay_rate, double min_alpha,
+                                          double L_min, double L_max)
+{
+    sharpness_ = sharpness;
+    decay_rate_ = decay_rate;
+    min_alpha_ = min_alpha;
+    L_min_ = L_min;
+    L_max_ = L_max;
+}
+
+double ProbabilityUpdater::intensity_to_weight(double intensity) const
+{
+    if (intensity <= intensity_threshold_) {
+        return 0.0;
+    }
+
+    // Normalize: [threshold, max] -> [0, 1]
+    double normalized = (intensity - intensity_threshold_) / (intensity_max_ - intensity_threshold_);
+    normalized = std::max(0.0, std::min(1.0, normalized));
+
+    // Sigmoid transformation centered at 0.5
+    double x = sharpness_ * (normalized - 0.5);
+    return 1.0 / (1.0 + std::exp(-x));
+}
+
+double ProbabilityUpdater::compute_alpha(int observation_count) const
+{
+    return std::max(min_alpha_, 1.0 / (1.0 + decay_rate_ * observation_count));
+}
+
+void ProbabilityUpdater::batch_update_iwlo(
+    const Eigen::MatrixXd& points,
+    const Eigen::VectorXd& intensities,
+    const std::vector<bool>& is_occupied)
+{
+    if (points.rows() != intensities.rows()) {
+        throw std::invalid_argument("Points and intensities must have same number of rows");
+    }
+
+    if (points.rows() != static_cast<int>(is_occupied.size())) {
+        throw std::invalid_argument("Points and is_occupied must have same number of elements");
+    }
+
+    if (points.cols() != 3) {
+        throw std::invalid_argument("Points must have 3 columns (x, y, z)");
+    }
+
+    for (int i = 0; i < points.rows(); ++i) {
+        // Get voxel key
+        std::string key = world_to_key(points(i, 0), points(i, 1), points(i, 2));
+
+        // Increment observation count
+        observation_counts_[key]++;
+        int n = observation_counts_[key];
+
+        double intensity = intensities(i);
+
+        // Get current log-odds (default 0.0 for unknown voxels)
+        double current_log_odds = 0.0;
+        auto it = voxels_log_odds_.find(key);
+        if (it != voxels_log_odds_.end()) {
+            current_log_odds = it->second;
+        }
+
+        // Convert to probability for adaptive scaling
+        double current_prob = log_odds_to_probability(current_log_odds);
+
+        // 1. Compute intensity-based weight using sigmoid
+        double w_intensity = intensity_to_weight(intensity);
+
+        // 2. Compute learning rate based on observation count
+        double alpha_n = compute_alpha(n - 1);  // n-1 because we already incremented
+
+        // 3. Compute adaptive scaling (for occupied updates)
+        double adapt_scale = 1.0;
+        if (w_intensity > 0 && adaptive_enabled_ && current_prob < adaptive_threshold_) {
+            adapt_scale = (current_prob / adaptive_threshold_) * adaptive_max_ratio_;
+        }
+
+        // 4. Compute log-odds update
+        double delta_L;
+        if (intensity > intensity_threshold_) {
+            // Occupied update: ΔL = L_occ × w(I) × α(n) × scale
+            delta_L = log_odds_occupied_ * w_intensity * alpha_n * adapt_scale;
+        } else {
+            // Free space update: ΔL = L_free × α(n)
+            delta_L = log_odds_free_ * alpha_n;
+        }
+
+        // 5. Apply update with saturation limits
+        double new_log_odds = current_log_odds + delta_L;
+        new_log_odds = std::max(L_min_, std::min(L_max_, new_log_odds));
+
+        // Store updated value
+        voxels_log_odds_[key] = new_log_odds;
+
+        // Track modified voxel for incremental sync
+        modified_keys_.insert(key);
+    }
+
+    // Sync with octree_mapper_ for visualization
+    if (enable_incremental_sync_) {
+        sync_modified_voxels_to_octree();
+    } else {
+        sync_all_voxels_to_octree();
+    }
+
+    // Clear modified keys after sync
+    modified_keys_.clear();
 }
 
 }  // namespace sonar_3d_reconstruction

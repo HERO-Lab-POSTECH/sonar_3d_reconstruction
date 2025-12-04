@@ -106,6 +106,30 @@ public:
     void set_intensity_params(double intensity_threshold, double intensity_max);
 
     /**
+     * Set IWLO (Intensity-Weighted Log-Odds) parameters
+     * @param sharpness Sigmoid steepness for intensity-to-weight (default: 3.0)
+     * @param decay_rate Learning rate decay rate (default: 0.1)
+     * @param min_alpha Minimum learning rate (default: 0.1)
+     * @param L_min Saturation lower bound (default: -2.0)
+     * @param L_max Saturation upper bound (default: 3.5)
+     */
+    void set_iwlo_params(double sharpness, double decay_rate, double min_alpha,
+                         double L_min, double L_max);
+
+    /**
+     * Batch update using IWLO (Intensity-Weighted Log-Odds) method
+     * Combines Log-Odds Bayesian with Weighted Average approach
+     * @param points Nx3 matrix of point coordinates
+     * @param intensities N-vector of intensity values
+     * @param is_occupied N-vector of boolean flags
+     */
+    void batch_update_iwlo(
+        const Eigen::MatrixXd& points,
+        const Eigen::VectorXd& intensities,
+        const std::vector<bool>& is_occupied
+    );
+
+    /**
      * Batch update using weighted average method (voxelmap_fusion style)
      * @param points Nx3 matrix of point coordinates
      * @param intensities N-vector of intensity values
@@ -161,6 +185,13 @@ private:
     double intensity_max_;  // Maximum intensity value (255.0)
     double intensity_threshold_;  // Minimum intensity threshold (35.0)
 
+    // IWLO (Intensity-Weighted Log-Odds) parameters
+    double sharpness_;      // Sigmoid steepness (default: 3.0)
+    double decay_rate_;     // Learning rate decay rate (default: 0.1)
+    double min_alpha_;      // Minimum learning rate (default: 0.1)
+    double L_min_;          // Saturation lower bound (default: -2.0)
+    double L_max_;          // Saturation upper bound (default: 3.5)
+
     // Incremental sync parameters
     std::unordered_set<std::string> modified_keys_;  // Track modified voxels for incremental sync
     bool enable_incremental_sync_;  // Enable incremental synchronization (default: true)
@@ -194,6 +225,20 @@ private:
      * @return String key for hash map
      */
     std::string world_to_key(double x, double y, double z) const;
+
+    /**
+     * Convert intensity to weight using sigmoid (IWLO method)
+     * @param intensity Observed intensity value
+     * @return Weight in range [0, 1]
+     */
+    double intensity_to_weight(double intensity) const;
+
+    /**
+     * Compute learning rate based on observation count (IWLO method)
+     * @param observation_count Number of observations
+     * @return Learning rate alpha
+     */
+    double compute_alpha(int observation_count) const;
 
     /**
      * Synchronize only modified voxels to octree_mapper_

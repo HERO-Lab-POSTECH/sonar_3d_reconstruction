@@ -89,6 +89,13 @@ class SimpleOctree:
         self.adaptive_update = True       # Enable adaptive updating
         self.adaptive_threshold = 0.5     # Protection threshold
         self.adaptive_max_ratio = 0.5     # Maximum update ratio at threshold
+
+        # IWLO (Intensity-Weighted Log-Odds) parameters
+        self.sharpness = 3.0              # Sigmoid steepness for intensity-to-weight
+        self.decay_rate = 0.1             # Learning rate decay rate
+        self.min_alpha = 0.1              # Minimum learning rate for change detection
+        self.L_min = -2.0                 # Saturation lower bound (P ~ 0.12)
+        self.L_max = 3.5                  # Saturation upper bound (P ~ 0.97)
     
     def world_to_key(self, x: float, y: float, z: float) -> Tuple[int, int, int]:
         """
@@ -163,6 +170,37 @@ class SimpleOctree:
             # Set the new value (not increment)
             self.voxels[key] = np.clip(new_log_odds, self.log_odds_min, self.log_odds_max)
 
+        elif self.probability_update_method == 'iwlo' and intensity is not None:
+            # IWLO: Intensity-Weighted Log-Odds
+            # Combines Log-Odds Bayesian with Weighted Average approach
+            threshold = self.intensity_threshold if hasattr(self, 'intensity_threshold') else 35
+
+            # 1. Compute intensity-based weight using sigmoid
+            w_intensity = self._intensity_to_weight(intensity, threshold)
+
+            # 2. Compute learning rate based on observation count
+            alpha_n = self._compute_alpha(n)
+
+            # 3. Compute adaptive scaling (for occupied updates)
+            if w_intensity > 0 and old_prob < self.adaptive_threshold:
+                adapt_scale = (old_prob / self.adaptive_threshold) * self.adaptive_max_ratio
+            else:
+                adapt_scale = 1.0
+
+            # 4. Compute log-odds update
+            if intensity > threshold:
+                # Occupied update: ΔL = L_occ × w(I) × α(n) × scale
+                delta_L = self.log_odds_occupied * w_intensity * alpha_n * adapt_scale
+            else:
+                # Free space update: ΔL = L_free × α(n)
+                delta_L = self.log_odds_free * alpha_n
+
+            # 5. Apply update with saturation limits
+            if key not in self.voxels:
+                self.voxels[key] = 0.0
+            self.voxels[key] += delta_L
+            self.voxels[key] = np.clip(self.voxels[key], self.L_min, self.L_max)
+
         else:
             # Standard log-odds update (additive)
             # Adaptive update: reduce occupied updates for voxels that are likely free
@@ -228,6 +266,40 @@ class SimpleOctree:
         log_odds_update = normalized_log_odds * weight
 
         return log_odds_update
+
+    def _intensity_to_weight(self, intensity: float, threshold: float) -> float:
+        """
+        Convert intensity to weight using sigmoid transformation (IWLO method)
+
+        Args:
+            intensity: Observed intensity value (0~255)
+            threshold: Minimum intensity threshold
+
+        Returns:
+            Weight in range [0, 1]
+        """
+        if intensity <= threshold:
+            return 0.0
+
+        # Normalize: [threshold, intensity_max] -> [0, 1]
+        normalized = (intensity - threshold) / (self.intensity_max - threshold)
+        normalized = np.clip(normalized, 0.0, 1.0)
+
+        # Sigmoid transformation centered at 0.5
+        x = self.sharpness * (normalized - 0.5)
+        return 1.0 / (1.0 + np.exp(-x))
+
+    def _compute_alpha(self, observation_count: int) -> float:
+        """
+        Compute learning rate based on observation count (IWLO method)
+
+        Args:
+            observation_count: Number of times this voxel has been observed
+
+        Returns:
+            Learning rate alpha in range [min_alpha, 1.0]
+        """
+        return max(self.min_alpha, 1.0 / (1.0 + self.decay_rate * observation_count))
 
     def _classify_state(self, log_odds: float) -> str:
         """
@@ -522,6 +594,13 @@ class SonarTo3DMapper:
 
             # Store intensity threshold for weighted average method
             self.octree.intensity_threshold = self.intensity_threshold
+
+            # IWLO parameters
+            self.octree.sharpness = default_config.get('sharpness', 3.0)
+            self.octree.decay_rate = default_config.get('decay_rate', 0.1)
+            self.octree.min_alpha = default_config.get('min_alpha', 0.1)
+            self.octree.L_min = default_config.get('L_min', -2.0)
+            self.octree.L_max = default_config.get('L_max', 3.5)
 
             # Recalculate log-odds threshold
             self.octree.log_odds_occupied_thresh = np.log(

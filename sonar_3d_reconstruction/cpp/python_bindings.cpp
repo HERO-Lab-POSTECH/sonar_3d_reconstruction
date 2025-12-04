@@ -141,6 +141,13 @@ PYBIND11_MODULE(sonar_3d_reconstruction_cpp, m) {
         .def("batch_update_weighted_average", &sonar_3d_reconstruction::ProbabilityUpdater::batch_update_weighted_average,
              py::arg("points"), py::arg("intensities"), py::arg("is_occupied"),
              "Batch update with weighted average method (voxelmap_fusion style)")
+        .def("set_iwlo_params", &sonar_3d_reconstruction::ProbabilityUpdater::set_iwlo_params,
+             py::arg("sharpness"), py::arg("decay_rate"), py::arg("min_alpha"),
+             py::arg("L_min"), py::arg("L_max"),
+             "Set IWLO (Intensity-Weighted Log-Odds) parameters")
+        .def("batch_update_iwlo", &sonar_3d_reconstruction::ProbabilityUpdater::batch_update_iwlo,
+             py::arg("points"), py::arg("intensities"), py::arg("is_occupied"),
+             "Batch update with IWLO method (combines Log-Odds with Weighted Average)")
         .def("set_incremental_sync", &sonar_3d_reconstruction::ProbabilityUpdater::set_incremental_sync,
              py::arg("enable") = true,
              "Enable or disable incremental synchronization")

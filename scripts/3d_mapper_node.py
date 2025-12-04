@@ -95,11 +95,18 @@ class SonarMapperNode(Node):
                 ('log_odds_max', 10.0),
 
                 # Probability update method (voxelmap_fusion style)
-                ('probability_update_method', 'weighted_average'),  # 'log_odds' | 'weighted_average'
+                ('probability_update_method', 'weighted_average'),  # 'log_odds' | 'weighted_average' | 'iwlo'
                 ('intensity_max', 255),  # Maximum intensity value for normalization
 
                 # Probability threshold (2-class: occupied vs free)
                 ('occupied_threshold', 0.7),  # Probability >= 0.7 = occupied, < 0.7 = free
+
+                # IWLO (Intensity-Weighted Log-Odds) parameters
+                ('sharpness', 3.0),      # Sigmoid steepness for intensity-to-weight (1.0~5.0)
+                ('decay_rate', 0.1),     # Learning rate decay rate (0.05~0.5)
+                ('min_alpha', 0.1),      # Minimum learning rate for change detection (0.01~0.3)
+                ('L_min', -2.0),         # Saturation lower bound (P ~ 0.12)
+                ('L_max', 3.5),          # Saturation upper bound (P ~ 0.97)
 
                 # Backend selection
                 ('use_cpp_backend', True),  # Use high-performance C++ hierarchical octree by default
@@ -181,7 +188,13 @@ class SonarMapperNode(Node):
             'intensity_max': self.get_parameter('intensity_max').value,
             'occupied_threshold': self.get_parameter('occupied_threshold').value,
             'use_cpp_backend': self.get_parameter('use_cpp_backend').value,
-            'frame_skip': self.get_parameter('frame_skip').value
+            'frame_skip': self.get_parameter('frame_skip').value,
+            # IWLO parameters
+            'sharpness': self.get_parameter('sharpness').value,
+            'decay_rate': self.get_parameter('decay_rate').value,
+            'min_alpha': self.get_parameter('min_alpha').value,
+            'L_min': self.get_parameter('L_min').value,
+            'L_max': self.get_parameter('L_max').value
         }
         
         # Get other parameters

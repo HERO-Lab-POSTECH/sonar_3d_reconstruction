@@ -3,8 +3,11 @@
 Launch file for 3D Sonar Mapping System
 
 Usage:
-  # Default (weighted_average method):
+  # Default (iwlo method - recommended):
   ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py
+
+  # Weighted average method:
+  ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py method:=weighted_average
 
   # Log-odds method:
   ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py method:=log_odds
@@ -26,13 +29,14 @@ from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
     # Package directories
-    pkg_dir = "/workspace/ros2_ws/src/sonar_3d_reconstruction"
+    pkg_dir = get_package_share_directory('sonar_3d_reconstruction')
     fast_lio_pkg = get_package_share_directory('fast_lio')
 
     # Config files
     common_config = os.path.join(pkg_dir, 'config', 'common.yaml')
     method_weighted_avg = os.path.join(pkg_dir, 'config', 'method_weighted_average.yaml')
     method_log_odds = os.path.join(pkg_dir, 'config', 'method_log_odds.yaml')
+    method_iwlo = os.path.join(pkg_dir, 'config', 'method_iwlo.yaml')
     robot_detection_config = os.path.join(pkg_dir, 'config', 'robot_detection.yaml')
     rviz_config = os.path.join(pkg_dir, 'rviz', '3d_mapping.rviz')
 
@@ -53,8 +57,8 @@ def generate_launch_description():
     # Declare arguments (defaults from common.yaml)
     ld = LaunchDescription([
         DeclareLaunchArgument('method',
-            default_value=common_params.get('probability_update_method', 'weighted_average'),
-            description='Probability update method: weighted_average or log_odds'),
+            default_value=common_params.get('probability_update_method', 'iwlo'),
+            description='Probability update method: iwlo, weighted_average, or log_odds'),
         DeclareLaunchArgument('use_sim_time',
             default_value=str(common_params.get('use_sim_time', True)).lower()),
         DeclareLaunchArgument('launch_fast_lio',
@@ -109,6 +113,21 @@ def generate_launch_description():
         ],
         output='screen',
         condition=IfCondition(PythonExpression(["'", method, "' == 'log_odds'"]))
+    ))
+
+    # 3D Mapper node - iwlo method (Intensity-Weighted Log-Odds)
+    ld.add_action(Node(
+        package='sonar_3d_reconstruction',
+        executable='3d_mapper_node.py',
+        name='sonar_3d_mapper',
+        parameters=[
+            common_config,
+            method_iwlo,
+            robot_detection_config,
+            {'use_sim_time': use_sim_time, 'sonar_orientation.pitch': sonar_pitch}
+        ],
+        output='screen',
+        condition=IfCondition(PythonExpression(["'", method, "' == 'iwlo'"]))
     ))
 
     # RViz

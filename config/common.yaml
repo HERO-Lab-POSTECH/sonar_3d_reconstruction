@@ -4,7 +4,7 @@
 sonar_3d_mapper:
   ros__parameters:
     #===== Sonar Sensor =====
-    horizontal_fov: 130.0        # degrees
+    horizontal_fov: 180.0        # degrees
     vertical_aperture: 20.0      # degrees
     max_range: 3.5              # meters
     min_range: 1.0               # meters
@@ -25,9 +25,12 @@ sonar_3d_mapper:
     use_cpp_backend: true
 
     #===== Probability Update =====
-    # Method: "weighted_average" (voxelmap_fusion style) or "log_odds" (traditional Bayesian)
+    # Method: "weighted_average" | "log_odds" | "iwlo"
+    #   - weighted_average: voxelmap_fusion style, uses intensity for weighted probability average
+    #   - log_odds: traditional Bayesian, additive log-odds update
+    #   - iwlo: Intensity-Weighted Log-Odds, combines both approaches (recommended)
     # Note: Method-specific params are in method_*.yaml files, loaded via launch arg
-    probability_update_method: "weighted_average"
+    probability_update_method: "iwlo"
 
     #===== Probability Threshold =====
     occupied_threshold: 0.7      # prob >= this = occupied, prob < this = free
@@ -58,7 +61,7 @@ sonar_3d_mapper:
 
     #===== Bag Playback =====
     play_bag: true
-    bag_file: "/workspace/data/4_yeondong_hang/20251029_blueboat_sonar_lidar/tilt90-range3.5_v4"
+    bag_file: "/workspace/data/4_yeondong_hang/20251029_blueboat_sonar_lidar/tilt90-range3.5_v3"
     bag_playback_rate: 1.0
 
     #===== Bag Recording (optional) =====
