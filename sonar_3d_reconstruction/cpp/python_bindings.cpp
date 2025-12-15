@@ -116,9 +116,7 @@ PYBIND11_MODULE(sonar_3d_reconstruction_cpp, m) {
         .def("set_clamping_thresholds", &sonar_3d_reconstruction::ProbabilityUpdater::set_clamping_thresholds,
              py::arg("min_prob"), py::arg("max_prob"),
              "Set probability clamping thresholds")
-        .def("batch_update", &sonar_3d_reconstruction::ProbabilityUpdater::batch_update,
-             py::arg("points"), py::arg("log_odds_updates"), py::arg("is_occupied"),
-             "Batch update with adaptive probability updates")
+        // batch_update() removed - using IWLO only
         .def("get_occupied_voxels", &sonar_3d_reconstruction::ProbabilityUpdater::get_occupied_voxels,
              py::arg("min_probability") = 0.5,
              "Get all occupied voxels above threshold")
@@ -138,9 +136,7 @@ PYBIND11_MODULE(sonar_3d_reconstruction_cpp, m) {
         .def("set_intensity_params", &sonar_3d_reconstruction::ProbabilityUpdater::set_intensity_params,
              py::arg("intensity_threshold"), py::arg("intensity_max"),
              "Set intensity normalization parameters")
-        .def("batch_update_weighted_average", &sonar_3d_reconstruction::ProbabilityUpdater::batch_update_weighted_average,
-             py::arg("points"), py::arg("intensities"), py::arg("is_occupied"),
-             "Batch update with weighted average method (voxelmap_fusion style)")
+        // batch_update_weighted_average() removed - using IWLO only
         .def("set_iwlo_params", &sonar_3d_reconstruction::ProbabilityUpdater::set_iwlo_params,
              py::arg("sharpness"), py::arg("decay_rate"), py::arg("min_alpha"),
              py::arg("L_min"), py::arg("L_max"),

@@ -72,63 +72,7 @@ void ProbabilityUpdater::set_clamping_thresholds(double min_prob, double max_pro
     octree_mapper_->set_occupancy_thresholds(min_prob, max_prob);
 }
 
-void ProbabilityUpdater::batch_update(const Eigen::MatrixXd& points, 
-                                     const Eigen::VectorXd& log_odds_updates,
-                                     const std::vector<bool>& is_occupied)
-{
-    if (points.rows() != log_odds_updates.rows()) {
-        throw std::invalid_argument("Points and log_odds_updates must have same number of rows");
-    }
-    
-    if (points.rows() != static_cast<int>(is_occupied.size())) {
-        throw std::invalid_argument("Points and is_occupied must have same number of elements");
-    }
-    
-    if (points.cols() != 3) {
-        throw std::invalid_argument("Points must be Nx3 matrix");
-    }
-    
-    // Process each point with adaptive updates
-    std::vector<bool> final_occupied_flags;
-    final_occupied_flags.reserve(points.rows());
-    
-    for (int i = 0; i < points.rows(); ++i) {
-        double log_odds_update = log_odds_updates(i);
-        bool occupied = is_occupied[i];
-        
-        // Apply adaptive scaling if enabled
-        if (adaptive_enabled_ && occupied) {
-            // Simplified adaptive approach without querying existing voxels
-            // to avoid potential thread-safety issues with OctoMap queries
-            // Use a conservative default probability for adaptive scaling
-            double current_prob = 0.5;  // Default unknown probability
-            log_odds_update = apply_adaptive_scaling(current_prob, log_odds_update, occupied);
-        }
-        
-        // Convert log-odds update to probability update and apply
-        final_occupied_flags.push_back(occupied);
-    }
-    
-    // Apply batch update to underlying octree with log-odds (Python SimpleOctree compatible)
-    try {
-        octree_mapper_->batch_update_with_log_odds(points, log_odds_updates);
-    } catch (const std::exception& e) {
-        // Log error but don't crash the entire update
-        std::cerr << "[ProbabilityUpdater] Batch update failed: " << e.what() << std::endl;
-        // Fall back to individual updates with error handling
-        for (int i = 0; i < points.rows(); ++i) {
-            try {
-                Eigen::MatrixXd single_point = points.row(i);
-                Eigen::VectorXd single_log_odds(1);
-                single_log_odds(0) = log_odds_updates(i);
-                octree_mapper_->batch_update_with_log_odds(single_point, single_log_odds);
-            } catch (const std::exception& e2) {
-                // Skip this point and continue
-                std::cerr << "[ProbabilityUpdater] Failed to update point " << i << ": " << e2.what() << std::endl;
-            }
-        }
-    }
-}
+// batch_update() method removed - using IWLO only
 
 Eigen::MatrixXd ProbabilityUpdater::get_occupied_voxels(double min_probability) const
 {
@@ -174,81 +118,7 @@ void ProbabilityUpdater::set_intensity_params(double intensity_threshold, double
     intensity_max_ = intensity_max;
 }
 
-void ProbabilityUpdater::batch_update_weighted_average(
-    const Eigen::MatrixXd& points,
-    const Eigen::VectorXd& intensities,
-    const std::vector<bool>& is_occupied)
-{
-    if (points.rows() != intensities.rows()) {
-        throw std::invalid_argument("Points and intensities must have same number of rows");
-    }
-
-    if (points.cols() != 3) {
-        throw std::invalid_argument("Points must be Nx3 matrix");
-    }
-
-    // Process each point with weighted average update
-    for (int i = 0; i < points.rows(); ++i) {
-        double x = points(i, 0);
-        double y = points(i, 1);
-        double z = points(i, 2);
-        double intensity = intensities(i);
-
-        // Generate voxel key
-        std::string key = world_to_key(x, y, z);
-
-        // Increment observation count
-        observation_counts_[key]++;
-        int count = observation_counts_[key];
-
-        // Skip low intensity points
-        if (intensity <= intensity_threshold_) {
-            continue;
-        }
-
-        // Normalize intensity: [threshold, max] -> [0.7, 0.95]
-        double normalized_intensity = std::max(intensity_threshold_, std::min(intensity_max_, intensity));
-        double observed_prob = occupied_threshold_ + 0.25 *
-            (normalized_intensity - intensity_threshold_) / (intensity_max_ - intensity_threshold_);
-
-        // Clamp observed probability
-        observed_prob = std::max(occupied_threshold_, std::min(0.95, observed_prob));
-
-        // Get current log-odds (default 0.0 for unknown voxels)
-        double current_log_odds = 0.0;
-        auto it = voxels_log_odds_.find(key);
-        if (it != voxels_log_odds_.end()) {
-            current_log_odds = it->second;
-        }
-
-        // Convert current log-odds to probability
-        double current_prob = log_odds_to_probability(current_log_odds);
-
-        // Apply weighted average: new_prob = (n * old_prob + obs_prob) / (n + 1)
-        // where n = count - 1 (previous observations)
-        double new_prob = ((count - 1) * current_prob + observed_prob) / static_cast<double>(count);
-
-        // Clamp to prevent extreme values
-        new_prob = std::max(min_probability_, std::min(max_probability_, new_prob));
-
-        // Convert back to log-odds and store
-        double new_log_odds = probability_to_log_odds(new_prob);
-        voxels_log_odds_[key] = new_log_odds;
-
-        // Track modified voxel for incremental sync
-        modified_keys_.insert(key);
-    }
-
-    // Sync with octree_mapper_ for visualization
-    if (enable_incremental_sync_) {
-        sync_modified_voxels_to_octree();
-    } else {
-        sync_all_voxels_to_octree();
-    }
-
-    // Clear modified keys after sync
-    modified_keys_.clear();
-}
+// batch_update_weighted_average() method removed - using IWLO only
 
 int ProbabilityUpdater::get_observation_count(const std::string& key) const
 {

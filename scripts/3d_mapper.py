@@ -156,401 +156,7 @@ class CrosstalkFilter:
         return mask
 
 
-class SimpleOctree:
-    """
-    Sparse voxel storage using dictionary with dynamic expansion
-    Stores log-odds values for each voxel with adaptive updating
-    """
-
-    def __init__(self, resolution: float = 0.03, dynamic_expansion: bool = True,
-                 probability_update_method: str = 'log_odds', intensity_max: int = 255):
-        """
-        Initialize octree with given resolution
-
-        Args:
-            resolution: Size of each voxel in meters
-            dynamic_expansion: Enable dynamic map expansion
-            probability_update_method: 'log_odds' or 'weighted_average'
-            intensity_max: Maximum intensity value for normalization (default 255)
-        """
-        self.resolution = resolution
-        self.voxels = defaultdict(float)  # Store log-odds values
-        self.observation_counts = defaultdict(int)  # Track observation counts per voxel
-        self.dynamic_expansion = dynamic_expansion
-
-        # Probability update method
-        self.probability_update_method = probability_update_method
-        self.intensity_max = intensity_max
-
-        # Map bounds (for dynamic expansion)
-        self.min_bounds = np.array([float('inf')] * 3)
-        self.max_bounds = np.array([-float('inf')] * 3)
-
-        # Log-odds parameters (will be set from config)
-        # Ratio: 3.5:-3.0 = 1.17:1 (occupied dominant, prevents erosion)
-        self.log_odds_occupied = 3.5      # Log-odds increment for occupied (1.5 -> 3.5)
-        self.log_odds_free = -3.0         # Log-odds decrement for free space (-2.0 -> -3.0)
-        self.log_odds_min = -10.0         # Minimum log-odds (clamping)
-        self.log_odds_max = 10.0          # Maximum log-odds (clamping)
-        self.log_odds_threshold = 0.0     # Threshold for considering occupied
-
-        # Probability threshold (2-class classification)
-        self.occupied_threshold = 0.7     # Probability threshold for occupied (< this = free)
-
-        # Convert threshold to log-odds
-        self.log_odds_occupied_thresh = np.log(self.occupied_threshold / (1.0 - self.occupied_threshold))
-
-        # Adaptive update parameters
-        self.adaptive_update = True       # Enable adaptive updating
-        self.adaptive_threshold = 0.5     # Protection threshold
-        self.adaptive_max_ratio = 0.3     # Maximum update ratio at threshold (0.5 -> 0.3)
-
-        # IWLO (Intensity-Weighted Log-Odds) parameters
-        self.sharpness = 0.1              # Sigmoid steepness (3.0 -> 0.1, stonefish recommended)
-        self.decay_rate = 0.1             # Learning rate decay rate
-        self.min_alpha = 0.3              # Minimum learning rate (0.1 -> 0.3, for change detection)
-        self.L_min = -10.0                # Saturation lower bound (-2.0 -> -10.0, extended)
-        self.L_max = 10.0                 # Saturation upper bound (3.5 -> 10.0, extended)
-    
-    def world_to_key(self, x: float, y: float, z: float) -> Tuple[int, int, int]:
-        """
-        Convert world coordinates to voxel key
-        
-        Args:
-            x, y, z: World coordinates in meters
-            
-        Returns:
-            Tuple (ix, iy, iz) as voxel index
-        """
-        i = int(np.floor(x / self.resolution))
-        j = int(np.floor(y / self.resolution))
-        k = int(np.floor(z / self.resolution))
-        return (i, j, k)
-    
-    def key_to_world(self, key: Tuple[int, int, int]) -> np.ndarray:
-        """
-        Convert voxel key to world coordinates (center of voxel)
-        
-        Args:
-            key: Tuple (ix, iy, iz) voxel index
-            
-        Returns:
-            numpy array [x, y, z] world coordinates
-        """
-        x = (key[0] + 0.5) * self.resolution
-        y = (key[1] + 0.5) * self.resolution
-        z = (key[2] + 0.5) * self.resolution
-        return np.array([x, y, z])
-    
-    def update_voxel(self, point: np.ndarray, log_odds_update: float, adaptive: bool = True,
-                     intensity: Optional[float] = None):
-        """
-        Update voxel log-odds value with optional adaptive updating
-
-        Args:
-            point: [x, y, z] numpy array in world coordinates
-            log_odds_update: Log-odds increment/decrement (ignored for weighted_average method)
-            adaptive: If True, use adaptive updating for occupied updates
-            intensity: Observed intensity value (for weighted_average method)
-        """
-        key = self.world_to_key(point[0], point[1], point[2])
-
-        # Get current values
-        old_log_odds = self.voxels.get(key, 0.0)
-        old_prob = 1.0 / (1.0 + np.exp(-old_log_odds))
-        n = self.observation_counts.get(key, 0)
-
-        # Use weighted average method if enabled and intensity provided
-        if self.probability_update_method == 'weighted_average' and intensity is not None:
-            # Convert intensity to probability
-            threshold = self.intensity_threshold if hasattr(self, 'intensity_threshold') else 35
-            intensity_clamped = np.clip(intensity, threshold, self.intensity_max)
-
-            # Normalize: [threshold, intensity_max] -> [0.7, 0.95]
-            # More aggressive mapping: threshold intensity -> 0.7 prob, max intensity -> 0.95 prob
-            normalized_ratio = (intensity_clamped - threshold) / (self.intensity_max - threshold)
-            obs_prob = 0.7 + 0.25 * normalized_ratio
-
-            # Weighted average: new_prob = (n * old_prob + obs_prob) / (n + 1)
-            new_prob = (n * old_prob + obs_prob) / (n + 1)
-
-            # Convert back to log-odds
-            if new_prob >= 0.9999:
-                new_log_odds = self.log_odds_max
-            elif new_prob <= 0.0001:
-                new_log_odds = self.log_odds_min
-            else:
-                new_log_odds = np.log(new_prob / (1.0 - new_prob))
-
-            # Set the new value (not increment)
-            self.voxels[key] = np.clip(new_log_odds, self.log_odds_min, self.log_odds_max)
-
-        elif self.probability_update_method == 'iwlo' and intensity is not None:
-            # IWLO: Intensity-Weighted Log-Odds
-            # Combines Log-Odds Bayesian with Weighted Average approach
-            threshold = self.intensity_threshold if hasattr(self, 'intensity_threshold') else 35
-
-            # 1. Compute intensity-based weight using sigmoid
-            w_intensity = self._intensity_to_weight(intensity, threshold)
-
-            # 2. Compute learning rate based on observation count
-            alpha_n = self._compute_alpha(n)
-
-            # 3. Compute adaptive scaling (for occupied updates)
-            if w_intensity > 0 and old_prob < self.adaptive_threshold:
-                adapt_scale = (old_prob / self.adaptive_threshold) * self.adaptive_max_ratio
-            else:
-                adapt_scale = 1.0
-
-            # 4. Compute log-odds update
-            if intensity > threshold:
-                # Occupied update: ΔL = L_occ × w(I) × α(n) × scale
-                delta_L = self.log_odds_occupied * w_intensity * alpha_n * adapt_scale
-            else:
-                # Free space update: ΔL = L_free × α(n)
-                delta_L = self.log_odds_free * alpha_n
-
-            # 5. Apply update with saturation limits
-            if key not in self.voxels:
-                self.voxels[key] = 0.0
-            self.voxels[key] += delta_L
-            self.voxels[key] = np.clip(self.voxels[key], self.L_min, self.L_max)
-
-        else:
-            # Standard log-odds update (additive)
-            # Adaptive update: bidirectional protection
-            if adaptive and self.adaptive_update:
-                current_prob = 1.0 / (1.0 + np.exp(-old_log_odds))
-
-                if log_odds_update > 0:
-                    # Occupied update: protect free voxels (existing logic)
-                    if current_prob <= self.adaptive_threshold:
-                        update_scale = (current_prob / self.adaptive_threshold) * self.adaptive_max_ratio
-                        log_odds_update *= update_scale
-                else:
-                    # Free update: protect occupied voxels (new - bidirectional)
-                    if current_prob >= (1.0 - self.adaptive_threshold):
-                        protection_factor = (current_prob - (1.0 - self.adaptive_threshold)) / self.adaptive_threshold
-                        update_scale = self.adaptive_max_ratio + (1.0 - self.adaptive_max_ratio) * (1.0 - protection_factor)
-                        log_odds_update *= update_scale
-
-            # Apply update
-            if key not in self.voxels:
-                self.voxels[key] = 0.0
-            self.voxels[key] += log_odds_update
-
-            # Clamp to prevent overflow
-            self.voxels[key] = np.clip(self.voxels[key], self.log_odds_min, self.log_odds_max)
-
-        # Increment observation count after update
-        self.observation_counts[key] = n + 1
-
-        # Update bounds for dynamic expansion
-        if self.dynamic_expansion:
-            self.min_bounds = np.minimum(self.min_bounds, point)
-            self.max_bounds = np.maximum(self.max_bounds, point)
-    
-    def calculate_weighted_average_update(self, intensity: float, observation_count: int) -> float:
-        """
-        Calculate weighted average log-odds update based on intensity and observation count
-        Based on voxelmap_fusion approach (Voxel.py:71-72)
-
-        Args:
-            intensity: Observed intensity value (threshold ~ intensity_max range)
-            observation_count: Number of times this voxel has been observed
-
-        Returns:
-            Log-odds update value
-        """
-        # Normalize intensity to probability range [0.5, 1.0]
-        # intensity_threshold is stored as self.intensity_threshold in parent mapper
-        threshold = self.intensity_threshold if hasattr(self, 'intensity_threshold') else 35
-
-        # Clamp intensity to valid range
-        intensity = np.clip(intensity, threshold, self.intensity_max)
-
-        # Normalize: [threshold, intensity_max] -> [0.5, 1.0]
-        normalized_prob = 0.5 + 0.5 * (intensity - threshold) / (self.intensity_max - threshold)
-
-        # Calculate weight: decreases with more observations
-        # weight = 1/(n+1) means first observation has weight 1, second has 1/2, etc.
-        weight = 1.0 / observation_count
-
-        # Convert normalized probability to log-odds
-        if normalized_prob >= 1.0:
-            normalized_log_odds = self.log_odds_occupied
-        elif normalized_prob <= 0.0:
-            normalized_log_odds = self.log_odds_free
-        else:
-            normalized_log_odds = np.log(normalized_prob / (1.0 - normalized_prob))
-
-        # Apply weight to the update
-        log_odds_update = normalized_log_odds * weight
-
-        return log_odds_update
-
-    def _intensity_to_weight(self, intensity: float, threshold: float) -> float:
-        """
-        Convert intensity to weight using sigmoid transformation (IWLO method)
-
-        Args:
-            intensity: Observed intensity value (0~255)
-            threshold: Minimum intensity threshold
-
-        Returns:
-            Weight in range [0, 1]
-        """
-        if intensity <= threshold:
-            return 0.0
-
-        # Normalize: [threshold, intensity_max] -> [0, 1]
-        normalized = (intensity - threshold) / (self.intensity_max - threshold)
-        normalized = np.clip(normalized, 0.0, 1.0)
-
-        # Sigmoid transformation centered at 0.5
-        x = self.sharpness * (normalized - 0.5)
-        return 1.0 / (1.0 + np.exp(-x))
-
-    def _compute_alpha(self, observation_count: int) -> float:
-        """
-        Compute learning rate based on observation count (IWLO method)
-
-        Args:
-            observation_count: Number of times this voxel has been observed
-
-        Returns:
-            Learning rate alpha in range [min_alpha, 1.0]
-        """
-        return max(self.min_alpha, 1.0 / (1.0 + self.decay_rate * observation_count))
-
-    def _classify_state(self, log_odds: float) -> str:
-        """
-        Classify voxel state based on log-odds value
-
-        Args:
-            log_odds: Log-odds value
-
-        Returns:
-            'free', 'unknown', or 'occupied'
-        """
-        if log_odds < self.log_odds_free_thresh:
-            return 'free'
-        elif log_odds > self.log_odds_occupied_thresh:
-            return 'occupied'
-        else:
-            return 'unknown'
-
-    def update_voxel_with_state_tracking(self, point: np.ndarray, log_odds_update: float,
-                                         adaptive: bool = True, intensity: Optional[float] = None) -> str:
-        """
-        Update voxel with state change tracking
-
-        Args:
-            point: [x, y, z] numpy array in world coordinates
-            log_odds_update: Log-odds increment/decrement
-            adaptive: If True, use adaptive updating
-            intensity: Observed intensity value
-
-        Returns:
-            State change: 'free->occupied', 'occupied->free', or 'no_change'
-        """
-        key = self.world_to_key(point[0], point[1], point[2])
-
-        # Get previous state
-        old_log_odds = self.voxels.get(key, 0.0)
-        old_state = self._classify_state(old_log_odds)
-
-        # Update voxel
-        self.update_voxel(point, log_odds_update, adaptive, intensity)
-
-        # Get new state
-        new_log_odds = self.voxels[key]
-        new_state = self._classify_state(new_log_odds)
-
-        # Detect state change
-        if old_state != new_state:
-            return f"{old_state}->{new_state}"
-        else:
-            return "no_change"
-
-    def get_log_odds(self, x: float, y: float, z: float) -> float:
-        """Get log-odds value for a voxel"""
-        key = self.world_to_key(x, y, z)
-        return self.voxels.get(key, 0.0)
-
-    def get_probability(self, x: float, y: float, z: float) -> float:
-        """Get probability from log-odds value"""
-        log_odds = self.get_log_odds(x, y, z)
-        return 1.0 / (1.0 + np.exp(-log_odds))
-    
-    def get_occupied_voxels(self, min_probability: float = 0.5) -> List[Tuple[np.ndarray, float]]:
-        """
-        Get all occupied voxels above probability threshold
-        
-        Args:
-            min_probability: Minimum probability to consider occupied
-            
-        Returns:
-            List of (point, probability) tuples
-        """
-        occupied = []
-        
-        # Convert probability to log-odds threshold
-        if min_probability >= 1.0:
-            min_log_odds = self.log_odds_max - 0.01
-        elif min_probability <= 0.0:
-            min_log_odds = self.log_odds_min
-        else:
-            min_log_odds = np.log(min_probability / (1.0 - min_probability))
-        
-        for key, log_odds in self.voxels.items():
-            if log_odds > min_log_odds:
-                point = self.key_to_world(key)
-                probability = 1.0 / (1.0 + np.exp(-log_odds))
-                occupied.append((point, probability))
-        
-        return occupied
-    
-    def get_all_voxels_classified(self, occupied_threshold: Optional[float] = None) -> Dict[str, List]:
-        """
-        Get all voxels classified as free or occupied (2-class)
-
-        Args:
-            occupied_threshold: Probability threshold for occupied (uses self.occupied_threshold if None)
-
-        Returns:
-            Dictionary with 'free', 'occupied' lists
-        """
-        free = []
-        occupied = []
-
-        # Use instance threshold if not provided
-        if occupied_threshold is None:
-            occupied_threshold = self.occupied_threshold
-
-        # Convert probability threshold to log-odds
-        log_odds_occupied_thresh = np.log(occupied_threshold / (1.0 - occupied_threshold))
-
-        for key, log_odds in self.voxels.items():
-            point = self.key_to_world(key)
-            probability = 1.0 / (1.0 + np.exp(-log_odds))
-
-            if log_odds >= log_odds_occupied_thresh:
-                occupied.append((point, probability))
-            else:
-                free.append((point, probability))
-
-        return {
-            'free': free,
-            'occupied': occupied
-        }
-    
-    def clear(self):
-        """Clear all voxels and observation counts"""
-        self.voxels.clear()
-        self.observation_counts.clear()
-        self.min_bounds = np.array([float('inf')] * 3)
-        self.max_bounds = np.array([-float('inf')] * 3)
+# Python SimpleOctree class removed - using C++ backend only
 
 
 class SonarTo3DMapper:
@@ -599,8 +205,8 @@ class SonarTo3DMapper:
             'voxel_resolution': 0.05,      # meters
             'dynamic_expansion': True,
 
-            # Probability update method
-            'probability_update_method': 'log_odds',  # 'log_odds' or 'weighted_average'
+            # Probability update method (IWLO only)
+            'probability_update_method': 'iwlo',
             'intensity_max': 255,          # Maximum intensity value for normalization
 
             # Probability threshold (2-class: occupied vs free)
@@ -716,47 +322,11 @@ class SonarTo3DMapper:
             print(f"[3D Mapper] C++ ProbabilityUpdater 사용 (해상도: {self.voxel_resolution}m)")
             print(f"  업데이트 방식: {self.probability_update_method}")
         else:
-            # Initialize Python SimpleOctree
-            self.octree = SimpleOctree(
-                self.voxel_resolution,
-                self.dynamic_expansion,
-                default_config['probability_update_method'],
-                default_config['intensity_max']
+            # C++ module required but not available
+            raise RuntimeError(
+                "C++ backend is required but not available. "
+                "Please build the C++ module: colcon build --packages-select sonar_3d_reconstruction"
             )
-
-            # Store log-odds values for both approaches
-            self.log_odds_occupied = default_config['log_odds_occupied']
-            self.log_odds_free = default_config['log_odds_free']
-
-            # Configure Python octree parameters
-            self.octree.log_odds_occupied = self.log_odds_occupied
-            self.octree.log_odds_free = self.log_odds_free
-            self.octree.log_odds_min = default_config['log_odds_min']
-            self.octree.log_odds_max = default_config['log_odds_max']
-            self.octree.occupied_threshold = default_config['occupied_threshold']
-            self.octree.adaptive_update = default_config['adaptive_update']
-            self.octree.adaptive_threshold = default_config['adaptive_threshold']
-            self.octree.adaptive_max_ratio = default_config['adaptive_max_ratio']
-
-            # Store intensity threshold for weighted average method
-            self.octree.intensity_threshold = self.intensity_threshold
-
-            # IWLO parameters (updated defaults from stonefish_slam)
-            self.octree.sharpness = default_config.get('sharpness', 0.1)
-            self.octree.decay_rate = default_config.get('decay_rate', 0.1)
-            self.octree.min_alpha = default_config.get('min_alpha', 0.3)
-            self.octree.L_min = default_config.get('L_min', -10.0)
-            self.octree.L_max = default_config.get('L_max', 10.0)
-
-            # Recalculate log-odds threshold
-            self.octree.log_odds_occupied_thresh = np.log(
-                default_config['occupied_threshold'] / (1.0 - default_config['occupied_threshold'])
-            )
-
-            print(f"[3D Mapper] Python SimpleOctree 사용 (해상도: {self.voxel_resolution}m)")
-            print(f"  업데이트 방식: {default_config['probability_update_method']}")
-            if self.use_cpp:
-                print("  주의: C++ 모듈을 요청했지만 사용할 수 없음")
         
         # Pre-compute bearing angles
         self.bearing_angles = np.linspace(
@@ -1179,46 +749,18 @@ class SonarTo3DMapper:
                 intensities_array = np.array(intensities_list, dtype=np.float64)
                 is_occupied_array = np.array(is_occupied_list, dtype=bool)
 
-                # C++ 배치 업데이트 실행 - 메서드별 분기
-                if self.probability_update_method == 'iwlo':
-                    self.octree.batch_update_iwlo(
-                        points_array, intensities_array, is_occupied_array
-                    )
-                elif self.probability_update_method == 'weighted_average':
-                    self.octree.batch_update_weighted_average(
-                        points_array, intensities_array, is_occupied_array
-                    )
-                else:
-                    # 기본 log_odds 방식
-                    self.octree.batch_update(
-                        points_array, log_odds_array, is_occupied_array
-                    )
-                
-        else:
-            # Python 개별 업데이트 사용
-            for key, update_info in voxel_updates.items():
-                if update_info['count'] > 0:
-                    avg_update = update_info['sum'] / update_info['count']
-                    point = self.key_to_world(key)
-                    intensity_val = update_info.get('intensity', None)
-
-                    if update_info['type'] == 'occupied':
-                        self.octree.update_voxel(point, avg_update, adaptive=True, intensity=intensity_val)
-                        num_occupied += 1
-                    elif update_info['type'] == 'free':
-                        self.octree.update_voxel(point, avg_update, adaptive=False, intensity=None)
-                        num_free += 1
+                # C++ 배치 업데이트 실행 (IWLO only)
+                self.octree.batch_update_iwlo(
+                    points_array, intensities_array, is_occupied_array
+                )
         
         # Calculate processing time
         processing_time = time.time() - start_time
         self.last_processing_time = processing_time
         self.total_processing_time += processing_time
         
-        # Get voxel count (compatible with both C++ and Python)
-        if self.use_cpp and CPP_MODULE_AVAILABLE:
-            num_voxels = self.octree.get_num_nodes()
-        else:
-            num_voxels = len(self.octree.voxels)
+        # Get voxel count
+        num_voxels = self.octree.get_num_nodes()
         
         return {
             'frame_count': self.frame_count,
@@ -1233,83 +775,40 @@ class SonarTo3DMapper:
     def get_point_cloud(self, include_free: bool = False) -> Dict[str, Any]:
         """
         Get current point cloud from probabilistic map
-        
+
         Args:
-            include_free: Whether to include free space voxels
-            
+            include_free: Whether to include free space voxels (not supported - ignored)
+
         Returns:
             Dictionary containing point cloud data and statistics
         """
-        if self.use_cpp and CPP_MODULE_AVAILABLE:
-            # C++ ProbabilityUpdater 사용
-            if include_free:
-                warnings.warn("C++ 백엔드는 free space 복셀 조회를 지원하지 않습니다. occupied만 반환합니다.")
-                include_free = False
-            
-            # C++에서 점유 복셀 조회
-            occupied_data = self.octree.get_occupied_voxels(self.occupied_threshold)
-            
-            if len(occupied_data) > 0:
-                points = occupied_data[:, :3]  # x, y, z
-                probabilities = occupied_data[:, 3]  # probability
-            else:
-                points = np.empty((0, 3))
-                probabilities = np.empty(0)
-            
-            # 메모리 사용량 통계
-            memory_stats = self.octree.get_memory_usage()
-            
-            return {
-                'points': points,
-                'probabilities': probabilities,
-                'num_voxels': memory_stats.num_nodes,
-                'num_occupied': len(points),
-                'frame_count': self.frame_count,
-                'processed_count': self.processed_frame_count,
-                'memory_mb': memory_stats.memory_mb,
-                'memory_efficiency': memory_stats.memory_efficiency,
-                'robot_detections': [(point, intensity) for point, intensity, timestamp in self.robot_detections] if self.enable_robot_detection else []
-            }
-        else:
-            # Python SimpleOctree 사용
-            if include_free:
-                classified = self.octree.get_all_voxels_classified()
+        if include_free:
+            warnings.warn("Free space voxel retrieval is not supported. Only occupied voxels returned.")
 
-                return {
-                    'occupied': classified['occupied'],
-                    'free': classified['free'],
-                    'unknown': classified['unknown'],
-                    'num_voxels': len(self.octree.voxels),
-                    'num_occupied': len(classified['occupied']),
-                    'num_free': len(classified['free']),
-                    'num_unknown': len(classified['unknown']),
-                    'frame_count': self.frame_count,
-                    'processed_count': self.processed_frame_count,
-                    'bounds': {
-                        'min': self.octree.min_bounds.copy() if self.octree.dynamic_expansion else None,
-                        'max': self.octree.max_bounds.copy() if self.octree.dynamic_expansion else None
-                    },
-                    'robot_detections': [(point, intensity) for point, intensity, timestamp in self.robot_detections] if self.enable_robot_detection else []
-                }
-            else:
-                occupied_voxels = self.octree.get_occupied_voxels(self.occupied_threshold)
-                
-                if occupied_voxels:
-                    points = np.array([v[0] for v in occupied_voxels])
-                    probabilities = np.array([v[1] for v in occupied_voxels])
-                else:
-                    points = np.empty((0, 3))
-                    probabilities = np.empty(0)
-                
-                return {
-                    'points': points,
-                    'probabilities': probabilities,
-                    'num_voxels': len(self.octree.voxels),
-                    'num_occupied': len(occupied_voxels),
-                    'frame_count': self.frame_count,
-                    'processed_count': self.processed_frame_count,
-                    'robot_detections': [(point, intensity) for point, intensity, timestamp in self.robot_detections] if self.enable_robot_detection else []
-                }
+        # C++에서 점유 복셀 조회
+        occupied_data = self.octree.get_occupied_voxels(self.occupied_threshold)
+
+        if len(occupied_data) > 0:
+            points = occupied_data[:, :3]  # x, y, z
+            probabilities = occupied_data[:, 3]  # probability
+        else:
+            points = np.empty((0, 3))
+            probabilities = np.empty(0)
+
+        # 메모리 사용량 통계
+        memory_stats = self.octree.get_memory_usage()
+
+        return {
+            'points': points,
+            'probabilities': probabilities,
+            'num_voxels': memory_stats.num_nodes,
+            'num_occupied': len(points),
+            'frame_count': self.frame_count,
+            'processed_count': self.processed_frame_count,
+            'memory_mb': memory_stats.memory_mb,
+            'memory_efficiency': memory_stats.memory_efficiency,
+            'robot_detections': [(point, intensity) for point, intensity, timestamp in self.robot_detections] if self.enable_robot_detection else []
+        }
     
     def reset_map(self):
         """Reset the probabilistic map"""
@@ -1322,45 +821,27 @@ class SonarTo3DMapper:
     
     def get_memory_stats(self) -> Dict[str, Any]:
         """Get detailed memory usage statistics"""
-        if self.use_cpp and CPP_MODULE_AVAILABLE:
-            # C++ 메모리 통계
-            stats = self.octree.get_memory_usage()
-            return {
-                'backend': 'C++ ProbabilityUpdater',
-                'num_nodes': stats.num_nodes,
-                'num_leaf_nodes': stats.num_leaf_nodes,
-                'memory_mb': stats.memory_mb,
-                'memory_efficiency': stats.memory_efficiency,
-                'resolution': self.octree.get_resolution()
-            }
-        else:
-            # Python 메모리 추정
-            num_voxels = len(self.octree.voxels)
-            # 각 복셀당 대략적인 메모리 사용량 추정 (키 + 값)
-            estimated_mb = num_voxels * (3 * 8 + 8) / (1024 * 1024)  # 32바이트 per voxel
-            
-            return {
-                'backend': 'Python SimpleOctree',
-                'num_voxels': num_voxels,
-                'estimated_memory_mb': estimated_mb,
-                'resolution': self.voxel_resolution,
-                'dynamic_expansion': self.octree.dynamic_expansion
-            }
+        # C++ 메모리 통계
+        stats = self.octree.get_memory_usage()
+        return {
+            'backend': 'C++ ProbabilityUpdater',
+            'num_nodes': stats.num_nodes,
+            'num_leaf_nodes': stats.num_leaf_nodes,
+            'memory_mb': stats.memory_mb,
+            'memory_efficiency': stats.memory_efficiency,
+            'resolution': self.octree.get_resolution()
+        }
     
     def prune_map(self) -> int:
         """
         Prune unnecessary nodes from the map
-        
+
         Returns:
-            Number of nodes removed (C++ only)
+            Number of nodes removed
         """
-        if self.use_cpp and CPP_MODULE_AVAILABLE:
-            removed_nodes = self.octree.prune_tree()
-            print(f"트리 정리 완료: {removed_nodes} 노드 제거")
-            return removed_nodes
-        else:
-            print("Python 백엔드는 트리 정리를 지원하지 않습니다")
-            return 0
+        removed_nodes = self.octree.prune_tree()
+        print(f"트리 정리 완료: {removed_nodes} 노드 제거")
+        return removed_nodes
 
 
 if __name__ == "__main__":

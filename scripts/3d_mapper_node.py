@@ -94,8 +94,8 @@ class SonarMapperNode(Node):
                 ('log_odds_min', -10.0),
                 ('log_odds_max', 10.0),
 
-                # Probability update method (voxelmap_fusion style)
-                ('probability_update_method', 'weighted_average'),  # 'log_odds' | 'weighted_average' | 'iwlo'
+                # Probability update method (IWLO only)
+                ('probability_update_method', 'iwlo'),
                 ('intensity_max', 255),  # Maximum intensity value for normalization
 
                 # Probability threshold (2-class: occupied vs free)

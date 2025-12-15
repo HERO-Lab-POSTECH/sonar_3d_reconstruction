@@ -46,15 +46,7 @@ public:
      */
     void set_clamping_thresholds(double min_prob, double max_prob);
     
-    /**
-     * Batch update multiple points with adaptive probability updates
-     * @param points Nx3 matrix of point coordinates
-     * @param log_odds_updates N-vector of log-odds updates for each point
-     * @param is_occupied N-vector of boolean flags for occupied vs free
-     */
-    void batch_update(const Eigen::MatrixXd& points, 
-                     const Eigen::VectorXd& log_odds_updates,
-                     const std::vector<bool>& is_occupied);
+    // batch_update() removed - using IWLO only
     
     /**
      * Get all occupied voxels above probability threshold
@@ -129,17 +121,7 @@ public:
         const std::vector<bool>& is_occupied
     );
 
-    /**
-     * Batch update using weighted average method (voxelmap_fusion style)
-     * @param points Nx3 matrix of point coordinates
-     * @param intensities N-vector of intensity values
-     * @param is_occupied N-vector of boolean flags (currently unused but kept for interface compatibility)
-     */
-    void batch_update_weighted_average(
-        const Eigen::MatrixXd& points,
-        const Eigen::VectorXd& intensities,
-        const std::vector<bool>& is_occupied
-    );
+    // batch_update_weighted_average() removed - using IWLO only
 
     /**
      * Get observation count for a voxel

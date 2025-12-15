@@ -25,10 +25,8 @@ sonar_3d_mapper:
     use_cpp_backend: true
 
     #===== Probability Update =====
-    # Method: "weighted_average" | "log_odds" | "iwlo"
-    #   - weighted_average: voxelmap_fusion style, uses intensity for weighted probability average
-    #   - log_odds: traditional Bayesian, additive log-odds update
-    #   - iwlo: Intensity-Weighted Log-Odds, combines both approaches (recommended)
+    # Method: "iwlo" (Intensity-Weighted Log-Odds) - ONLY method supported
+    # IWLO combines Bayesian log-odds with intensity-weighted updates (recommended)
     # Note: Method-specific params are in method_*.yaml files, loaded via launch arg
     probability_update_method: "iwlo"
 
