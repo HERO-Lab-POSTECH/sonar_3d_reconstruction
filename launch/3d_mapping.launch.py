@@ -13,12 +13,52 @@ Usage:
 import os
 import yaml
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch.conditions import IfCondition
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
+
+
+def setup_bag_recording(context, *args, **kwargs):
+    """Setup bag recording with auto-increment folder names"""
+    record_bag = context.launch_configurations.get('record_bag', 'false')
+    if record_bag.lower() != 'true':
+        return []
+
+    base_path = context.launch_configurations.get('record_base_path')
+    prefix = context.launch_configurations.get('record_prefix')
+
+    # Find next test number
+    next_num = 1
+    if os.path.exists(base_path):
+        existing = [d for d in os.listdir(base_path)
+                    if d.startswith(f'{prefix}_') and os.path.isdir(os.path.join(base_path, d))]
+        numbers = []
+        for d in existing:
+            try:
+                num = int(d[len(prefix)+1:])  # +1 for underscore
+                numbers.append(num)
+            except ValueError:
+                continue
+        next_num = max(numbers, default=0) + 1
+
+    # Create output directory
+    output_dir = os.path.join(base_path, f'{prefix}_{next_num}')
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Output bag path (no 'recording' subfolder)
+    bag_path = os.path.join(output_dir, f'{prefix}_{next_num}')
+
+    print(f'[Bag Recording] Output: {bag_path}')
+
+    return [
+        ExecuteProcess(
+            cmd=['ros2', 'bag', 'record', '-a', '-o', bag_path],
+            output='screen'
+        )
+    ]
 
 
 def generate_launch_description():
@@ -45,6 +85,9 @@ def generate_launch_description():
     bag_file = LaunchConfiguration('bag_file')
     bag_rate = LaunchConfiguration('bag_rate')
     sonar_pitch = LaunchConfiguration('sonar_pitch')
+    record_bag = LaunchConfiguration('record_bag')
+    record_base_path = LaunchConfiguration('record_base_path')
+    record_prefix = LaunchConfiguration('record_prefix')
 
     # Declare arguments (defaults from common.yaml)
     ld = LaunchDescription([
@@ -63,6 +106,15 @@ def generate_launch_description():
         DeclareLaunchArgument('sonar_pitch',
             default_value=str(common_params.get('sonar_orientation', {}).get('pitch', 90.0)),
             description='Sonar pitch angle in degrees'),
+        DeclareLaunchArgument('record_bag',
+            default_value=str(common_params.get('record_bag', False)).lower(),
+            description='Enable bag recording with auto-increment'),
+        DeclareLaunchArgument('record_base_path',
+            default_value=common_params.get('record_base_path', '/workspace/data/experiments'),
+            description='Base directory for bag recordings'),
+        DeclareLaunchArgument('record_prefix',
+            default_value=common_params.get('record_prefix', 'test'),
+            description='Folder prefix for recordings (e.g., test1, test2)'),
     ])
 
     # Fast-LIO
@@ -104,5 +156,8 @@ def generate_launch_description():
         output='screen',
         condition=IfCondition(play_bag)
     ))
+
+    # Bag recorder with auto-increment
+    ld.add_action(OpaqueFunction(function=setup_bag_recording))
 
     return ld

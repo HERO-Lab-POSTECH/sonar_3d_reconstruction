@@ -42,6 +42,25 @@ spec.loader.exec_module(mapper_module)
 SonarTo3DMapper = mapper_module.SonarTo3DMapper
 
 
+def get_next_test_number(base_path: str, prefix: str) -> int:
+    """Find existing test folders and return next available number."""
+    if not os.path.exists(base_path):
+        return 1
+
+    existing = [d for d in os.listdir(base_path)
+                if d.startswith(f'{prefix}_') and os.path.isdir(os.path.join(base_path, d))]
+
+    numbers = []
+    for d in existing:
+        try:
+            num = int(d[len(prefix)+1:])  # +1 for underscore
+            numbers.append(num)
+        except ValueError:
+            continue
+
+    return max(numbers, default=0) + 1
+
+
 class SonarMapperNode(Node):
     """ROS2 node for 3D sonar mapping with probabilistic octree"""
     
@@ -128,9 +147,14 @@ class SonarMapperNode(Node):
                 ('odometry_topic', '/fast_lio/odometry'),
                 ('pointcloud_topic', '/sonar_3d_map'),
                 ('marker_topic', '/sonar_3d_map_markers'),
-                
+
                 # Visualization
-                ('show_opencv_visualization', False)
+                ('show_opencv_visualization', False),
+
+                # Bag recording (auto-increment)
+                ('record_bag', False),
+                ('record_base_path', '/workspace/data/experiments'),
+                ('record_prefix', 'test')
             ]
         )
         
@@ -328,6 +352,15 @@ class SonarMapperNode(Node):
         self.get_logger().info(f'  Subscribing to odometry: {odometry_topic}')
         self.get_logger().info(f'  Publishing to: {pointcloud_topic}')
         self.get_logger().info(f'  Time synchronization enabled with {0.1}s tolerance')
+
+        # Log bag recording information
+        record_bag = self.get_parameter('record_bag').value
+        if record_bag:
+            base_path = self.get_parameter('record_base_path').value
+            prefix = self.get_parameter('record_prefix').value
+            next_num = get_next_test_number(base_path, prefix)
+            output_path = os.path.join(base_path, f'{prefix}_{next_num}', f'{prefix}_{next_num}')
+            self.get_logger().info(f'[Bag Recording] Auto-generated output path: {output_path}')
     
     def visualize_with_threshold(self, sonar_image):
         """

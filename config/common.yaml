@@ -70,7 +70,8 @@ sonar_3d_mapper:
     bag_file: "/workspace/data/4_yeondong_hang/20251029_blueboat_sonar_lidar/tilt90-range3.5_v3"
     bag_playback_rate: 1.0
 
-    #===== Bag Recording (optional) =====
+    #===== Bag Recording =====
     record_bag: false
-    record_output_path: "/workspace/data/recorded_mapping"
-    record_topics: "all"
+    record_base_path: "/workspace/data/experiments"  # Base directory for recordings
+    record_prefix: "test"                            # Folder prefix (test_1, test_2...)
+    # Output path is auto-generated: {record_base_path}/{record_prefix}_{N}/{record_prefix}_{N}.db3
