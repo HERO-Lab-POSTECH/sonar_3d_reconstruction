@@ -87,16 +87,6 @@ class SonarMapperNode(Node):
                 ('adaptive_update', True),
                 ('adaptive_threshold', 0.5),
                 ('adaptive_max_ratio', 0.3),
-                
-                # Log-odds parameters
-                ('log_odds_occupied', 1.5),
-                ('log_odds_free', -2.0),
-                ('log_odds_min', -10.0),
-                ('log_odds_max', 10.0),
-
-                # Probability update method (IWLO only)
-                ('probability_update_method', 'iwlo'),
-                ('intensity_max', 255),  # Maximum intensity value for normalization
 
                 # Probability threshold (2-class: occupied vs free)
                 ('occupied_threshold', 0.7),  # Probability >= 0.7 = occupied, < 0.7 = free
@@ -105,8 +95,10 @@ class SonarMapperNode(Node):
                 ('sharpness', 3.0),      # Sigmoid steepness for intensity-to-weight (1.0~5.0)
                 ('decay_rate', 0.1),     # Learning rate decay rate (0.05~0.5)
                 ('min_alpha', 0.1),      # Minimum learning rate for change detection (0.01~0.3)
-                ('L_min', -2.0),         # Saturation lower bound (P ~ 0.12)
-                ('L_max', 3.5),          # Saturation upper bound (P ~ 0.97)
+                ('L_occ', 3.5),          # Log-odds occupied increment
+                ('L_free', -3.0),        # Log-odds free decrement
+                ('L_min', -10.0),        # Saturation lower bound
+                ('L_max', 10.0),         # Saturation upper bound
 
                 # Backend selection
                 ('use_cpp_backend', True),  # Use high-performance C++ hierarchical octree by default
@@ -188,12 +180,6 @@ class SonarMapperNode(Node):
             'adaptive_update': self.get_parameter('adaptive_update').value,
             'adaptive_threshold': self.get_parameter('adaptive_threshold').value,
             'adaptive_max_ratio': self.get_parameter('adaptive_max_ratio').value,
-            'log_odds_occupied': self.get_parameter('log_odds_occupied').value,
-            'log_odds_free': self.get_parameter('log_odds_free').value,
-            'log_odds_min': self.get_parameter('log_odds_min').value,
-            'log_odds_max': self.get_parameter('log_odds_max').value,
-            'probability_update_method': self.get_parameter('probability_update_method').value,
-            'intensity_max': self.get_parameter('intensity_max').value,
             'occupied_threshold': self.get_parameter('occupied_threshold').value,
             'use_cpp_backend': self.get_parameter('use_cpp_backend').value,
             'frame_skip': self.get_parameter('frame_skip').value,
@@ -201,6 +187,8 @@ class SonarMapperNode(Node):
             'sharpness': self.get_parameter('sharpness').value,
             'decay_rate': self.get_parameter('decay_rate').value,
             'min_alpha': self.get_parameter('min_alpha').value,
+            'L_occ': self.get_parameter('L_occ').value,
+            'L_free': self.get_parameter('L_free').value,
             'L_min': self.get_parameter('L_min').value,
             'L_max': self.get_parameter('L_max').value,
             # Cross-talk filter parameters
@@ -326,7 +314,7 @@ class SonarMapperNode(Node):
         self.get_logger().info(f'  Horizontal FOV: {config["horizontal_fov"]}°')
         self.get_logger().info(f'  Vertical aperture: {config["vertical_aperture"]}°')
         self.get_logger().info(f'  Voxel resolution: {config["voxel_resolution"]}m')
-        self.get_logger().info(f'  Probability update method: {config["probability_update_method"]}')
+        self.get_logger().info(f'  Probability update method: IWLO')
         self.get_logger().info(f'  Occupied threshold: {config["occupied_threshold"]}')
         self.get_logger().info(f'  Adaptive update: {config["adaptive_update"]}')
         self.get_logger().info(f'  Robot detection: {config["enable_robot_detection"]} (threshold: >={config["robot_detection"]["min_threshold"]})')

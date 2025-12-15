@@ -205,10 +205,6 @@ class SonarTo3DMapper:
             'voxel_resolution': 0.05,      # meters
             'dynamic_expansion': True,
 
-            # Probability update method (IWLO only)
-            'probability_update_method': 'iwlo',
-            'intensity_max': 255,          # Maximum intensity value for normalization
-
             # Probability threshold (2-class: occupied vs free)
             'occupied_threshold': 0.7,     # prob >= this = occupied, < this = free
 
@@ -217,11 +213,12 @@ class SonarTo3DMapper:
             'adaptive_threshold': 0.5,
             'adaptive_max_ratio': 0.3,
 
-            # Log-odds parameters (updated from stonefish_slam)
-            'log_odds_occupied': 3.5,      # 1.5 -> 3.5 (occupied dominant)
-            'log_odds_free': -3.0,         # -2.0 -> -3.0 (balanced)
-            'log_odds_min': -10.0,
-            'log_odds_max': 10.0,
+            # IWLO parameters
+            'L_occ': 3.5,          # Log-odds occupied increment
+            'L_free': -3.0,        # Log-odds free decrement
+            'L_min': -10.0,        # Saturation lower bound
+            'L_max': 10.0,         # Saturation upper bound
+            'intensity_max': 255,  # Maximum intensity value for normalization
 
             # Shadow region protection
             'angular_cone_width': 0.5,     # 0.5 = no overlap, 1.0 = full overlap
@@ -275,19 +272,16 @@ class SonarTo3DMapper:
             self.sonar_orientation
         )
         
-        # Initialize octree - Try C++ first, fallback to Python
+        # Initialize C++ ProbabilityUpdater (required)
         self.use_cpp = default_config.get('use_cpp_backend', CPP_MODULE_AVAILABLE)
-        
+
         if self.use_cpp and CPP_MODULE_AVAILABLE:
             # Initialize C++ ProbabilityUpdater
             self.octree = ProbabilityUpdater(self.voxel_resolution)
 
             # Store log-odds values for ray processing
-            self.log_odds_occupied = default_config['log_odds_occupied']
-            self.log_odds_free = default_config['log_odds_free']
-
-            # Store probability update method for C++ IWLO activation
-            self.probability_update_method = default_config['probability_update_method']
+            self.log_odds_occupied = default_config['L_occ']
+            self.log_odds_free = default_config['L_free']
 
             # Configure C++ octree parameters
             self.octree.set_log_odds_params(
@@ -301,26 +295,25 @@ class SonarTo3DMapper:
             )
 
             # Set clamping thresholds based on log-odds
-            min_prob = 1.0 / (1.0 + np.exp(-default_config['log_odds_min']))
-            max_prob = 1.0 / (1.0 + np.exp(-default_config['log_odds_max']))
+            min_prob = 1.0 / (1.0 + np.exp(-default_config['L_min']))
+            max_prob = 1.0 / (1.0 + np.exp(-default_config['L_max']))
             self.octree.set_clamping_thresholds(min_prob, max_prob)
 
-            # Configure IWLO parameters for C++ backend
-            if self.probability_update_method == 'iwlo':
-                self.octree.set_iwlo_params(
-                    default_config.get('sharpness', 0.1),
-                    default_config.get('decay_rate', 0.1),
-                    default_config.get('min_alpha', 0.3),
-                    default_config.get('L_min', -10.0),
-                    default_config.get('L_max', 10.0)
-                )
-                self.octree.set_intensity_params(
-                    self.intensity_threshold,
-                    default_config.get('intensity_max', 255)
-                )
+            # Configure IWLO parameters
+            self.octree.set_iwlo_params(
+                default_config.get('sharpness', 0.1),
+                default_config.get('decay_rate', 0.1),
+                default_config.get('min_alpha', 0.3),
+                default_config.get('L_min', -10.0),
+                default_config.get('L_max', 10.0)
+            )
+            self.octree.set_intensity_params(
+                self.intensity_threshold,
+                default_config.get('intensity_max', 255)
+            )
 
             print(f"[3D Mapper] C++ ProbabilityUpdater 사용 (해상도: {self.voxel_resolution}m)")
-            print(f"  업데이트 방식: {self.probability_update_method}")
+            print(f"  업데이트 방식: IWLO")
         else:
             # C++ module required but not available
             raise RuntimeError(

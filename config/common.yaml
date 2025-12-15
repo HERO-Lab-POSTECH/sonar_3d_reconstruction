@@ -25,10 +25,9 @@ sonar_3d_mapper:
     use_cpp_backend: true
 
     #===== Probability Update =====
-    # Method: "iwlo" (Intensity-Weighted Log-Odds) - ONLY method supported
-    # IWLO combines Bayesian log-odds with intensity-weighted updates (recommended)
-    # Note: Method-specific params are in method_*.yaml files, loaded via launch arg
-    probability_update_method: "iwlo"
+    # IWLO (Intensity-Weighted Log-Odds) is the only supported method
+    # IWLO combines Bayesian log-odds with intensity-weighted updates
+    # IWLO-specific params are in method_iwlo.yaml, loaded via launch file
 
     #===== Probability Threshold =====
     occupied_threshold: 0.7      # prob >= this = occupied, prob < this = free
