@@ -10,21 +10,21 @@ namespace sonar_3d_reconstruction
 
 ProbabilityUpdater::ProbabilityUpdater(double resolution)
     : resolution_(resolution)
-    , log_odds_occupied_(1.5)
-    , log_odds_free_(-2.0)
+    , log_odds_occupied_(3.5)      // 1.5 -> 3.5 (occupied dominant)
+    , log_odds_free_(-3.0)         // -2.0 -> -3.0 (balanced)
     , adaptive_enabled_(true)
     , adaptive_threshold_(0.5)
     , adaptive_max_ratio_(0.3)
-    , min_probability_(0.12)
-    , max_probability_(0.97)
+    , min_probability_(0.00005)    // 0.12 -> 0.00005 (for L_min=-10.0)
+    , max_probability_(0.99995)    // 0.97 -> 0.99995 (for L_max=10.0)
     , occupied_threshold_(0.7)
     , intensity_max_(255.0)
     , intensity_threshold_(35.0)
-    , sharpness_(3.0)
+    , sharpness_(0.1)              // 3.0 -> 0.1 (stonefish recommended)
     , decay_rate_(0.1)
-    , min_alpha_(0.1)
-    , L_min_(-2.0)
-    , L_max_(3.5)
+    , min_alpha_(0.3)              // 0.1 -> 0.3 (for change detection)
+    , L_min_(-10.0)                // -2.0 -> -10.0 (extended bounds)
+    , L_max_(10.0)                 // 3.5 -> 10.0 (extended bounds)
     , enable_incremental_sync_(true)
 {
     // Use direct log-odds storage (Python SimpleOctree style) for exact compatibility
@@ -482,10 +482,21 @@ void ProbabilityUpdater::batch_update_iwlo(
         // 2. Compute learning rate based on observation count
         double alpha_n = compute_alpha(n - 1);  // n-1 because we already incremented
 
-        // 3. Compute adaptive scaling (for occupied updates)
+        // 3. Compute adaptive scaling (bidirectional protection)
         double adapt_scale = 1.0;
-        if (w_intensity > 0 && adaptive_enabled_ && current_prob < adaptive_threshold_) {
-            adapt_scale = (current_prob / adaptive_threshold_) * adaptive_max_ratio_;
+        if (adaptive_enabled_) {
+            if (intensity > intensity_threshold_) {
+                // Occupied update: protect free voxels (existing logic)
+                if (current_prob < adaptive_threshold_) {
+                    adapt_scale = (current_prob / adaptive_threshold_) * adaptive_max_ratio_;
+                }
+            } else {
+                // Free update: protect occupied voxels (new - bidirectional)
+                if (current_prob > (1.0 - adaptive_threshold_)) {
+                    double protection_factor = (current_prob - (1.0 - adaptive_threshold_)) / adaptive_threshold_;
+                    adapt_scale = adaptive_max_ratio_ + (1.0 - adaptive_max_ratio_) * (1.0 - protection_factor);
+                }
+            }
         }
 
         // 4. Compute log-odds update
@@ -494,8 +505,8 @@ void ProbabilityUpdater::batch_update_iwlo(
             // Occupied update: ΔL = L_occ × w(I) × α(n) × scale
             delta_L = log_odds_occupied_ * w_intensity * alpha_n * adapt_scale;
         } else {
-            // Free space update: ΔL = L_free × α(n)
-            delta_L = log_odds_free_ * alpha_n;
+            // Free space update: ΔL = L_free × α(n) × scale (now with bidirectional protection)
+            delta_L = log_odds_free_ * alpha_n * adapt_scale;
         }
 
         // 5. Apply update with saturation limits

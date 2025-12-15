@@ -187,8 +187,9 @@ class SimpleOctree:
         self.max_bounds = np.array([-float('inf')] * 3)
 
         # Log-odds parameters (will be set from config)
-        self.log_odds_occupied = 1.5      # Log-odds increment for occupied
-        self.log_odds_free = -2.0         # Log-odds decrement for free space
+        # Ratio: 3.5:-3.0 = 1.17:1 (occupied dominant, prevents erosion)
+        self.log_odds_occupied = 3.5      # Log-odds increment for occupied (1.5 -> 3.5)
+        self.log_odds_free = -3.0         # Log-odds decrement for free space (-2.0 -> -3.0)
         self.log_odds_min = -10.0         # Minimum log-odds (clamping)
         self.log_odds_max = 10.0          # Maximum log-odds (clamping)
         self.log_odds_threshold = 0.0     # Threshold for considering occupied
@@ -202,14 +203,14 @@ class SimpleOctree:
         # Adaptive update parameters
         self.adaptive_update = True       # Enable adaptive updating
         self.adaptive_threshold = 0.5     # Protection threshold
-        self.adaptive_max_ratio = 0.5     # Maximum update ratio at threshold
+        self.adaptive_max_ratio = 0.3     # Maximum update ratio at threshold (0.5 -> 0.3)
 
         # IWLO (Intensity-Weighted Log-Odds) parameters
-        self.sharpness = 3.0              # Sigmoid steepness for intensity-to-weight
+        self.sharpness = 0.1              # Sigmoid steepness (3.0 -> 0.1, stonefish recommended)
         self.decay_rate = 0.1             # Learning rate decay rate
-        self.min_alpha = 0.1              # Minimum learning rate for change detection
-        self.L_min = -2.0                 # Saturation lower bound (P ~ 0.12)
-        self.L_max = 3.5                  # Saturation upper bound (P ~ 0.97)
+        self.min_alpha = 0.3              # Minimum learning rate (0.1 -> 0.3, for change detection)
+        self.L_min = -10.0                # Saturation lower bound (-2.0 -> -10.0, extended)
+        self.L_max = 10.0                 # Saturation upper bound (3.5 -> 10.0, extended)
     
     def world_to_key(self, x: float, y: float, z: float) -> Tuple[int, int, int]:
         """
@@ -317,14 +318,21 @@ class SimpleOctree:
 
         else:
             # Standard log-odds update (additive)
-            # Adaptive update: reduce occupied updates for voxels that are likely free
-            if adaptive and self.adaptive_update and log_odds_update > 0:
+            # Adaptive update: bidirectional protection
+            if adaptive and self.adaptive_update:
                 current_prob = 1.0 / (1.0 + np.exp(-old_log_odds))
 
-                # Linear interpolation for adaptive update
-                if current_prob <= self.adaptive_threshold:
-                    update_scale = (current_prob / self.adaptive_threshold) * self.adaptive_max_ratio
-                    log_odds_update *= update_scale
+                if log_odds_update > 0:
+                    # Occupied update: protect free voxels (existing logic)
+                    if current_prob <= self.adaptive_threshold:
+                        update_scale = (current_prob / self.adaptive_threshold) * self.adaptive_max_ratio
+                        log_odds_update *= update_scale
+                else:
+                    # Free update: protect occupied voxels (new - bidirectional)
+                    if current_prob >= (1.0 - self.adaptive_threshold):
+                        protection_factor = (current_prob - (1.0 - self.adaptive_threshold)) / self.adaptive_threshold
+                        update_scale = self.adaptive_max_ratio + (1.0 - self.adaptive_max_ratio) * (1.0 - protection_factor)
+                        log_odds_update *= update_scale
 
             # Apply update
             if key not in self.voxels:
@@ -603,11 +611,14 @@ class SonarTo3DMapper:
             'adaptive_threshold': 0.5,
             'adaptive_max_ratio': 0.3,
 
-            # Log-odds parameters
-            'log_odds_occupied': 1.5,
-            'log_odds_free': -2.0,
+            # Log-odds parameters (updated from stonefish_slam)
+            'log_odds_occupied': 3.5,      # 1.5 -> 3.5 (occupied dominant)
+            'log_odds_free': -3.0,         # -2.0 -> -3.0 (balanced)
             'log_odds_min': -10.0,
             'log_odds_max': 10.0,
+
+            # Shadow region protection
+            'angular_cone_width': 0.5,     # 0.5 = no overlap, 1.0 = full overlap
 
             # Processing parameters
             'frame_skip': 1,  # Process every N frames
@@ -644,7 +655,10 @@ class SonarTo3DMapper:
         # Z-axis filtering
         self.z_filter_min = default_config.get('z_filter_min', -5.0)
         self.z_filter_enabled = default_config.get('z_filter_enabled', False)
-        
+
+        # Shadow region protection
+        self.angular_cone_width = default_config.get('angular_cone_width', 0.5)
+
         # Sonar mounting transform
         self.sonar_position = np.array(default_config['sonar_position'])
         self.sonar_orientation = np.array(default_config['sonar_orientation'])
@@ -666,6 +680,9 @@ class SonarTo3DMapper:
             self.log_odds_occupied = default_config['log_odds_occupied']
             self.log_odds_free = default_config['log_odds_free']
 
+            # Store probability update method for C++ IWLO activation
+            self.probability_update_method = default_config['probability_update_method']
+
             # Configure C++ octree parameters
             self.octree.set_log_odds_params(
                 self.log_odds_occupied,
@@ -682,7 +699,22 @@ class SonarTo3DMapper:
             max_prob = 1.0 / (1.0 + np.exp(-default_config['log_odds_max']))
             self.octree.set_clamping_thresholds(min_prob, max_prob)
 
+            # Configure IWLO parameters for C++ backend
+            if self.probability_update_method == 'iwlo':
+                self.octree.set_iwlo_params(
+                    default_config.get('sharpness', 0.1),
+                    default_config.get('decay_rate', 0.1),
+                    default_config.get('min_alpha', 0.3),
+                    default_config.get('L_min', -10.0),
+                    default_config.get('L_max', 10.0)
+                )
+                self.octree.set_intensity_params(
+                    self.intensity_threshold,
+                    default_config.get('intensity_max', 255)
+                )
+
             print(f"[3D Mapper] C++ ProbabilityUpdater 사용 (해상도: {self.voxel_resolution}m)")
+            print(f"  업데이트 방식: {self.probability_update_method}")
         else:
             # Initialize Python SimpleOctree
             self.octree = SimpleOctree(
@@ -709,12 +741,12 @@ class SonarTo3DMapper:
             # Store intensity threshold for weighted average method
             self.octree.intensity_threshold = self.intensity_threshold
 
-            # IWLO parameters
-            self.octree.sharpness = default_config.get('sharpness', 3.0)
+            # IWLO parameters (updated defaults from stonefish_slam)
+            self.octree.sharpness = default_config.get('sharpness', 0.1)
             self.octree.decay_rate = default_config.get('decay_rate', 0.1)
-            self.octree.min_alpha = default_config.get('min_alpha', 0.1)
-            self.octree.L_min = default_config.get('L_min', -2.0)
-            self.octree.L_max = default_config.get('L_max', 3.5)
+            self.octree.min_alpha = default_config.get('min_alpha', 0.3)
+            self.octree.L_min = default_config.get('L_min', -10.0)
+            self.octree.L_max = default_config.get('L_max', 10.0)
 
             # Recalculate log-odds threshold
             self.octree.log_odds_occupied_thresh = np.log(
@@ -832,7 +864,36 @@ class SonarTo3DMapper:
         """Check if bearing angle is within valid FOV"""
         half_fov = self.horizontal_fov / 2
         return abs(bearing_angle) <= half_fov
-    
+
+    def is_in_shadow_region(self, voxel_range: float, bearing_angle: float,
+                            bearing_first_hits: dict) -> bool:
+        """
+        Check if a voxel is in another bearing's shadow region
+
+        Shadow region: area behind first hit of adjacent bearings.
+        If a voxel is behind an adjacent bearing's first hit, it should not
+        be updated as free (to preserve unknown state in occluded areas).
+
+        Args:
+            voxel_range: Range of the voxel from sensor origin
+            bearing_angle: Bearing angle of the current ray
+            bearing_first_hits: Dictionary of bearing angle -> first hit range
+
+        Returns:
+            True if voxel is in shadow region (should skip free update)
+        """
+        bearing_resolution = self.horizontal_fov / self.image_width
+        tolerance = bearing_resolution * self.angular_cone_width * 2
+
+        for adj_bearing, adj_first_hit in bearing_first_hits.items():
+            # Check adjacent bearings within tolerance
+            if abs(adj_bearing - bearing_angle) < tolerance and adj_bearing != bearing_angle:
+                # If voxel is behind adjacent bearing's first hit, it's in shadow
+                if adj_first_hit > 0 and voxel_range > adj_first_hit:
+                    return True
+
+        return False
+
     def world_to_key(self, x: float, y: float, z: float) -> Tuple[int, int, int]:
         """
         Convert world coordinates to voxel key (compatible with both C++ and Python)
@@ -1029,7 +1090,27 @@ class SonarTo3DMapper:
 
         # Process subset of bearings for efficiency
         bearing_step = max(1, bearing_bins // 256)
+        range_resolution = self.max_range / range_bins
 
+        # Phase 1: Collect first hit information for all bearings (for shadow detection)
+        bearing_first_hits = {}
+        for b_idx in range(0, bearing_bins, bearing_step):
+            bearing_angle = self.bearing_angles[b_idx]
+            if not self.is_bearing_in_valid_fov(bearing_angle):
+                continue
+
+            intensity_profile = polar_image[:, b_idx]
+            first_hit_idx = -1
+            for r_idx, intensity in enumerate(intensity_profile):
+                range_m = r_idx * range_resolution
+                if intensity > self.intensity_threshold and range_m >= self.min_range:
+                    first_hit_idx = r_idx
+                    break
+
+            if first_hit_idx >= 0:
+                bearing_first_hits[bearing_angle] = first_hit_idx * range_resolution
+
+        # Phase 2: Process rays with shadow-aware updates
         for b_idx in range(0, bearing_bins, bearing_step):
             bearing_angle = self.bearing_angles[b_idx]
 
@@ -1041,9 +1122,16 @@ class SonarTo3DMapper:
             intensity_profile = polar_image[:, b_idx]
             ray_updates = self.process_sonar_ray(bearing_angle, intensity_profile, T_sonar_to_world)
 
-            # Accumulate updates
+            # Accumulate updates with shadow check
             for point, log_odds, update_type, intensity in ray_updates:
                 key = self.world_to_key(point[0], point[1], point[2])
+
+                # Shadow check: skip free updates in shadow regions
+                if update_type == 'free':
+                    voxel_range = np.sqrt(point[0]**2 + point[1]**2)  # 2D range
+                    if self.is_in_shadow_region(voxel_range, bearing_angle, bearing_first_hits):
+                        continue  # Skip - preserve unknown state in shadow
+
                 if voxel_updates[key]['type'] != 'occupied':  # Occupied has priority
                     voxel_updates[key]['type'] = update_type
                     # Store intensity for weighted average method
@@ -1060,34 +1148,51 @@ class SonarTo3DMapper:
             # C++ 배치 업데이트 사용
             points_list = []
             log_odds_list = []
+            intensities_list = []  # IWLO용 intensity 배열
             is_occupied_list = []
-            
+
             for key, update_info in voxel_updates.items():
                 if update_info['count'] > 0:
                     avg_update = update_info['sum'] / update_info['count']
-                    
+
                     # 키를 월드 좌표로 변환
                     world_point = self.key_to_world(key)
                     points_list.append(world_point)
                     log_odds_list.append(avg_update)
+
+                    # IWLO용 intensity 수집 (없으면 0)
+                    intensity_val = update_info.get('intensity', 0.0)
+                    intensities_list.append(intensity_val if intensity_val else 0.0)
+
                     is_occupied = update_info['type'] == 'occupied'
                     is_occupied_list.append(is_occupied)
-                    
+
                     if is_occupied:
                         num_occupied += 1
                     else:
                         num_free += 1
-            
+
             # NumPy 배열로 변환하여 배치 업데이트
             if points_list:
                 points_array = np.array(points_list, dtype=np.float64)
                 log_odds_array = np.array(log_odds_list, dtype=np.float64)
+                intensities_array = np.array(intensities_list, dtype=np.float64)
                 is_occupied_array = np.array(is_occupied_list, dtype=bool)
-                
-                # C++ 배치 업데이트 실행
-                self.octree.batch_update(
-                    points_array, log_odds_array, is_occupied_array
-                )
+
+                # C++ 배치 업데이트 실행 - 메서드별 분기
+                if self.probability_update_method == 'iwlo':
+                    self.octree.batch_update_iwlo(
+                        points_array, intensities_array, is_occupied_array
+                    )
+                elif self.probability_update_method == 'weighted_average':
+                    self.octree.batch_update_weighted_average(
+                        points_array, intensities_array, is_occupied_array
+                    )
+                else:
+                    # 기본 log_odds 방식
+                    self.octree.batch_update(
+                        points_array, log_odds_array, is_occupied_array
+                    )
                 
         else:
             # Python 개별 업데이트 사용

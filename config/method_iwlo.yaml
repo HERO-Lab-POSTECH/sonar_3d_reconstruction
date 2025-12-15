@@ -1,23 +1,31 @@
 # Intensity-Weighted Log-Odds (IWLO) Method
 # Combines Log-Odds Bayesian with Weighted Average approach
 # Use with: ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py method:=iwlo
+#
+# Reference: stonefish_slam PARAMETER_TUNING.md
+# Key improvements:
+#   - L_occ:L_free ratio ~1.17:1 (occupied dominant) to prevent floor erosion
+#   - Extended saturation bounds for gradual convergence
+#   - Lower sharpness for smoother intensity-to-weight mapping
+#   - Bidirectional adaptive protection
 
 sonar_3d_mapper:
   ros__parameters:
     # Log-odds bounds (Saturation limits - OctoMap style)
-    L_occ: 1.5          # Max occupied log-odds increment
-    L_free: -2.0        # Free space log-odds decrement
-    L_min: -2.0         # Lower bound (P ~ 0.12)
-    L_max: 3.5          # Upper bound (P ~ 0.97)
+    # Ratio: 3.5:-3.0 = 1.17:1 (occupied dominant, prevents erosion)
+    L_occ: 3.5          # Max occupied log-odds increment (1.5 -> 3.5)
+    L_free: -3.0        # Free space log-odds decrement (-2.0 -> -3.0)
+    L_min: -10.0        # Lower bound (P ~ 0.00005) - extended for gradual convergence
+    L_max: 10.0         # Upper bound (P ~ 0.99995) - extended for gradual convergence
 
     # Intensity-to-weight sigmoid transformation
-    sharpness: 3.0      # Sigmoid steepness (1.0~5.0)
+    sharpness: 0.1      # Sigmoid steepness (3.0 -> 0.1, stonefish recommended)
 
     # Observation count decay (learning rate annealing)
     decay_rate: 0.1     # Alpha decay rate (0.05~0.5)
-    min_alpha: 0.1      # Minimum learning rate for change detection
+    min_alpha: 0.3      # Minimum learning rate (0.1 -> 0.3, for change detection)
 
-    # Adaptive update (inherited from existing)
-    adaptive_update: false
+    # Adaptive update - bidirectional protection enabled
+    adaptive_update: true
     adaptive_threshold: 0.5
     adaptive_max_ratio: 0.3

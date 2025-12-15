@@ -35,6 +35,11 @@ sonar_3d_mapper:
     #===== Probability Threshold =====
     occupied_threshold: 0.7      # prob >= this = occupied, prob < this = free
 
+    #===== Shadow Region Protection =====
+    # Angular cone width for bearing overlap protection
+    # 0.5 = 0% overlap (strict), 1.0 = 100% overlap (permissive)
+    angular_cone_width: 0.5
+
     #===== Cross-talk Filter =====
     # 상세 설정은 config/crosstalk_filter.yaml 참조
     crosstalk_filter_enabled: false
