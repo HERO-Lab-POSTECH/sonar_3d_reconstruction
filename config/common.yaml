@@ -58,7 +58,7 @@ sonar_3d_mapper:
     #===== ROS2 Interface =====
     sonar_frame_id: "sonar_link"
     base_frame_id: "body"
-    map_frame_id: "camera_init"
+    map_frame_id: "world_init"
     publish_tf: false
 
     sonar_topic: "/sensor/sonar/oculus/m3000d/image"
@@ -80,7 +80,7 @@ sonar_3d_mapper:
 
     #===== Bag Playback =====
     play_bag: true
-    bag_file: "/workspace/data/5_hyeongsan_gang/20241205_slam_test/slam_test_v5_raw"
+    bag_file: "/workspace/data/5_hyeongsan_gang/20241205_slam_test/slam_test_v3_raw"
     bag_playback_rate: 1.0
 
     #===== Bag Recording =====
