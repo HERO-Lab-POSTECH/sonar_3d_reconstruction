@@ -116,18 +116,15 @@ void OctreeMapper::batch_update_with_log_odds(const Eigen::MatrixXd& points,
         if (std::isfinite(x) && std::isfinite(y) && std::isfinite(z)) {
             octomap::point3d octo_point(x, y, z);
 
-            // Optimized: single hash lookup using insert_or_assign pattern
-            auto [it, inserted] = log_odds_map_.try_emplace(octo_point, 0.0);
-            double current_log_odds = it->second;
-
-            // Apply update
-            double new_log_odds = current_log_odds + log_odds_updates(i);
+            // Direct assignment: IWLO already computes absolute log_odds value
+            // (NOT incremental update - avoids double counting bug)
+            double new_log_odds = log_odds_updates(i);
 
             // Clamp to prevent overflow
             new_log_odds = std::max(log_odds_min_, std::min(log_odds_max_, new_log_odds));
 
-            // Update in place (single lookup already done)
-            it->second = new_log_odds;
+            // Store in map (direct assignment, not accumulation)
+            log_odds_map_[octo_point] = new_log_odds;
             
             // Also update OctoMap for spatial queries (using probability from log-odds)
             double probability = 1.0 / (1.0 + std::exp(-new_log_odds));
@@ -273,12 +270,19 @@ void OctreeMapper::set_occupancy_thresholds(double min_thresh, double max_thresh
 
 bool OctreeMapper::save_to_file(const std::string& filename) const
 {
-    return octree_->writeBinary(filename);
+    // Suppress OctoMap stdout
+    std::streambuf* old_cout = std::cout.rdbuf(nullptr);
+    bool result = octree_->writeBinary(filename);
+    std::cout.rdbuf(old_cout);
+    return result;
 }
 
 bool OctreeMapper::load_from_file(const std::string& filename)
 {
+    // Suppress OctoMap stdout
+    std::streambuf* old_cout = std::cout.rdbuf(nullptr);
     bool success = octree_->readBinary(filename);
+    std::cout.rdbuf(old_cout);
     if (success) {
         invalidate_cache();
     }

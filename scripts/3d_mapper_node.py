@@ -17,7 +17,7 @@ import struct
 # ROS2 message imports
 from sensor_msgs.msg import Image, PointCloud2, PointField
 from nav_msgs.msg import Odometry
-from std_msgs.msg import Header
+from std_msgs.msg import Header, Int32MultiArray
 from geometry_msgs.msg import TransformStamped
 from visualization_msgs.msg import MarkerArray, Marker
 from tf2_ros import StaticTransformBroadcaster
@@ -29,17 +29,23 @@ from message_filters import Subscriber, ApproximateTimeSynchronizer
 from cv_bridge import CvBridge
 import cv2
 
-# Import core mapping class (using import with underscores since Python doesn't allow starting with numbers)
+# Import core mapping class and configuration
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-# We'll rename the file or import it differently
+
 import importlib.util
-spec = importlib.util.spec_from_file_location("mapper_3d", 
+spec = importlib.util.spec_from_file_location("mapper_3d",
     os.path.join(os.path.dirname(__file__), "3d_mapper.py"))
 mapper_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mapper_module)
 SonarTo3DMapper = mapper_module.SonarTo3DMapper
+
+spec_config = importlib.util.spec_from_file_location("config",
+    os.path.join(os.path.dirname(__file__), "config.py"))
+config_module = importlib.util.module_from_spec(spec_config)
+spec_config.loader.exec_module(config_module)
+SonarMapperConfig = config_module.SonarMapperConfig
 
 
 def get_next_test_number(base_path: str, prefix: str) -> int:
@@ -110,6 +116,9 @@ class SonarMapperNode(Node):
                 # Probability threshold (2-class: occupied vs free)
                 ('occupied_threshold', 0.7),  # Probability >= 0.7 = occupied, < 0.7 = free
 
+                # Shadow region protection
+                ('angular_cone_width', 0.5),  # 0.5 = 0% overlap, 1.0 = full overlap
+
                 # IWLO (Intensity-Weighted Log-Odds) parameters
                 ('sharpness', 3.0),      # Sigmoid steepness for intensity-to-weight (1.0~5.0)
                 ('decay_rate', 0.1),     # Learning rate decay rate (0.05~0.5)
@@ -122,6 +131,12 @@ class SonarMapperNode(Node):
                 # Backend selection
                 ('use_cpp_backend', True),  # Use high-performance C++ hierarchical octree by default
 
+                # Out-of-Core parameters (disk-based storage for large maps)
+                ('use_outofcore', False),   # Enable disk-based tile storage
+                ('outofcore_map_path', '/workspace/data/map_tiles'),  # Tile storage directory
+                ('outofcore_tile_size', 10.0),   # Tile size in meters
+                ('outofcore_cache_size', 16),    # Max tiles in memory
+
                 # Cross-talk filter parameters
                 ('crosstalk_filter_enabled', False),
                 ('morpho_filter_enabled', True),
@@ -132,7 +147,7 @@ class SonarMapperNode(Node):
 
                 # Processing parameters
                 ('frame_skip', 1),  # Process every N frames
-                
+
                 # Publishing parameters
                 ('show_free_space', False),
                 
@@ -150,6 +165,8 @@ class SonarMapperNode(Node):
 
                 # Visualization
                 ('show_opencv_visualization', False),
+                ('pointcloud_publish_rate', 10.0),  # Hz
+                ('tile_save_interval', 5.0),        # seconds
 
                 # Bag recording (auto-increment)
                 ('record_bag', False),
@@ -158,71 +175,9 @@ class SonarMapperNode(Node):
             ]
         )
         
-        # Get parameters and create config dictionary
-        # Parameter priority order (highest to lowest):
-        # 1. Command line args (ros2 run ... --ros-args -p param:=value)
-        # 2. YAML file (specified in launch or --params-file)
-        # 3. Launch file parameters
-        # 4. Node defaults (declared above)
-        # 5. 3d_mapper.py defaults (will be overridden by config dict)
-        
-        # ROS2 automatically handles priority 1-4, we just get the final values
-        config = {
-            'horizontal_fov': self.get_parameter('horizontal_fov').value,
-            'vertical_aperture': self.get_parameter('vertical_aperture').value,
-            'max_range': self.get_parameter('max_range').value,
-            'min_range': self.get_parameter('min_range').value,
-            'intensity_threshold': self.get_parameter('intensity_threshold').value,
-            
-            # Terrain detection parameters  
-            'terrain_detection': {
-                'min_threshold': self.get_parameter('terrain_detection.min_threshold').value,
-                'max_threshold': self.get_parameter('terrain_detection.max_threshold').value
-            },
-            
-            # Robot detection parameters
-            'enable_robot_detection': self.get_parameter('enable_robot_detection').value,
-            'robot_detection': {
-                'min_threshold': self.get_parameter('robot_detection.min_threshold').value,
-                'topic': self.get_parameter('robot_detection.topic').value
-            },
-            
-            'sonar_position': [
-                self.get_parameter('sonar_position.x').value,
-                self.get_parameter('sonar_position.y').value,
-                self.get_parameter('sonar_position.z').value
-            ],
-            'sonar_orientation': [
-                np.radians(self.get_parameter('sonar_orientation.roll').value),  # Convert degrees to radians
-                np.radians(self.get_parameter('sonar_orientation.pitch').value),  # Convert degrees to radians
-                np.radians(self.get_parameter('sonar_orientation.yaw').value)  # Convert degrees to radians
-            ],
-            'voxel_resolution': self.get_parameter('voxel_resolution').value,
-            'dynamic_expansion': self.get_parameter('dynamic_expansion').value,
-            'z_filter_min': self.get_parameter('z_filter_min').value,
-            'z_filter_enabled': self.get_parameter('z_filter_enabled').value,
-            'adaptive_update': self.get_parameter('adaptive_update').value,
-            'adaptive_threshold': self.get_parameter('adaptive_threshold').value,
-            'adaptive_max_ratio': self.get_parameter('adaptive_max_ratio').value,
-            'occupied_threshold': self.get_parameter('occupied_threshold').value,
-            'use_cpp_backend': self.get_parameter('use_cpp_backend').value,
-            'frame_skip': self.get_parameter('frame_skip').value,
-            # IWLO parameters
-            'sharpness': self.get_parameter('sharpness').value,
-            'decay_rate': self.get_parameter('decay_rate').value,
-            'min_alpha': self.get_parameter('min_alpha').value,
-            'L_occ': self.get_parameter('L_occ').value,
-            'L_free': self.get_parameter('L_free').value,
-            'L_min': self.get_parameter('L_min').value,
-            'L_max': self.get_parameter('L_max').value,
-            # Cross-talk filter parameters
-            'crosstalk_filter_enabled': self.get_parameter('crosstalk_filter_enabled').value,
-            'morpho_filter_enabled': self.get_parameter('morpho_filter_enabled').value,
-            'morpho_kernel_size': self.get_parameter('morpho_kernel_size').value,
-            'morpho_kernel_shape': self.get_parameter('morpho_kernel_shape').value,
-            'azimuth_check_enabled': self.get_parameter('azimuth_check_enabled').value,
-            'azimuth_consistency_threshold': self.get_parameter('azimuth_consistency_threshold').value
-        }
+        # Load configuration from ROS2 parameters using dataclass
+        config_dataclass = SonarMapperConfig.from_ros_params(self)
+        config = config_dataclass.to_mapper_dict()
         
         # Get other parameters
         self.show_free_space = self.get_parameter('show_free_space').value
@@ -231,7 +186,9 @@ class SonarMapperNode(Node):
         self.map_frame_id = self.get_parameter('map_frame_id').value
         self.publish_tf = self.get_parameter('publish_tf').value
         self.show_opencv_visualization = self.get_parameter('show_opencv_visualization').value
-        
+        self.pointcloud_publish_rate = self.get_parameter('pointcloud_publish_rate').value
+        self.tile_save_interval = self.get_parameter('tile_save_interval').value
+
         # Get topic names
         sonar_topic = self.get_parameter('sonar_topic').value
         odometry_topic = self.get_parameter('odometry_topic').value
@@ -241,15 +198,14 @@ class SonarMapperNode(Node):
         # Store robot detection settings
         self.enable_robot_detection = config['enable_robot_detection']
         self.robot_detection_topic = config['robot_detection']['topic']
-        
+
+        # Store out-of-core mode flag
+        self.use_outofcore = config['use_outofcore']
+
         # Initialize mapper
         self.mapper = SonarTo3DMapper(config)
         
-        # Log backend information
-        backend_info = self.mapper.get_memory_stats()
-        self.get_logger().info(f"Using {backend_info['backend']}")
-        if 'C++' in backend_info['backend']:
-            self.get_logger().info("C++ backend is active for high-performance processing")
+        # Backend info (silent - available via get_memory_stats())
         
         # Create CV bridge for image conversion
         self.bridge = CvBridge()
@@ -321,132 +277,102 @@ class SonarMapperNode(Node):
                 self.robot_detection_topic,
                 10
             )
-            self.get_logger().info(f'Robot detection enabled, publishing to: {self.robot_detection_topic}')
         else:
             self.robot_pub = None
-            self.get_logger().info('Robot detection disabled')
         
-        # Create timer for periodic publishing (fixed at 10Hz)
-        self.timer = self.create_timer(
-            0.1,  # 10Hz publishing rate
-            self.publish_pointcloud
-        )
+        # Create timer for periodic publishing
+        if not self.use_outofcore:
+            # In-memory mode: configurable pointcloud publishing rate
+            publish_interval = 1.0 / self.pointcloud_publish_rate
+            self.timer = self.create_timer(publish_interval, self.publish_pointcloud)
+        else:
+            # Out-of-core mode: eviction 기반 + 주기적 저장
+            self.timer = None
+            self.tile_update_pub = self.create_publisher(
+                Int32MultiArray,
+                '/updated_tile_indices',
+                10
+            )
+            # 주기적으로 dirty 타일 저장 + visualizer 알림
+            self.flush_timer = self.create_timer(self.tile_save_interval, self.periodic_flush_and_notify)
         
         # No need for TF timer anymore since we use static transform
         
-        self.get_logger().info('3D Sonar Mapper Node initialized')
-        self.get_logger().info(f'  Horizontal FOV: {config["horizontal_fov"]}°')
-        self.get_logger().info(f'  Vertical aperture: {config["vertical_aperture"]}°')
-        self.get_logger().info(f'  Voxel resolution: {config["voxel_resolution"]}m')
-        self.get_logger().info(f'  Probability update method: IWLO')
-        self.get_logger().info(f'  Occupied threshold: {config["occupied_threshold"]}')
-        self.get_logger().info(f'  Adaptive update: {config["adaptive_update"]}')
-        self.get_logger().info(f'  Robot detection: {config["enable_robot_detection"]} (threshold: >={config["robot_detection"]["min_threshold"]})')
-        if config["enable_robot_detection"]:
-            self.get_logger().info(f'  Terrain range: {config["terrain_detection"]["min_threshold"]}-{config["terrain_detection"]["max_threshold"]} (when robot detection enabled)')
-        self.get_logger().info(f'  Frame skip: {config["frame_skip"]} (process every {config["frame_skip"]} frame{"s" if config["frame_skip"] > 1 else ""})')
-        self.get_logger().info(f'  Sonar orientation (deg): roll={self.get_parameter("sonar_orientation.roll").value}, '
-                              f'pitch={self.get_parameter("sonar_orientation.pitch").value}, '
-                              f'yaw={self.get_parameter("sonar_orientation.yaw").value}')
-        self.get_logger().info(f'  Subscribing to sonar: {sonar_topic}')
-        self.get_logger().info(f'  Subscribing to odometry: {odometry_topic}')
-        self.get_logger().info(f'  Publishing to: {pointcloud_topic}')
-        self.get_logger().info(f'  Time synchronization enabled with {0.1}s tolerance')
-
-        # Log bag recording information
-        record_bag = self.get_parameter('record_bag').value
-        if record_bag:
-            base_path = self.get_parameter('record_base_path').value
-            prefix = self.get_parameter('record_prefix').value
-            next_num = get_next_test_number(base_path, prefix)
-            output_path = os.path.join(base_path, f'{prefix}_{next_num}', f'{prefix}_{next_num}')
-            self.get_logger().info(f'[Bag Recording] Auto-generated output path: {output_path}')
+        # Initialization summary (single line)
+        mode_str = "out-of-core" if self.use_outofcore else "in-memory"
+        self.get_logger().info(
+            f'Mapper initialized: {config["voxel_resolution"]}m res, '
+            f'{config["horizontal_fov"]}°x{config["vertical_aperture"]}° FOV, '
+            f'{mode_str} mode'
+        )
     
-    def visualize_with_threshold(self, sonar_image):
+    def _decode_sonar_image(self, sonar_msg: Image) -> np.ndarray:
         """
-        Visualize sonar image with intensity threshold applied
-        
+        Decode ROS Image message to numpy array
+
         Args:
-            sonar_image: Original sonar image as numpy array
+            sonar_msg: ROS Image message
+
+        Returns:
+            Decoded image as numpy array, or None on error
         """
-        # Create visualization image
-        viz_image = sonar_image.copy()
-        
-        # Apply threshold - create binary mask
+        try:
+            if sonar_msg.encoding == 'mono8' or sonar_msg.encoding == '8UC1':
+                return self.bridge.imgmsg_to_cv2(sonar_msg, desired_encoding='mono8')
+            elif sonar_msg.encoding == 'mono16' or sonar_msg.encoding == '16UC1':
+                img16 = self.bridge.imgmsg_to_cv2(sonar_msg, desired_encoding='mono16')
+                return (img16 / 256).astype(np.uint8)
+            else:
+                self.get_logger().error(f'Unsupported encoding: {sonar_msg.encoding}')
+                return None
+        except Exception as e:
+            self.get_logger().error(f'Image decode failed: {e}')
+            return None
+
+    def _visualize_sonar_frame(self, sonar_image: np.ndarray):
+        """
+        Visualize sonar frame with threshold overlay
+
+        Args:
+            sonar_image: Grayscale sonar image
+        """
         threshold = self.mapper.intensity_threshold
         thresholded = np.where(sonar_image > threshold, 255, 0).astype(np.uint8)
-        
-        # Convert to color for better visualization
-        # Original image in blue channel
+
         original_colored = cv2.cvtColor(sonar_image, cv2.COLOR_GRAY2BGR)
-        
-        # Thresholded image in red channel  
-        thresholded_colored = np.zeros((sonar_image.shape[0], sonar_image.shape[1], 3), dtype=np.uint8)
-        thresholded_colored[:, :, 2] = thresholded  # Red channel for detected objects
-        
-        # Overlay: original + threshold highlights
+
+        thresholded_colored = np.zeros_like(original_colored)
+        thresholded_colored[:, :, 2] = thresholded
+
         overlay = cv2.addWeighted(original_colored, 0.6, thresholded_colored, 0.4, 0)
-        
-        # Add threshold value text
-        text = f"Intensity Threshold: {threshold}"
-        cv2.putText(overlay, text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 
-                   0.7, (0, 255, 0), 2)
-        
-        # Add frame counter
-        frame_text = f"Frame: {self.frame_count}"
-        cv2.putText(overlay, frame_text, (10, 60), cv2.FONT_HERSHEY_SIMPLEX,
-                   0.7, (0, 255, 0), 2)
-        
-        # Create side-by-side view
+
+        cv2.putText(overlay, f"Intensity Threshold: {threshold}", (10, 30),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        cv2.putText(overlay, f"Frame: {self.frame_count}", (10, 60),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
         combined = np.hstack([original_colored, overlay])
-        
-        # Show windows
+
         cv2.imshow("Sonar: Original | Threshold Applied", combined)
         cv2.imshow("Binary Threshold", thresholded)
-        
-        # Wait for 1ms to update display
         cv2.waitKey(1)
     
     def synchronized_callback(self, sonar_msg: Image, odom_msg: Odometry):
         """
         Process synchronized sonar image and odometry data
-        
+
         Args:
             sonar_msg: Sonar image message
             odom_msg: Odometry message
         """
         self.frame_count += 1
-        
-        # Frame skipping logic
+
+        # Frame skipping logic - check BEFORE decoding
         if self.frame_count % self.frame_skip != 0:
-            # Show OpenCV visualization even for skipped frames if enabled
-            if self.show_opencv_visualization:
-                try:
-                    if sonar_msg.encoding == 'mono8' or sonar_msg.encoding == '8UC1':
-                        sonar_image = self.bridge.imgmsg_to_cv2(sonar_msg, desired_encoding='mono8')
-                    elif sonar_msg.encoding == 'mono16' or sonar_msg.encoding == '16UC1':
-                        sonar_image = self.bridge.imgmsg_to_cv2(sonar_msg, desired_encoding='mono16')
-                        sonar_image = (sonar_image / 256).astype(np.uint8)
-                    else:
-                        return
-                    self.visualize_with_threshold(sonar_image)
-                except Exception:
-                    pass
             return
-        # Convert ROS Image to numpy array
-        try:
-            # Handle different encodings
-            if sonar_msg.encoding == 'mono8' or sonar_msg.encoding == '8UC1':
-                sonar_image = self.bridge.imgmsg_to_cv2(sonar_msg, desired_encoding='mono8')
-            elif sonar_msg.encoding == 'mono16' or sonar_msg.encoding == '16UC1':
-                sonar_image = self.bridge.imgmsg_to_cv2(sonar_msg, desired_encoding='mono16')
-                # Convert to 8-bit
-                sonar_image = (sonar_image / 256).astype(np.uint8)
-            else:
-                self.get_logger().error(f'Unsupported image encoding: {sonar_msg.encoding}')
-                return
-        except Exception as e:
-            self.get_logger().error(f'Failed to convert image: {e}')
+        # Decode image (only for processed frames)
+        sonar_image = self._decode_sonar_image(sonar_msg)
+        if sonar_image is None:
             return
         
         # Extract odometry position and orientation
@@ -465,28 +391,24 @@ class SonarMapperNode(Node):
         
         # Process the sonar image
         stats = self.mapper.process_sonar_image(sonar_image, position, orientation)
-        
-        # Show OpenCV visualization if enabled
+
+        # Show visualization if enabled
         if self.show_opencv_visualization:
-            self.visualize_with_threshold(sonar_image)
-        
+            self._visualize_sonar_frame(sonar_image)
+
         # Store latest odometry for TF publishing
         self.latest_odometry = odom_msg
         
-        # Log statistics periodically
-        if not stats.get('skipped', False) and self.frame_count % 10 == 0:
-            # Calculate time difference for debug
-            sonar_time = sonar_msg.header.stamp.sec + sonar_msg.header.stamp.nanosec * 1e-9
-            odom_time = odom_msg.header.stamp.sec + odom_msg.header.stamp.nanosec * 1e-9
-            time_diff = abs(sonar_time - odom_time)
-            
+        # Log statistics periodically (every 100 frames to reduce log noise)
+        if not stats.get('skipped', False) and self.frame_count % 100 == 0:
             self.get_logger().info(
-                f'Frame {self.frame_count}: '
-                f'{stats["num_occupied"]} occupied, {stats["num_free"]} free, '
-                f'{stats["num_voxels"]} total voxels, '
-                f'time_diff={time_diff:.3f}s, '
-                f'proc_time={stats["processing_time"]:.3f}s'
+                f'Frame {self.frame_count}: {stats["num_voxels"]} voxels, '
+                f'{stats["processing_time"]*1000:.1f}ms'
             )
+
+        # Out-of-core 모드: eviction으로 저장된 타일 알림
+        if self.use_outofcore:
+            self.notify_saved_tiles()
     
     def publish_static_tf(self):
         """Publish static TF transform from base_link to sonar_link"""
@@ -518,12 +440,48 @@ class SonarMapperNode(Node):
         t.transform.rotation.y = cr * sp * cy + sr * cp * sy
         t.transform.rotation.z = cr * cp * sy - sr * sp * cy
         
-        # Send static transform
+        # Send static transform (silent)
         self.tf_static_broadcaster.sendTransform(t)
-        self.get_logger().info(f'Published static TF: {self.base_frame_id} -> {self.sonar_frame_id}')
     
+    def notify_saved_tiles(self):
+        """Eviction으로 저장된 타일 인덱스를 visualizer에 알림 (out-of-core 모드)"""
+        if not self.use_outofcore:
+            return
+
+        if hasattr(self.mapper, 'get_and_clear_saved_tiles'):
+            # Get tiles that were saved via eviction
+            saved_tiles = self.mapper.get_and_clear_saved_tiles()
+
+            # Publish saved tile indices if any (silent)
+            if len(saved_tiles) > 0 and hasattr(self, 'tile_update_pub'):
+                msg = Int32MultiArray()
+                # Pack as [x1, y1, z1, x2, y2, z2, ...]
+                for tile_idx in saved_tiles:
+                    msg.data.extend([tile_idx.x, tile_idx.y, tile_idx.z])
+                self.tile_update_pub.publish(msg)
+
+    def periodic_flush_and_notify(self):
+        """5초 주기로 모든 dirty 타일을 저장하고 visualizer에 알림 (out-of-core 모드)"""
+        if not self.use_outofcore:
+            return
+
+        # Flush all dirty tiles to disk and get their indices
+        if hasattr(self.mapper, 'flush_map_and_get_dirty_tiles'):
+            flushed_tiles = self.mapper.flush_map_and_get_dirty_tiles()
+
+            # Publish flushed tile indices
+            if len(flushed_tiles) > 0 and hasattr(self, 'tile_update_pub'):
+                msg = Int32MultiArray()
+                for tile_idx in flushed_tiles:
+                    msg.data.extend([tile_idx.x, tile_idx.y, tile_idx.z])
+                self.tile_update_pub.publish(msg)
+
     def publish_pointcloud(self):
         """Publish accumulated point cloud"""
+        # Skip in out-of-core mode (use map_visualizer_node instead)
+        if self.use_outofcore:
+            return
+
         # Get point cloud from mapper
         result = self.mapper.get_point_cloud(include_free=self.show_free_space)
         
@@ -710,29 +668,34 @@ class SonarMapperNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    
+
     node = SonarMapperNode()
-    
+
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
-        # Print final statistics
+        # Print final statistics and flush tiles
         if node:
             try:
                 result = node.mapper.get_point_cloud()
+                memory_stats = node.mapper.get_memory_stats()
+
                 node.get_logger().info(
-                    f'\nFinal statistics:\n'
-                    f'  Total frames: {result["frame_count"]}\n'
-                    f'  Processed frames: {result["processed_count"]}\n'
-                    f'  Total voxels: {result["num_voxels"]}\n'
-                    f'  Occupied voxels: {result["num_occupied"]}'
+                    f'Shutdown: {result["processed_count"]}/{result["frame_count"]} frames, '
+                    f'{result["num_occupied"]}/{result["num_voxels"]} occupied voxels'
                 )
+
+                # Flush all dirty tiles to disk on shutdown (out-of-core mode)
+                if hasattr(node.mapper, 'flush_map'):
+                    node.mapper.flush_map()
+                    node.notify_saved_tiles()
+
                 node.destroy_node()
-            except Exception:
-                pass
-        
+            except Exception as e:
+                print(f"Shutdown error: {e}")
+
         if rclpy.ok():
             rclpy.shutdown()
 

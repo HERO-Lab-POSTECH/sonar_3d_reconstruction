@@ -3,7 +3,8 @@ Panels:
     Help Height: 78
     Name: Displays
     Property Tree Widget:
-      Expanded: ~
+      Expanded:
+        - /PointCloud21
       Splitter Ratio: 0.5
     Tree Height: 752
   - Class: rviz_common/Selection
@@ -23,7 +24,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: Sonar3DMap
+    SyncSource: CloudMap
 Visualization Manager:
   Class: ""
   Displays:
@@ -117,8 +118,8 @@ Visualization Manager:
         - Alpha: 0.30000001192092896
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
-            Max Value: 61.547401428222656
-            Min Value: -5.703291416168213
+            Max Value: 73.44287109375
+            Min Value: -10.939796447753906
             Value: true
           Axis: Z
           Channel Name: intensity
@@ -289,6 +290,40 @@ Visualization Manager:
           Value: true
       Enabled: true
       Name: Trajectory
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: -0.15000000596046448
+        Min Value: -2.3499999046325684
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 255; 255
+      Color Transformer: AxisColor
+      Decay Time: 0
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 0.9999545812606812
+      Min Color: 0; 0; 0
+      Min Intensity: 0.7123962640762329
+      Name: PointCloud2
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.10000000149011612
+      Style: Flat Squares
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /map_pointcloud
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 0; 0; 0
@@ -372,4 +407,4 @@ Window Geometry:
     collapsed: false
   Width: 1920
   X: 0
-  Y: 360
+  Y: 206

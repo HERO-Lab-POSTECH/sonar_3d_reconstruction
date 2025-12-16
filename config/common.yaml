@@ -21,8 +21,16 @@ sonar_3d_mapper:
       yaw: 0.0                   # degrees
 
     #===== Voxel Map =====
-    voxel_resolution: 0.1       # meters
+    voxel_resolution: 0.1      # meters
     use_cpp_backend: true
+
+    #===== Out-of-Core Storage =====
+    # Enable disk-based tile storage for large maps (장시간 매핑용)
+    # When enabled, map is stored on disk instead of RAM
+    use_outofcore: true                              # true = disk-based, false = RAM-based
+    outofcore_map_path: "/workspace/map_tiles"   # Tile storage directory
+    outofcore_tile_size: 0.4                         # Tile size in meters 
+    outofcore_cache_size: 16                         # Max tiles in memory (128 = most tiles stay cached)
 
     #===== Probability Update =====
     # IWLO (Intensity-Weighted Log-Odds) is the only supported method
@@ -43,6 +51,8 @@ sonar_3d_mapper:
 
     #===== Processing =====
     frame_skip: 5                # process every N frames
+    # Note: Free space carving is always enabled for noise reduction
+    # All tiles (including free-only) are saved for complete map representation
     enable_robot_detection: false
 
     #===== ROS2 Interface =====
@@ -59,19 +69,21 @@ sonar_3d_mapper:
     #===== Visualization =====
     show_free_space: false
     show_opencv_visualization: true
+    pointcloud_publish_rate: 10.0  # Hz - PointCloud2 publishing rate (in-memory mode)
+    tile_save_interval: 5.0       # seconds - dirty tile save interval (out-of-core mode)
     use_sim_time: true
 
     #===== Launch Options =====
     launch_fast_lio: true
     launch_rviz: true
+    rviz_config: "3d_mapping.rviz"  # rviz config file name (in rviz/ folder)
 
     #===== Bag Playback =====
     play_bag: true
-    bag_file: "/workspace/data/4_yeondong_hang/20251029_blueboat_sonar_lidar/tilt90-range3.5_v3"
+    bag_file: "/workspace/data/5_hyeongsan_gang/20241205_slam_test/slam_test_v5_raw"
     bag_playback_rate: 1.0
 
     #===== Bag Recording =====
     record_bag: false
     record_base_path: "/workspace/data/experiments"  # Base directory for recordings
-    record_prefix: "test"                            # Folder prefix (test_1, test_2...)
-    # Output path is auto-generated: {record_base_path}/{record_prefix}_{N}/{record_prefix}_{N}.db3
+    # Output path is auto-generated: {record_base_path}/YYYYMMDD_HHMMSS/

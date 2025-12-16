@@ -6,6 +6,7 @@
 #include "octree_mapper.h"
 #include "ray_casting.h"
 #include "probability_updater.h"
+#include "outofcore_tile_mapper.h"
 
 namespace py = pybind11;
 
@@ -149,6 +150,110 @@ PYBIND11_MODULE(sonar_3d_reconstruction_cpp, m) {
              "Enable or disable incremental synchronization")
         .def("force_full_sync", &sonar_3d_reconstruction::ProbabilityUpdater::force_full_sync,
              "Force full synchronization from internal storage to octree");
+
+    // TileIndex structure
+    py::class_<sonar_3d_reconstruction::TileIndex>(m, "TileIndex")
+        .def(py::init<>())
+        .def(py::init<int, int, int>(), py::arg("x"), py::arg("y"), py::arg("z"))
+        .def_readwrite("x", &sonar_3d_reconstruction::TileIndex::x)
+        .def_readwrite("y", &sonar_3d_reconstruction::TileIndex::y)
+        .def_readwrite("z", &sonar_3d_reconstruction::TileIndex::z)
+        .def("to_string", &sonar_3d_reconstruction::TileIndex::to_string)
+        .def("__repr__", [](const sonar_3d_reconstruction::TileIndex& idx) {
+            return "<TileIndex: " + idx.to_string() + ">";
+        })
+        .def("__eq__", &sonar_3d_reconstruction::TileIndex::operator==);
+
+    // OutofcoreTileMapper class (out-of-core disk-based mapper)
+    py::class_<sonar_3d_reconstruction::OutofcoreTileMapper>(m, "OutofcoreTileMapper")
+        .def(py::init<const std::string&, double, double, size_t>(),
+             py::arg("map_path"),
+             py::arg("resolution") = 0.05,
+             py::arg("tile_size") = 10.0,
+             py::arg("cache_size") = 16,
+             "Create OutofcoreTileMapper with tile-based disk storage")
+        // IWLO update (main interface)
+        .def("batch_update_iwlo", &sonar_3d_reconstruction::OutofcoreTileMapper::batch_update_iwlo,
+             py::arg("points"), py::arg("intensities"), py::arg("is_occupied"),
+             "Batch update with IWLO method")
+        // Parameter setters
+        .def("set_iwlo_params", &sonar_3d_reconstruction::OutofcoreTileMapper::set_iwlo_params,
+             py::arg("sharpness"), py::arg("decay_rate"), py::arg("min_alpha"),
+             py::arg("L_min"), py::arg("L_max"),
+             "Set IWLO parameters")
+        .def("set_log_odds_params", &sonar_3d_reconstruction::OutofcoreTileMapper::set_log_odds_params,
+             py::arg("log_odds_occupied"), py::arg("log_odds_free"),
+             "Set log-odds parameters")
+        .def("set_intensity_params", &sonar_3d_reconstruction::OutofcoreTileMapper::set_intensity_params,
+             py::arg("intensity_threshold"), py::arg("intensity_max"),
+             "Set intensity parameters")
+        .def("set_occupied_threshold", &sonar_3d_reconstruction::OutofcoreTileMapper::set_occupied_threshold,
+             py::arg("threshold"),
+             "Set occupied threshold for visualization filtering")
+        .def("set_adaptive_params", &sonar_3d_reconstruction::OutofcoreTileMapper::set_adaptive_params,
+             py::arg("enabled"), py::arg("threshold"), py::arg("max_ratio"),
+             "Set adaptive parameters")
+        // Getters
+        .def("get_occupied_voxels", &sonar_3d_reconstruction::OutofcoreTileMapper::get_occupied_voxels,
+             py::arg("min_probability") = 0.5,
+             "Get occupied voxels from cached tiles only")
+        .def("get_all_occupied_voxels", &sonar_3d_reconstruction::OutofcoreTileMapper::get_all_occupied_voxels,
+             py::arg("min_probability") = 0.5,
+             "Get ALL occupied voxels from ALL tiles (loads from disk)")
+        .def("get_occupied_voxels_in_region", &sonar_3d_reconstruction::OutofcoreTileMapper::get_occupied_voxels_in_region,
+             py::arg("min_bound"), py::arg("max_bound"), py::arg("min_probability") = 0.5,
+             "Get occupied voxels in a specific region")
+        .def("get_memory_usage", &sonar_3d_reconstruction::OutofcoreTileMapper::get_memory_usage,
+             "Get memory usage statistics")
+        .def("get_resolution", &sonar_3d_reconstruction::OutofcoreTileMapper::get_resolution,
+             "Get voxel resolution")
+        .def("get_num_nodes", &sonar_3d_reconstruction::OutofcoreTileMapper::get_num_nodes,
+             "Get total number of nodes across cached tiles")
+        // Tile management
+        .def("flush_all", &sonar_3d_reconstruction::OutofcoreTileMapper::flush_all,
+             "Flush all dirty tiles to disk")
+        .def("flush_tile", &sonar_3d_reconstruction::OutofcoreTileMapper::flush_tile,
+             py::arg("idx"),
+             "Flush specific tile to disk")
+        .def("clear", &sonar_3d_reconstruction::OutofcoreTileMapper::clear,
+             "Clear all data")
+        // Octree export
+        .def("save_merged_octree", &sonar_3d_reconstruction::OutofcoreTileMapper::save_merged_octree,
+             py::arg("filepath"),
+             "Save merged octree to .bt file")
+        .def("get_octree_binary", [](sonar_3d_reconstruction::OutofcoreTileMapper& self) {
+             auto result = self.get_octree_binary();
+             // Convert vector<int8_t> to py::bytes
+             return py::make_tuple(
+                 py::bytes(reinterpret_cast<const char*>(result.first.data()), result.first.size()),
+                 result.second
+             );
+         }, "Get octree as binary data (data, tree_id) for ROS octomap_msgs")
+        // Statistics
+        .def("get_cached_tile_count", &sonar_3d_reconstruction::OutofcoreTileMapper::get_cached_tile_count,
+             "Get number of tiles in cache")
+        .def("get_total_tile_count", &sonar_3d_reconstruction::OutofcoreTileMapper::get_total_tile_count,
+             "Get total number of tiles on disk")
+        .def("get_all_tile_indices", &sonar_3d_reconstruction::OutofcoreTileMapper::get_all_tile_indices,
+             "Get list of all tile indices")
+        .def("get_disk_usage", &sonar_3d_reconstruction::OutofcoreTileMapper::get_disk_usage,
+             "Get disk usage in bytes")
+        // Region preloading
+        .def("preload_region", &sonar_3d_reconstruction::OutofcoreTileMapper::preload_region,
+             py::arg("min_bound"), py::arg("max_bound"),
+             "Preload tiles in a region")
+        // Selective tile reload (for visualization optimization)
+        .def("reload_tiles", &sonar_3d_reconstruction::OutofcoreTileMapper::reload_tiles,
+             py::arg("indices"),
+             "Reload specific tiles from disk (for visualization sync)")
+        .def("flush_and_get_dirty_tiles", &sonar_3d_reconstruction::OutofcoreTileMapper::flush_and_get_dirty_tiles,
+             "Flush all dirty tiles and return their indices")
+        // Pruning
+        .def("prune_all", &sonar_3d_reconstruction::OutofcoreTileMapper::prune_all,
+             "Prune all cached tiles (merge homogeneous octree nodes)")
+        // Eviction notification (for visualizer sync)
+        .def("get_and_clear_saved_tiles", &sonar_3d_reconstruction::OutofcoreTileMapper::get_and_clear_saved_tiles,
+             "Get and clear list of recently saved tiles (from eviction)");
 
     // Module version info
     m.attr("__version__") = "1.0.0";

@@ -22,32 +22,32 @@ try:
     CV2_AVAILABLE = True
 except ImportError:
     CV2_AVAILABLE = False
-    print("[3D Mapper] OpenCV 없음 - crosstalk filter 비활성화")
 
 # C++ 모듈 임포트 시도
 try:
     # ROS2 install 경로에서 직접 모듈 임포트
     import sys
     import importlib.util
-    
+
     install_path = "/workspace/ros2_ws/install/sonar_3d_reconstruction/local/lib/python3.10/dist-packages"
     cpp_file = f"{install_path}/sonar_3d_reconstruction/sonar_3d_reconstruction_cpp.cpython-310-x86_64-linux-gnu.so"
-    
+
     # 직접 로드 방식
     spec = importlib.util.spec_from_file_location("sonar_3d_reconstruction_cpp", cpp_file)
     cpp_module = importlib.util.module_from_spec(spec)
     sys.modules["sonar_3d_reconstruction_cpp"] = cpp_module
     spec.loader.exec_module(cpp_module)
-    
+
     ProbabilityUpdater = cpp_module.ProbabilityUpdater
     MemoryStats = cpp_module.MemoryStats
-    
+    OutofcoreTileMapper = cpp_module.OutofcoreTileMapper
+
     CPP_MODULE_AVAILABLE = True
-    print("[3D Mapper] C++ ProbabilityUpdater 모듈 로드 성공")
+    OUTOFCORE_AVAILABLE = True
 except Exception as e:
     CPP_MODULE_AVAILABLE = False
-    print("[3D Mapper] C++ 모듈 없음 - Python SimpleOctree 사용")
-    print(f"  Error: {e}")
+    OUTOFCORE_AVAILABLE = False
+    warnings.warn(f"[3D Mapper] C++ module unavailable, using Python fallback: {e}")
 
 
 class CrosstalkFilter:
@@ -80,7 +80,6 @@ class CrosstalkFilter:
         self.azimuth_check_enabled = azimuth_check_enabled
 
         if not CV2_AVAILABLE and morpho_enabled:
-            print("[CrosstalkFilter] OpenCV 없음, morphological filter 비활성화")
             self.morpho_enabled = False
 
     def filter(self, polar_img):
@@ -225,12 +224,23 @@ class SonarTo3DMapper:
 
             # Processing parameters
             'frame_skip': 1,  # Process every N frames
+
+            # Out-of-Core parameters (disk-based storage)
+            'use_outofcore': False,        # Enable disk-based tile storage
+            'outofcore_map_path': '/workspace/data/map_tiles',  # Tile storage directory
+            'outofcore_tile_size': 10.0,   # Tile size in meters
+            'outofcore_cache_size': 16,    # Max tiles in memory
         }
         
         # Update with provided config
         if config:
+            # DEBUG: Print incoming config
+            import sys
+            print(f"[3D_MAPPER DEBUG] Incoming config keys: {list(config.keys())}", file=sys.stderr, flush=True)
+            print(f"[3D_MAPPER DEBUG] config['outofcore_tile_size'] = {config.get('outofcore_tile_size', 'NOT FOUND')}", file=sys.stderr, flush=True)
             default_config.update(config)
-        
+            print(f"[3D_MAPPER DEBUG] After update: default_config['outofcore_tile_size'] = {default_config.get('outofcore_tile_size')}", file=sys.stderr, flush=True)
+
         # Store parameters
         self.horizontal_fov = np.radians(default_config['horizontal_fov'])
         self.vertical_aperture = np.radians(default_config['vertical_aperture'])
@@ -248,7 +258,7 @@ class SonarTo3DMapper:
         
         # Processing parameters
         self.frame_skip = default_config['frame_skip']
-        
+
         self.image_width = default_config['image_width']
         self.image_height = default_config['image_height']
         self.voxel_resolution = default_config['voxel_resolution']
@@ -272,16 +282,60 @@ class SonarTo3DMapper:
             self.sonar_orientation
         )
         
-        # Initialize C++ ProbabilityUpdater (required)
+        # Initialize C++ backend
         self.use_cpp = default_config.get('use_cpp_backend', CPP_MODULE_AVAILABLE)
+        self.use_outofcore = default_config.get('use_outofcore', False)
 
-        if self.use_cpp and CPP_MODULE_AVAILABLE:
-            # Initialize C++ ProbabilityUpdater
+        # Store log-odds values for ray processing
+        self.log_odds_occupied = default_config['L_occ']
+        self.log_odds_free = default_config['L_free']
+
+        if self.use_outofcore and OUTOFCORE_AVAILABLE:
+            # Initialize OutofcoreTileMapper (disk-based)
+            map_path = default_config.get('outofcore_map_path', '/workspace/data/map_tiles')
+            tile_size = default_config.get('outofcore_tile_size', 10.0)
+            cache_size = default_config.get('outofcore_cache_size', 16)
+
+            # DEBUG: Print values before C++ call
+            import sys
+            print(f"[3D_MAPPER] Creating OutofcoreTileMapper:", file=sys.stderr, flush=True)
+            print(f"  map_path={map_path}", file=sys.stderr, flush=True)
+            print(f"  resolution={self.voxel_resolution}", file=sys.stderr, flush=True)
+            print(f"  tile_size={tile_size} (type={type(tile_size).__name__})", file=sys.stderr, flush=True)
+            print(f"  cache_size={cache_size}", file=sys.stderr, flush=True)
+
+            self.octree = OutofcoreTileMapper(
+                map_path,
+                self.voxel_resolution,
+                tile_size,
+                cache_size
+            )
+
+            # Configure IWLO parameters
+            self.octree.set_iwlo_params(
+                default_config.get('sharpness', 0.1),
+                default_config.get('decay_rate', 0.1),
+                default_config.get('min_alpha', 0.3),
+                default_config.get('L_min', -10.0),
+                default_config.get('L_max', 10.0)
+            )
+            self.octree.set_log_odds_params(
+                self.log_odds_occupied,
+                self.log_odds_free
+            )
+            self.octree.set_intensity_params(
+                self.intensity_threshold,
+                default_config.get('intensity_max', 255)
+            )
+            self.octree.set_adaptive_params(
+                default_config['adaptive_update'],
+                default_config['adaptive_threshold'],
+                default_config['adaptive_max_ratio']
+            )
+
+        elif self.use_cpp and CPP_MODULE_AVAILABLE:
+            # Initialize C++ ProbabilityUpdater (RAM-based)
             self.octree = ProbabilityUpdater(self.voxel_resolution)
-
-            # Store log-odds values for ray processing
-            self.log_odds_occupied = default_config['L_occ']
-            self.log_odds_free = default_config['L_free']
 
             # Configure C++ octree parameters
             self.octree.set_log_odds_params(
@@ -311,9 +365,6 @@ class SonarTo3DMapper:
                 self.intensity_threshold,
                 default_config.get('intensity_max', 255)
             )
-
-            print(f"[3D Mapper] C++ ProbabilityUpdater 사용 (해상도: {self.voxel_resolution}m)")
-            print(f"  업데이트 방식: IWLO")
         else:
             # C++ module required but not available
             raise RuntimeError(
@@ -351,7 +402,6 @@ class SonarTo3DMapper:
                 morpho_enabled=default_config.get('morpho_filter_enabled', True),
                 azimuth_check_enabled=default_config.get('azimuth_check_enabled', True)
             )
-            print(f"[3D Mapper] Cross-talk filter 활성화")
         else:
             self.crosstalk_filter = None
     
@@ -429,31 +479,58 @@ class SonarTo3DMapper:
         return abs(bearing_angle) <= half_fov
 
     def is_in_shadow_region(self, voxel_range: float, bearing_angle: float,
-                            bearing_first_hits: dict) -> bool:
+                            bearing_first_hits: List[Tuple[float, float]]) -> bool:
         """
-        Check if a voxel is in another bearing's shadow region
+        Check if a voxel is in another bearing's shadow region (optimized)
 
         Shadow region: area behind first hit of adjacent bearings.
-        If a voxel is behind an adjacent bearing's first hit, it should not
-        be updated as free (to preserve unknown state in occluded areas).
+        Uses binary search on sorted bearing list for O(log N) complexity.
 
         Args:
             voxel_range: Range of the voxel from sensor origin
             bearing_angle: Bearing angle of the current ray
-            bearing_first_hits: Dictionary of bearing angle -> first hit range
+            bearing_first_hits: Sorted list of (bearing, first_hit_range) tuples
 
         Returns:
             True if voxel is in shadow region (should skip free update)
         """
+        if not bearing_first_hits:
+            return False
+
         bearing_resolution = self.horizontal_fov / self.image_width
         tolerance = bearing_resolution * self.angular_cone_width * 2
 
-        for adj_bearing, adj_first_hit in bearing_first_hits.items():
-            # Check adjacent bearings within tolerance
-            if abs(adj_bearing - bearing_angle) < tolerance and adj_bearing != bearing_angle:
-                # If voxel is behind adjacent bearing's first hit, it's in shadow
-                if adj_first_hit > 0 and voxel_range > adj_first_hit:
-                    return True
+        # Binary search for nearest bearing
+        left, right = 0, len(bearing_first_hits) - 1
+        while left <= right:
+            mid = (left + right) // 2
+            mid_bearing = bearing_first_hits[mid][0]
+
+            if abs(mid_bearing - bearing_angle) < tolerance:
+                # Found adjacent bearing - check shadow
+                if mid_bearing != bearing_angle:
+                    first_hit = bearing_first_hits[mid][1]
+                    if first_hit > 0 and voxel_range > first_hit:
+                        return True
+
+                # Check immediate neighbors
+                if mid > 0:
+                    prev_bearing, prev_hit = bearing_first_hits[mid - 1]
+                    if abs(prev_bearing - bearing_angle) < tolerance and prev_bearing != bearing_angle:
+                        if prev_hit > 0 and voxel_range > prev_hit:
+                            return True
+
+                if mid < len(bearing_first_hits) - 1:
+                    next_bearing, next_hit = bearing_first_hits[mid + 1]
+                    if abs(next_bearing - bearing_angle) < tolerance and next_bearing != bearing_angle:
+                        if next_hit > 0 and voxel_range > next_hit:
+                            return True
+                return False
+
+            elif mid_bearing < bearing_angle:
+                left = mid + 1
+            else:
+                right = mid - 1
 
         return False
 
@@ -515,33 +592,33 @@ class SonarTo3DMapper:
         # If no hit, skip this ray (no update)
         if first_hit_idx == -1:
             return updates  # Return empty updates - no information available
-        
+
         # Calculate vertical aperture parameters
         half_aperture = self.vertical_aperture / 2
-        
-        # Process free space before first hit (sparse)
+
+        # Process free space before first hit (sparse) - always enabled for carving
+        # Note: min_range only affects first hit detection, not free space carving
+        # All voxels before first hit are free (including those within min_range)
         free_sampling_step = 10
         for r_idx in range(0, first_hit_idx, free_sampling_step):
             range_m = r_idx * range_resolution
-            if range_m < self.min_range:
-                continue
-            
+
             # Calculate vertical spread
             vertical_spread = range_m * np.tan(half_aperture)
             num_vertical = max(1, int(vertical_spread / (self.voxel_resolution * 4)))
-            
+
             for v_step in range(-num_vertical, num_vertical + 1):
                 vertical_angle = (v_step / max(1, num_vertical)) * half_aperture
-                
+
                 # Sonar coordinates (X=forward, Y=right, Z=down)
                 x_sonar = range_m * np.cos(vertical_angle) * np.cos(bearing_angle)
                 y_sonar = -range_m * np.cos(vertical_angle) * np.sin(bearing_angle)
                 z_sonar = range_m * np.sin(vertical_angle)
-                
+
                 # Transform to world
                 pt_sonar = np.array([x_sonar, y_sonar, z_sonar, 1.0])
                 pt_world = T_sonar_to_world @ pt_sonar
-                
+
                 # Apply Z-axis filter if enabled
                 if self.z_filter_enabled and pt_world[2] < self.z_filter_min:
                     continue
@@ -655,8 +732,8 @@ class SonarTo3DMapper:
         bearing_step = max(1, bearing_bins // 256)
         range_resolution = self.max_range / range_bins
 
-        # Phase 1: Collect first hit information for all bearings (for shadow detection)
-        bearing_first_hits = {}
+        # Phase 1: Collect first hit information (sorted list for O(log N) lookup)
+        bearing_first_hits = []
         for b_idx in range(0, bearing_bins, bearing_step):
             bearing_angle = self.bearing_angles[b_idx]
             if not self.is_bearing_in_valid_fov(bearing_angle):
@@ -671,7 +748,10 @@ class SonarTo3DMapper:
                     break
 
             if first_hit_idx >= 0:
-                bearing_first_hits[bearing_angle] = first_hit_idx * range_resolution
+                bearing_first_hits.append((bearing_angle, first_hit_idx * range_resolution))
+
+        # Sort for binary search (already sorted due to iteration order, but explicit)
+        bearing_first_hits.sort(key=lambda x: x[0])
 
         # Phase 2: Process rays with shadow-aware updates
         for b_idx in range(0, bearing_bins, bearing_step):
@@ -810,31 +890,85 @@ class SonarTo3DMapper:
         self.frame_count = 0
         self.processed_frame_count = 0
         self.total_processing_time = 0.0
-        print("Map reset")
-    
+
     def get_memory_stats(self) -> Dict[str, Any]:
         """Get detailed memory usage statistics"""
         # C++ 메모리 통계
         stats = self.octree.get_memory_usage()
-        return {
-            'backend': 'C++ ProbabilityUpdater',
-            'num_nodes': stats.num_nodes,
-            'num_leaf_nodes': stats.num_leaf_nodes,
-            'memory_mb': stats.memory_mb,
-            'memory_efficiency': stats.memory_efficiency,
-            'resolution': self.octree.get_resolution()
-        }
+
+        if self.use_outofcore:
+            return {
+                'backend': 'C++ OutofcoreTileMapper (Disk)',
+                'num_nodes': stats.num_nodes,
+                'num_leaf_nodes': stats.num_leaf_nodes,
+                'memory_mb': stats.memory_mb,
+                'memory_efficiency': stats.memory_efficiency,
+                'resolution': self.octree.get_resolution(),
+                'cached_tiles': self.octree.get_cached_tile_count(),
+                'total_tiles': self.octree.get_total_tile_count(),
+                'disk_usage_bytes': self.octree.get_disk_usage()
+            }
+        else:
+            return {
+                'backend': 'C++ ProbabilityUpdater (RAM)',
+                'num_nodes': stats.num_nodes,
+                'num_leaf_nodes': stats.num_leaf_nodes,
+                'memory_mb': stats.memory_mb,
+                'memory_efficiency': stats.memory_efficiency,
+                'resolution': self.octree.get_resolution()
+            }
+
+    def flush_map(self):
+        """Flush all dirty tiles to disk (only for OutofcoreTileMapper)"""
+        if self.use_outofcore:
+            self.octree.flush_all()
+
+    def flush_map_and_get_dirty_tiles(self):
+        """
+        Flush dirty tiles and return their indices (for visualization sync)
+
+        Returns:
+            List of TileIndex objects that were flushed, or empty list if not outofcore mode
+        """
+        if self.use_outofcore:
+            return self.octree.flush_and_get_dirty_tiles()
+        return []
+
+    def get_and_clear_saved_tiles(self):
+        """
+        Get tiles saved via LRU eviction and clear the list (for visualizer sync)
+
+        Returns:
+            List of TileIndex objects that were saved since last call
+        """
+        if self.use_outofcore:
+            return self.octree.get_and_clear_saved_tiles()
+        return []
+
+    def save_merged_octree(self, filepath: str) -> bool:
+        """
+        Save merged octree to .bt file (only for OutofcoreTileMapper)
+
+        Args:
+            filepath: Output file path (.bt format)
+
+        Returns:
+            True if successful
+        """
+        if self.use_outofcore:
+            return self.octree.save_merged_octree(filepath)
+        return False
     
     def prune_map(self) -> int:
         """
-        Prune unnecessary nodes from the map
+        Prune unnecessary nodes from the map (merge homogeneous octree nodes)
 
         Returns:
             Number of nodes removed
         """
-        removed_nodes = self.octree.prune_tree()
-        print(f"트리 정리 완료: {removed_nodes} 노드 제거")
-        return removed_nodes
+        if self.use_outofcore:
+            return self.octree.prune_all()
+        return self.octree.prune_tree()
 
 
 if __name__ == "__main__":

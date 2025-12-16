@@ -8,10 +8,14 @@ Usage:
 
   # Override bag file:
   ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py bag_file:=/path/to/bag
+
+  # Custom map output path:
+  ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py map_path:=/custom/path
 """
 
 import os
 import yaml
+from datetime import datetime
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -21,37 +25,95 @@ from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
 
+def generate_timestamped_map_path(context, *args, **kwargs):
+    """Generate timestamped map path and setup mapper/visualizer nodes"""
+    pkg_dir = get_package_share_directory('sonar_3d_reconstruction')
+    common_config = os.path.join(pkg_dir, 'config', 'common.yaml')
+    method_iwlo = os.path.join(pkg_dir, 'config', 'method_iwlo.yaml')
+    robot_detection_config = os.path.join(pkg_dir, 'config', 'robot_detection.yaml')
+    crosstalk_config = os.path.join(pkg_dir, 'config', 'crosstalk_filter.yaml')
+    map_visualizer_config = os.path.join(pkg_dir, 'config', 'map_visualizer.yaml')
+
+    use_sim_time = context.launch_configurations.get('use_sim_time', 'true')
+    sonar_pitch = context.launch_configurations.get('sonar_pitch', '90.0')
+    launch_visualizer = context.launch_configurations.get('launch_visualizer', 'false')
+    map_path_arg = context.launch_configurations.get('map_path', '')
+
+    # Generate timestamped path if not specified
+    if map_path_arg:
+        map_path = map_path_arg
+    else:
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        map_path = f'/workspace/data/map_tiles/{timestamp}'
+
+    # Create directory
+    os.makedirs(map_path, exist_ok=True)
+    print(f'[3D Mapping] Map output path: {map_path}')
+
+    nodes = []
+
+    # 3D Mapper node
+    nodes.append(Node(
+        package='sonar_3d_reconstruction',
+        executable='3d_mapper_node.py',
+        name='sonar_3d_mapper',
+        parameters=[
+            common_config,
+            method_iwlo,
+            robot_detection_config,
+            crosstalk_config,
+            {
+                'use_sim_time': use_sim_time == 'true',
+                'sonar_orientation.pitch': float(sonar_pitch),
+                'outofcore_map_path': map_path,  # Override map path
+            }
+        ],
+        output='screen'
+    ))
+
+    # Map Visualizer node (if enabled)
+    if launch_visualizer.lower() == 'true':
+        # Read common params for visualizer
+        with open(common_config, 'r') as f:
+            vis_common_params = yaml.safe_load(f)['sonar_3d_mapper']['ros__parameters']
+
+        nodes.append(Node(
+            package='sonar_3d_reconstruction',
+            executable='map_visualizer_node.py',
+            name='map_visualizer',
+            parameters=[
+                map_visualizer_config,
+                {
+                    'use_sim_time': use_sim_time == 'true',
+                    'outofcore_map_path': map_path,
+                    'map_path': map_path,
+                    # Pass common.yaml parameters explicitly (different namespace)
+                    'outofcore_tile_size': vis_common_params.get('outofcore_tile_size', 10.0),
+                    'voxel_resolution': vis_common_params.get('voxel_resolution', 0.1),
+                    'outofcore_cache_size': vis_common_params.get('outofcore_cache_size', 16),
+                }
+            ],
+            output='screen'
+        ))
+
+    return nodes
+
+
 def setup_bag_recording(context, *args, **kwargs):
-    """Setup bag recording with auto-increment folder names"""
+    """Setup bag recording with timestamp-based folder names"""
+    from datetime import datetime
+
     record_bag = context.launch_configurations.get('record_bag', 'false')
     if record_bag.lower() != 'true':
         return []
 
     base_path = context.launch_configurations.get('record_base_path')
-    prefix = context.launch_configurations.get('record_prefix')
 
-    # Find next test number
-    next_num = 1
-    if os.path.exists(base_path):
-        existing = [d for d in os.listdir(base_path)
-                    if d.startswith(f'{prefix}_') and os.path.isdir(os.path.join(base_path, d))]
-        numbers = []
-        for d in existing:
-            try:
-                num = int(d[len(prefix)+1:])  # +1 for underscore
-                numbers.append(num)
-            except ValueError:
-                continue
-        next_num = max(numbers, default=0) + 1
+    # Create timestamp-based folder name: YYYYMMDD_HHMMSS
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    bag_path = os.path.join(base_path, timestamp)
 
-    # Create output directory
-    output_dir = os.path.join(base_path, f'{prefix}_{next_num}')
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Output bag path (no 'recording' subfolder)
-    bag_path = os.path.join(output_dir, f'{prefix}_{next_num}')
-
-    print(f'[Bag Recording] Output: {bag_path}')
+    print(f'[Bag Recording] Output: {bag_path}/')
 
     return [
         ExecuteProcess(
@@ -68,14 +130,14 @@ def generate_launch_description():
 
     # Config files
     common_config = os.path.join(pkg_dir, 'config', 'common.yaml')
-    method_iwlo = os.path.join(pkg_dir, 'config', 'method_iwlo.yaml')
-    robot_detection_config = os.path.join(pkg_dir, 'config', 'robot_detection.yaml')
-    crosstalk_config = os.path.join(pkg_dir, 'config', 'crosstalk_filter.yaml')
-    rviz_config = os.path.join(pkg_dir, 'rviz', '3d_mapping.rviz')
 
     # Load defaults from common.yaml
     with open(common_config, 'r') as f:
         common_params = yaml.safe_load(f)['sonar_3d_mapper']['ros__parameters']
+
+    # RViz config (from common.yaml or default)
+    rviz_config_name = common_params.get('rviz_config', '3d_mapping.rviz')
+    rviz_config = os.path.join(pkg_dir, 'rviz', rviz_config_name)
 
     # Launch configurations
     use_sim_time = LaunchConfiguration('use_sim_time')
@@ -84,10 +146,8 @@ def generate_launch_description():
     play_bag = LaunchConfiguration('play_bag')
     bag_file = LaunchConfiguration('bag_file')
     bag_rate = LaunchConfiguration('bag_rate')
-    sonar_pitch = LaunchConfiguration('sonar_pitch')
     record_bag = LaunchConfiguration('record_bag')
     record_base_path = LaunchConfiguration('record_base_path')
-    record_prefix = LaunchConfiguration('record_prefix')
 
     # Declare arguments (defaults from common.yaml)
     ld = LaunchDescription([
@@ -112,9 +172,12 @@ def generate_launch_description():
         DeclareLaunchArgument('record_base_path',
             default_value=common_params.get('record_base_path', '/workspace/data/experiments'),
             description='Base directory for bag recordings'),
-        DeclareLaunchArgument('record_prefix',
-            default_value=common_params.get('record_prefix', 'test'),
-            description='Folder prefix for recordings (e.g., test1, test2)'),
+        DeclareLaunchArgument('launch_visualizer',
+            default_value='true',
+            description='Launch map visualizer node for out-of-core tile visualization'),
+        DeclareLaunchArgument('map_path',
+            default_value='',
+            description='Map output path (default: timestamped folder in /workspace/data/map_tiles/)'),
     ])
 
     # Fast-LIO
@@ -126,20 +189,8 @@ def generate_launch_description():
         condition=IfCondition(launch_fast_lio)
     ))
 
-    # 3D Mapper node (IWLO only)
-    ld.add_action(Node(
-        package='sonar_3d_reconstruction',
-        executable='3d_mapper_node.py',
-        name='sonar_3d_mapper',
-        parameters=[
-            common_config,
-            method_iwlo,
-            robot_detection_config,
-            crosstalk_config,
-            {'use_sim_time': use_sim_time, 'sonar_orientation.pitch': sonar_pitch}
-        ],
-        output='screen'
-    ))
+    # 3D Mapper + Visualizer nodes (with timestamped map path)
+    ld.add_action(OpaqueFunction(function=generate_timestamped_map_path))
 
     # RViz
     ld.add_action(Node(

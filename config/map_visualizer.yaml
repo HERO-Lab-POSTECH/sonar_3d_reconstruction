@@ -1,0 +1,20 @@
+# Map Visualizer Node Parameters
+# NOTE: map_path, resolution, tile_size, frame_id, occupied_threshold는
+#       common.yaml에서 자동으로 로드됩니다.
+
+map_visualizer:
+  ros__parameters:
+    #===== Visualizer 전용 파라미터 =====
+    visualization_mode: "octomap"                 # "octomap", "pointcloud", or "all"
+    publish_rate: 1.0                         # Hz - 토픽 발행 주기
+    auto_refresh: true                        # 자동으로 디스크에서 갱신
+    refresh_interval: 5.0                     # 초 - 디스크에서 타일 다시 로드하는 주기
+
+    # Published topics:
+    # /map_octomap (octomap_msgs/Octomap) - RViz OctoMap 플러그인용
+    # /map_pointcloud (sensor_msgs/PointCloud2) - Point cloud with intensity
+
+# Visualization Modes:
+# - "octomap": OctoMap 메시지만 발행 (RViz OctoMap 플러그인 사용)
+# - "pointcloud": PointCloud2만 발행 (intensity = probability)
+# - "all": OctoMap + PointCloud2 둘 다 발행

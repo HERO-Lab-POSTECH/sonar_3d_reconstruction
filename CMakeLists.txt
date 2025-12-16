@@ -31,6 +31,9 @@ add_library(sonar_3d_reconstruction_cpp MODULE
   sonar_3d_reconstruction/cpp/ray_casting.cpp
   sonar_3d_reconstruction/cpp/probability_updater.cpp
   sonar_3d_reconstruction/cpp/ray_processor.cpp
+  sonar_3d_reconstruction/cpp/tile.cpp
+  sonar_3d_reconstruction/cpp/tile_manager.cpp
+  sonar_3d_reconstruction/cpp/outofcore_tile_mapper.cpp
 )
 
 target_include_directories(sonar_3d_reconstruction_cpp PRIVATE
@@ -82,12 +85,14 @@ ament_environment_hooks(
 # Install Python executable scripts (install(PROGRAMS) automatically sets executable permissions)
 install(PROGRAMS
   scripts/3d_mapper_node.py
+  scripts/map_visualizer_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
 # Install Python modules (non-executable Python files)
 install(FILES
   scripts/3d_mapper.py
+  scripts/config.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

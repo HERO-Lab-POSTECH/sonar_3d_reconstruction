@@ -11,11 +11,10 @@
 sonar_3d_mapper:
   ros__parameters:
     # Log-odds bounds (Saturation limits - OctoMap style)
-    # Ratio: 3.5:-3.0 = 1.17:1 (occupied dominant, prevents erosion)
-    L_occ: 3.5          # Max occupied log-odds increment
-    L_free: -3.0        # Free space log-odds decrement
+    L_occ: 2.0          # Max occupied log-odds increment
+    L_free: -4.0        # Free space log-odds decrement
     L_min: -10.0        # Lower bound (P ~ 0.00005)
-    L_max: 10.0         # Upper bound (P ~ 0.99995)
+    L_max: 8.0         # Upper bound (P ~ 0.99995)
 
     # Intensity-to-weight sigmoid transformation
     sharpness: 0.1      # Sigmoid steepness (stonefish recommended)
