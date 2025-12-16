@@ -132,8 +132,8 @@ class WorldInitBroadcaster(Node):
             f'pitch={np.degrees(pitch):.2f}° (mean_acc: {mean_acc})'
         )
 
-        # Convert to quaternion (only roll and pitch)
-        q = quaternion_from_euler(roll, pitch, yaw)
+        # Convert to quaternion (negate for correct direction)
+        q = quaternion_from_euler(-roll, -pitch, yaw)
 
         # Publish static TF: world_init → camera_init
         t = TransformStamped()
@@ -146,8 +146,7 @@ class WorldInitBroadcaster(Node):
         t.transform.translation.y = 0.0
         t.transform.translation.z = 0.0
 
-        # Rotation (inverse: from camera_init to world_init coordinate)
-        # We want world_init to be horizontal, so camera_init is tilted relative to it
+        # Rotation: world_init (horizontal) → camera_init (tilted)
         q_inv = quaternion_inverse(q)
         t.transform.rotation.x = q_inv[0]
         t.transform.rotation.y = q_inv[1]

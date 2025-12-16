@@ -4,7 +4,7 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
-        - /PointCloud21
+        - /Visualization1/TF1/Frames1
       Splitter Ratio: 0.5
     Tree Height: 752
   - Class: rviz_common/Selection
@@ -89,16 +89,22 @@ Visualization Manager:
           Length: 0.5
           Name: Axes
           Radius: 0.019999999552965164
-          Reference Frame: <Fixed Frame>
+          Reference Frame: world_init
           Value: true
         - Class: rviz_default_plugins/TF
           Enabled: true
           Frame Timeout: 15
           Frames:
-            All Enabled: true
+            All Enabled: false
+            base_link:
+              Value: false
             body:
               Value: true
             camera_init:
+              Value: false
+            range_link:
+              Value: false
+            world_init:
               Value: true
           Marker Scale: 1
           Name: TF
@@ -106,9 +112,10 @@ Visualization Manager:
           Show Axes: true
           Show Names: true
           Tree:
-            camera_init:
-              body:
-                {}
+            world_init:
+              camera_init:
+                body:
+                  {}
           Update Interval: 0
           Value: true
       Enabled: true
@@ -118,8 +125,8 @@ Visualization Manager:
         - Alpha: 0.30000001192092896
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
-            Max Value: 73.44287109375
-            Min Value: -10.939796447753906
+            Max Value: 71.25212860107422
+            Min Value: -11.605228424072266
             Value: true
           Axis: Z
           Channel Name: intensity
@@ -161,7 +168,7 @@ Visualization Manager:
           Color: 255; 0; 0
           Color Transformer: AxisColor
           Decay Time: 0
-          Enabled: true
+          Enabled: false
           Invert Rainbow: false
           Max Color: 255; 255; 255
           Max Intensity: 0.9999545812606812
@@ -182,7 +189,7 @@ Visualization Manager:
             Value: /sonar_3d_map
           Use Fixed Frame: true
           Use rainbow: true
-          Value: true
+          Value: false
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -195,7 +202,7 @@ Visualization Manager:
           Color: 255; 255; 255
           Color Transformer: FlatColor
           Decay Time: 0
-          Enabled: true
+          Enabled: false
           Invert Rainbow: false
           Max Color: 255; 255; 255
           Max Intensity: 248
@@ -216,7 +223,58 @@ Visualization Manager:
             Value: /sonar_robot_detections
           Use Fixed Frame: true
           Use rainbow: true
+          Value: false
+        - Alpha: 1
+          Autocompute Intensity Bounds: true
+          Autocompute Value Bounds:
+            Max Value: -0.15000000596046448
+            Min Value: -2.3499999046325684
+            Value: true
+          Axis: Z
+          Channel Name: intensity
+          Class: rviz_default_plugins/PointCloud2
+          Color: 255; 255; 255
+          Color Transformer: AxisColor
+          Decay Time: 0
+          Enabled: true
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Max Intensity: 0.9999545812606812
+          Min Color: 0; 0; 0
+          Min Intensity: 0.7123962640762329
+          Name: SonarPointCloud
+          Position Transformer: XYZ
+          Selectable: true
+          Size (Pixels): 3
+          Size (m): 0.10000000149011612
+          Style: Flat Squares
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /map_pointcloud
+          Use Fixed Frame: true
+          Use rainbow: true
           Value: true
+        - Class: octomap_rviz_plugins/OccupancyGrid
+          Enabled: true
+          Max. Height Display: inf
+          Max. Octree Depth: 16
+          Min. Height Display: -inf
+          Name: SonarOctoMap
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /map_octomap
+          Value: true
+          Voxel Alpha: 1
+          Voxel Coloring: Z-Axis
+          Voxel Rendering: Occupied Voxels
       Enabled: true
       Name: 3D map
     - Class: rviz_common/Group
@@ -290,40 +348,6 @@ Visualization Manager:
           Value: true
       Enabled: true
       Name: Trajectory
-    - Alpha: 1
-      Autocompute Intensity Bounds: true
-      Autocompute Value Bounds:
-        Max Value: -0.15000000596046448
-        Min Value: -2.3499999046325684
-        Value: true
-      Axis: Z
-      Channel Name: intensity
-      Class: rviz_default_plugins/PointCloud2
-      Color: 255; 255; 255
-      Color Transformer: AxisColor
-      Decay Time: 0
-      Enabled: true
-      Invert Rainbow: false
-      Max Color: 255; 255; 255
-      Max Intensity: 0.9999545812606812
-      Min Color: 0; 0; 0
-      Min Intensity: 0.7123962640762329
-      Name: PointCloud2
-      Position Transformer: XYZ
-      Selectable: true
-      Size (Pixels): 3
-      Size (m): 0.10000000149011612
-      Style: Flat Squares
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /map_pointcloud
-      Use Fixed Frame: true
-      Use rainbow: true
-      Value: true
   Enabled: true
   Global Options:
     Background Color: 0; 0; 0
@@ -370,7 +394,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 10.549112319946289
+      Distance: 20.822078704833984
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1

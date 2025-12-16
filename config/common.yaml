@@ -84,6 +84,6 @@ sonar_3d_mapper:
     bag_playback_rate: 1.0
 
     #===== Bag Recording =====
-    record_bag: false
+    record_bag: true
     record_base_path: "/workspace/data/experiments"  # Base directory for recordings
     # Output path is auto-generated: {record_base_path}/YYYYMMDD_HHMMSS/
