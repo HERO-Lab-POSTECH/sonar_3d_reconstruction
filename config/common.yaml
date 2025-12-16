@@ -58,7 +58,7 @@ sonar_3d_mapper:
     #===== ROS2 Interface =====
     sonar_frame_id: "sonar_link"
     base_frame_id: "body"
-    map_frame_id: "world_init"
+    map_frame_id: "camera_init"  # RViz에서 world_init을 fixed frame으로 설정
     publish_tf: false
 
     sonar_topic: "/sensor/sonar/oculus/m3000d/image"

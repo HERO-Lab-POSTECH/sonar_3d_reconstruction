@@ -180,6 +180,21 @@ def generate_launch_description():
             description='Map output path (default: timestamped folder in /workspace/data/map_tiles/)'),
     ])
 
+    # World Init TF Broadcaster (gravity alignment)
+    ld.add_action(Node(
+        package='sonar_3d_reconstruction',
+        executable='world_init_broadcaster_node.py',
+        name='world_init_broadcaster',
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'imu_topic': '/sensor/ins/livox_mid360/imu',
+            'init_samples': 50,
+            'parent_frame': 'world_init',
+            'child_frame': 'camera_init',
+        }],
+        output='screen'
+    ))
+
     # Fast-LIO
     ld.add_action(IncludeLaunchDescription(
         PythonLaunchDescriptionSource(

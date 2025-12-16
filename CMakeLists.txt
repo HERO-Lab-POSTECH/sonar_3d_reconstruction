@@ -86,6 +86,7 @@ ament_environment_hooks(
 install(PROGRAMS
   scripts/3d_mapper_node.py
   scripts/map_visualizer_node.py
+  scripts/world_init_broadcaster_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
