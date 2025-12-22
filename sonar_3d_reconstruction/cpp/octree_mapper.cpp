@@ -270,19 +270,23 @@ void OctreeMapper::set_occupancy_thresholds(double min_thresh, double max_thresh
 
 bool OctreeMapper::save_to_file(const std::string& filename) const
 {
-    // Suppress OctoMap stdout
+    // Suppress OctoMap stdout/stderr
     std::streambuf* old_cout = std::cout.rdbuf(nullptr);
+    std::streambuf* old_cerr = std::cerr.rdbuf(nullptr);
     bool result = octree_->writeBinary(filename);
     std::cout.rdbuf(old_cout);
+    std::cerr.rdbuf(old_cerr);
     return result;
 }
 
 bool OctreeMapper::load_from_file(const std::string& filename)
 {
-    // Suppress OctoMap stdout
+    // Suppress OctoMap stdout/stderr
     std::streambuf* old_cout = std::cout.rdbuf(nullptr);
+    std::streambuf* old_cerr = std::cerr.rdbuf(nullptr);
     bool success = octree_->readBinary(filename);
     std::cout.rdbuf(old_cout);
+    std::cerr.rdbuf(old_cerr);
     if (success) {
         invalidate_cache();
     }

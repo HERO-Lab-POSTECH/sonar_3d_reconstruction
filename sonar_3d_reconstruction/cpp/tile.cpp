@@ -145,11 +145,13 @@ bool Tile::save(const std::string& tile_dir)
     // This optimizes storage and enables proper visualization of large uniform regions
     octree_->prune();
 
-    // Save octree to .bt file (suppress OctoMap stdout)
+    // Save octree to .bt file (suppress OctoMap stdout/stderr)
     std::string octree_path = tile_dir + "/octree.bt";
     std::streambuf* old_cout = std::cout.rdbuf(nullptr);
+    std::streambuf* old_cerr = std::cerr.rdbuf(nullptr);
     bool write_ok = octree_->writeBinary(octree_path);
     std::cout.rdbuf(old_cout);
+    std::cerr.rdbuf(old_cerr);
     if (!write_ok) {
         return false;
     }
@@ -167,12 +169,14 @@ bool Tile::save(const std::string& tile_dir)
 
 bool Tile::load(const std::string& tile_dir)
 {
-    // Load octree from .bt file (suppress OctoMap stdout)
+    // Load octree from .bt file (suppress OctoMap stdout/stderr)
     std::string octree_path = tile_dir + "/octree.bt";
     if (fs::exists(octree_path)) {
         std::streambuf* old_cout = std::cout.rdbuf(nullptr);
+        std::streambuf* old_cerr = std::cerr.rdbuf(nullptr);
         bool read_ok = octree_->readBinary(octree_path);
         std::cout.rdbuf(old_cout);
+        std::cerr.rdbuf(old_cerr);
         if (!read_ok) {
             return false;
         }
