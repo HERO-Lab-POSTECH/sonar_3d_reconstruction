@@ -85,12 +85,10 @@ def generate_timestamped_map_path(context, *args, **kwargs):
                 map_visualizer_config,
                 {
                     'use_sim_time': use_sim_time == 'true',
+                    # Pass common.yaml parameters (namespaced)
                     'outofcore.map_path': map_path,
-                    'map_path': map_path,
-                    # Pass common.yaml parameters explicitly (namespaced)
                     'outofcore.tile_size': vis_common_params.get('outofcore', {}).get('tile_size', 10.0),
                     'octree.voxel_resolution': vis_common_params.get('octree', {}).get('voxel_resolution', 0.1),
-                    'outofcore.cache_size': vis_common_params.get('outofcore', {}).get('cache_size', 16),
                     'mapping.occupied_threshold': vis_common_params.get('mapping', {}).get('occupied_threshold', 0.7),
                     'frames.map': vis_common_params.get('frames', {}).get('map', 'camera_init'),
                 }

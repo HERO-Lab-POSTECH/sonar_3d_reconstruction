@@ -5,7 +5,8 @@
 map_visualizer:
   ros__parameters:
     #===== Visualizer-specific Parameters =====
-    visualization_mode: "octomap"             # "octomap", "pointcloud", or "all"
+    visualization:
+      mode: "octomap"                         # "octomap", "pointcloud", or "all"
     publish_rate: 1.0                         # Hz - topic publishing rate
     auto_refresh: true                        # Auto refresh from disk
     refresh_interval: 5.0                     # seconds - interval to reload tiles from disk
