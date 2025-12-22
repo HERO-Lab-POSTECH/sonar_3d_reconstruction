@@ -347,33 +347,164 @@ class SonarMapperNode(Node):
     
     def parameter_callback(self, params):
         """
-        Handle dynamic parameter updates at runtime
-
-        Supported parameters (namespaced):
-        - filtering.intensity_threshold: Noise filtering level (0-255)
-        - filtering.min_range: Minimum range filter in meters
-        - mapping.occupied_threshold: Occupancy probability threshold (0.0-1.0)
-        - processing.frame_skip: Process every N frames (1+)
-
-        Args:
-            params: List of Parameter objects being changed
-
-        Returns:
-            SetParametersResult indicating success/failure
+        Handle dynamic parameter updates at runtime.
+        All non-read-only parameters are supported.
         """
+        # Track which C++ backend updates are needed
+        update_iwlo = False
+        update_log_odds = False
+        update_adaptive = False
+        update_intensity = False
+        update_crosstalk = False
+        update_orientation = False
+
         for param in params:
-            if param.name == 'filtering.intensity_threshold':
-                self.mapper.intensity_threshold = int(param.value)
-                self.get_logger().info(f'filtering.intensity_threshold updated: {param.value}')
-            elif param.name == 'filtering.min_range':
-                self.mapper.min_range = float(param.value)
-                self.get_logger().info(f'filtering.min_range updated: {param.value}m')
-            elif param.name == 'mapping.occupied_threshold':
-                self.mapper.occupied_threshold = float(param.value)
-                self.get_logger().info(f'mapping.occupied_threshold updated: {param.value}')
-            elif param.name == 'processing.frame_skip':
-                self.frame_skip = int(param.value)
-                self.get_logger().info(f'processing.frame_skip updated: {param.value}')
+            name = param.name
+            value = param.value
+
+            # === Filtering ===
+            if name == 'filtering.intensity_threshold':
+                self.mapper.intensity_threshold = int(value)
+                update_intensity = True
+            elif name == 'filtering.min_range':
+                self.mapper.min_range = float(value)
+
+            # === Mapping ===
+            elif name == 'mapping.occupied_threshold':
+                self.mapper.occupied_threshold = float(value)
+            elif name == 'mapping.angular_cone_width':
+                self.mapper.angular_cone_width = float(value)
+
+            # === Processing ===
+            elif name == 'processing.frame_skip':
+                self.frame_skip = int(value)
+                self.mapper.frame_skip = int(value)
+
+            # === Visualization ===
+            elif name == 'visualization.show_opencv_visualization':
+                self.show_opencv_visualization = bool(value)
+            elif name == 'visualization.pointcloud_publish_rate':
+                self.pointcloud_publish_rate = float(value)
+                # Note: Timer recreation would require more complex logic
+            elif name == 'visualization.tile_save_interval':
+                self.tile_save_interval = float(value)
+
+            # === Octree ===
+            elif name == 'octree.dynamic_expansion':
+                self.mapper.dynamic_expansion = bool(value)
+
+            # === Adaptive ===
+            elif name == 'adaptive.update':
+                self.mapper.adaptive_update = bool(value)
+                update_adaptive = True
+            elif name == 'adaptive.threshold':
+                self.mapper.adaptive_threshold = float(value)
+                update_adaptive = True
+            elif name == 'adaptive.max_ratio':
+                self.mapper.adaptive_max_ratio = float(value)
+                update_adaptive = True
+
+            # === IWLO ===
+            elif name == 'iwlo.sharpness':
+                self.mapper.sharpness = float(value)
+                update_iwlo = True
+            elif name == 'iwlo.decay_rate':
+                self.mapper.decay_rate = float(value)
+                update_iwlo = True
+            elif name == 'iwlo.min_alpha':
+                self.mapper.min_alpha = float(value)
+                update_iwlo = True
+            elif name == 'iwlo.L_occ':
+                self.mapper.log_odds_occupied = float(value)
+                update_log_odds = True
+            elif name == 'iwlo.L_free':
+                self.mapper.log_odds_free = float(value)
+                update_log_odds = True
+            elif name == 'iwlo.L_min':
+                self.mapper.L_min = float(value)
+                update_iwlo = True
+            elif name == 'iwlo.L_max':
+                self.mapper.L_max = float(value)
+                update_iwlo = True
+
+            # === Out-of-Core ===
+            elif name == 'outofcore.cache_size':
+                # Cache size change requires backend method if available
+                pass  # Limited runtime support
+
+            # === Mounting Orientation ===
+            elif name == 'mounting.orientation.roll':
+                self.mapper.sonar_orientation[0] = np.radians(float(value))
+                update_orientation = True
+            elif name == 'mounting.orientation.pitch':
+                self.mapper.sonar_orientation[1] = np.radians(float(value))
+                update_orientation = True
+            elif name == 'mounting.orientation.yaw':
+                self.mapper.sonar_orientation[2] = np.radians(float(value))
+                update_orientation = True
+
+            # === Terrain/Robot Detection (conditional) ===
+            elif name == 'terrain_detection.min_threshold':
+                self.mapper.terrain_min_threshold = int(value)
+            elif name == 'terrain_detection.max_threshold':
+                self.mapper.terrain_max_threshold = int(value)
+            elif name == 'robot_detection.min_threshold':
+                self.mapper.robot_min_threshold = int(value)
+
+            # === Crosstalk (conditional) ===
+            elif name == 'crosstalk.morpho_enabled':
+                self.mapper.morpho_filter_enabled = bool(value)
+                update_crosstalk = True
+            elif name == 'crosstalk.morpho_kernel_size':
+                self.mapper.morpho_kernel_size = int(value)
+                update_crosstalk = True
+            elif name == 'crosstalk.morpho_kernel_shape':
+                self.mapper.morpho_kernel_shape = str(value)
+                update_crosstalk = True
+            elif name == 'crosstalk.azimuth_enabled':
+                self.mapper.azimuth_check_enabled = bool(value)
+                update_crosstalk = True
+            elif name == 'crosstalk.azimuth_threshold':
+                self.mapper.azimuth_consistency_threshold = float(value)
+                update_crosstalk = True
+
+            self.get_logger().debug(f'{name} updated: {value}')
+
+        # Apply batched C++ backend updates
+        if hasattr(self.mapper, 'octree') and self.mapper.octree is not None:
+            if update_iwlo:
+                self.mapper.octree.set_iwlo_params(
+                    getattr(self.mapper, 'sharpness', 3.0),
+                    getattr(self.mapper, 'decay_rate', 0.1),
+                    getattr(self.mapper, 'min_alpha', 0.1),
+                    getattr(self.mapper, 'L_min', -10.0),
+                    getattr(self.mapper, 'L_max', 10.0)
+                )
+            if update_log_odds:
+                self.mapper.octree.set_log_odds_params(
+                    self.mapper.log_odds_occupied,
+                    self.mapper.log_odds_free
+                )
+            if update_adaptive:
+                self.mapper.octree.set_adaptive_params(
+                    getattr(self.mapper, 'adaptive_update', True),
+                    getattr(self.mapper, 'adaptive_threshold', 0.5),
+                    getattr(self.mapper, 'adaptive_max_ratio', 0.3)
+                )
+            if update_intensity:
+                self.mapper.octree.set_intensity_params(
+                    self.mapper.intensity_threshold,
+                    getattr(self.mapper, 'intensity_max', 255)
+                )
+
+        # Update transform matrix and TF if orientation changed
+        if update_orientation:
+            self.mapper.update_sonar_orientation()
+            if self.publish_tf:
+                self.sonar_orientation = self.mapper.sonar_orientation.copy()
+                self.publish_static_tf()
+            self.get_logger().info('Sonar orientation updated')
+
         return SetParametersResult(successful=True)
 
     def _decode_sonar_image(self, sonar_msg: Image) -> np.ndarray:

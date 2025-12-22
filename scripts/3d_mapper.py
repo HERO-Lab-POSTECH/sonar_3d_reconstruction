@@ -284,6 +284,27 @@ class SonarTo3DMapper:
         self.log_odds_occupied = default_config['L_occ']
         self.log_odds_free = default_config['L_free']
 
+        # Store IWLO parameters for dynamic updates
+        self.sharpness = default_config.get('sharpness', 3.0)
+        self.decay_rate = default_config.get('decay_rate', 0.1)
+        self.min_alpha = default_config.get('min_alpha', 0.1)
+        self.L_min = default_config.get('L_min', -10.0)
+        self.L_max = default_config.get('L_max', 10.0)
+        self.intensity_max = default_config.get('intensity_max', 255)
+
+        # Store adaptive parameters for dynamic updates
+        self.adaptive_update = default_config.get('adaptive_update', True)
+        self.adaptive_threshold = default_config.get('adaptive_threshold', 0.5)
+        self.adaptive_max_ratio = default_config.get('adaptive_max_ratio', 0.3)
+
+        # Store crosstalk filter parameters for dynamic updates
+        self.crosstalk_filter_enabled = default_config.get('crosstalk_filter_enabled', False)
+        self.morpho_filter_enabled = default_config.get('morpho_filter_enabled', True)
+        self.morpho_kernel_size = default_config.get('morpho_kernel_size', 5)
+        self.morpho_kernel_shape = default_config.get('morpho_kernel_shape', 'rect')
+        self.azimuth_check_enabled = default_config.get('azimuth_check_enabled', True)
+        self.azimuth_consistency_threshold = default_config.get('azimuth_consistency_threshold', 0.5)
+
         if self.use_outofcore and OUTOFCORE_AVAILABLE:
             # Initialize OutofcoreTileMapper (disk-based)
             map_path = default_config.get('outofcore_map_path', '/workspace/data/map_tiles')
@@ -446,7 +467,17 @@ class SonarTo3DMapper:
         ])
         
         return R
-    
+
+    def update_sonar_orientation(self):
+        """
+        Recompute sonar-to-base transform after orientation change.
+        Call this after modifying self.sonar_orientation.
+        """
+        self.T_sonar_to_base = self.create_transform_matrix(
+            self.sonar_position,
+            self.sonar_orientation
+        )
+
     def create_odometry_transform(self, position: List[float], quaternion: List[float]) -> np.ndarray:
         """
         Create transformation matrix from odometry data
