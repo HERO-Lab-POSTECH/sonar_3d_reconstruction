@@ -17,7 +17,7 @@ import struct
 # ROS2 message imports
 from sensor_msgs.msg import Image, PointCloud2, PointField
 from nav_msgs.msg import Odometry
-from std_msgs.msg import Header, Int32MultiArray
+from std_msgs.msg import Header, Int32MultiArray, Float32
 from geometry_msgs.msg import TransformStamped
 from visualization_msgs.msg import MarkerArray, Marker
 from tf2_ros import StaticTransformBroadcaster
@@ -162,6 +162,7 @@ class SonarMapperNode(Node):
                 ('odometry_topic', '/fast_lio/odometry'),
                 ('pointcloud_topic', '/sonar_3d_map'),
                 ('marker_topic', '/sonar_3d_map_markers'),
+                ('range_topic', '/sensor/sonar/oculus/param/range'),  # Dynamic range from sonar
 
                 # Visualization
                 ('show_opencv_visualization', False),
@@ -194,6 +195,7 @@ class SonarMapperNode(Node):
         odometry_topic = self.get_parameter('odometry_topic').value
         pointcloud_topic = self.get_parameter('pointcloud_topic').value
         marker_topic = self.get_parameter('marker_topic').value
+        range_topic = self.get_parameter('range_topic').value
         
         # Store robot detection settings
         self.enable_robot_detection = config['enable_robot_detection']
@@ -279,7 +281,16 @@ class SonarMapperNode(Node):
             )
         else:
             self.robot_pub = None
-        
+
+        # Subscribe to dynamic range topic from sonar driver
+        self.range_sub = self.create_subscription(
+            Float32,
+            range_topic,
+            self.range_callback,
+            qos_profile
+        )
+        self.get_logger().info(f'Subscribed to range topic: {range_topic}')
+
         # Create timer for periodic publishing
         if not self.use_outofcore:
             # In-memory mode: configurable pointcloud publishing rate
@@ -356,7 +367,20 @@ class SonarMapperNode(Node):
         cv2.imshow("Sonar: Original | Threshold Applied", combined)
         cv2.imshow("Binary Threshold", thresholded)
         cv2.waitKey(1)
-    
+
+    def range_callback(self, msg: Float32):
+        """
+        Update max_range dynamically from sonar driver
+
+        Args:
+            msg: Float32 message containing current sonar range in meters
+        """
+        new_range = msg.data
+        if new_range > 0 and new_range != self.mapper.max_range:
+            old_range = self.mapper.max_range
+            self.mapper.update_max_range(new_range)
+            self.get_logger().info(f'max_range updated: {old_range:.1f}m -> {new_range:.1f}m')
+
     def synchronized_callback(self, sonar_msg: Image, odom_msg: Odometry):
         """
         Process synchronized sonar image and odometry data

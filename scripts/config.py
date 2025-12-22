@@ -42,10 +42,6 @@ class SonarMapperConfig:
     enable_robot_detection: bool = False
     robot_detection: RobotDetectionConfig = field(default_factory=RobotDetectionConfig)
 
-    # Image dimensions
-    image_width: int = 512
-    image_height: int = 500
-
     # Sonar mounting (relative to base_link)
     sonar_position: List[float] = field(default_factory=lambda: [0.0, 0.0, -0.5])
     sonar_orientation: List[float] = field(default_factory=lambda: [0.0, 1.5708, 0.0])
@@ -219,9 +215,6 @@ class SonarMapperConfig:
                 'min_threshold': self.robot_detection.min_threshold,
                 'topic': self.robot_detection.topic
             },
-
-            'image_width': self.image_width,
-            'image_height': self.image_height,
 
             'sonar_position': self.sonar_position,
             'sonar_orientation': self.sonar_orientation,

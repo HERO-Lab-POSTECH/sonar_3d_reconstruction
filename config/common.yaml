@@ -65,6 +65,7 @@ sonar_3d_mapper:
     odometry_topic: "/fast_lio/odometry"
     pointcloud_topic: "/sonar_3d_map"
     marker_topic: "/sonar_3d_map_markers"
+    range_topic: "/sensor/sonar/oculus/param/range"  # Dynamic range from sonar driver
 
     #===== Visualization =====
     show_free_space: false
@@ -84,6 +85,6 @@ sonar_3d_mapper:
     bag_playback_rate: 1.0
 
     #===== Bag Recording =====
-    record_bag: true
+    record_bag: false
     record_base_path: "/workspace/data/experiments"  # Base directory for recordings
     # Output path is auto-generated: {record_base_path}/YYYYMMDD_HHMMSS/

@@ -193,9 +193,6 @@ class SonarTo3DMapper:
                 'topic': '/sonar_robot_detections'
             },
 
-            'image_width': 512,            # bearings
-            'image_height': 500,           # ranges
-
             # Sonar mounting (relative to base_link)
             'sonar_position': [0.0, 0.0, -0.5],  # xyz
             'sonar_orientation': [0.0, 1.5708, 0.0],  # rpy (0, 90deg, 0)
@@ -259,8 +256,9 @@ class SonarTo3DMapper:
         # Processing parameters
         self.frame_skip = default_config['frame_skip']
 
-        self.image_width = default_config['image_width']
-        self.image_height = default_config['image_height']
+        # Image dimensions - dynamically set from first frame
+        self.image_width = None
+        self.image_height = None
         self.voxel_resolution = default_config['voxel_resolution']
         self.occupied_threshold = default_config['occupied_threshold']
         self.dynamic_expansion = default_config['dynamic_expansion']
@@ -372,12 +370,8 @@ class SonarTo3DMapper:
                 "Please build the C++ module: colcon build --packages-select sonar_3d_reconstruction"
             )
         
-        # Pre-compute bearing angles
-        self.bearing_angles = np.linspace(
-            -self.horizontal_fov/2,
-            self.horizontal_fov/2,
-            self.image_width
-        )
+        # Bearing angles - initialized dynamically in process_sonar_image
+        self.bearing_angles = None
         
         # Frame counter
         self.frame_count = 0
@@ -472,7 +466,17 @@ class SonarTo3DMapper:
         T[:3, :3] = self.quaternion_to_matrix(quaternion)
         T[:3, 3] = position
         return T
-    
+
+    def update_max_range(self, new_range: float) -> None:
+        """
+        Update max_range dynamically (e.g., from sonar driver topic)
+
+        Args:
+            new_range: New maximum range in meters
+        """
+        if new_range > 0:
+            self.max_range = new_range
+
     def is_bearing_in_valid_fov(self, bearing_angle: float) -> bool:
         """Check if bearing angle is within valid FOV"""
         half_fov = self.horizontal_fov / 2
@@ -709,18 +713,22 @@ class SonarTo3DMapper:
         if self.crosstalk_filter is not None:
             polar_image = self.crosstalk_filter.filter(polar_image)
         
-        # Get image dimensions
+        # Get image dimensions dynamically from image shape
         range_bins, bearing_bins = polar_image.shape
-        
-        # Update bearing angles if needed
-        if bearing_bins != self.image_width:
+
+        # Update bearing angles if first frame or dimension changed
+        if self.bearing_angles is None or bearing_bins != self.image_width:
             self.bearing_angles = np.linspace(
                 -self.horizontal_fov/2,
                 self.horizontal_fov/2,
                 bearing_bins
             )
             self.image_width = bearing_bins
-        
+
+        # Update image height if first frame or range changed
+        if self.image_height is None or range_bins != self.image_height:
+            self.image_height = range_bins
+
         # Create transformation matrices
         T_base_to_world = self.create_odometry_transform(robot_position, robot_orientation)
         T_sonar_to_world = T_base_to_world @ self.T_sonar_to_base
