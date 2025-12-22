@@ -109,23 +109,6 @@ class SonarMapperNode(Node):
                 # Octree (octree.*)
                 ('octree.dynamic_expansion', True),
 
-                # Adaptive (adaptive.*)
-                ('adaptive.update', True),
-                ('adaptive.threshold', 0.5),
-                ('adaptive.max_ratio', 0.3),
-
-                # IWLO (iwlo.*)
-                ('iwlo.sharpness', 3.0),
-                ('iwlo.decay_rate', 0.1),
-                ('iwlo.min_alpha', 0.1),
-                ('iwlo.L_occ', 3.5),
-                ('iwlo.L_free', -3.0),
-                ('iwlo.L_min', -10.0),
-                ('iwlo.L_max', 10.0),
-
-                # Out-of-Core cache
-                ('outofcore.cache_size', 16),
-
                 # Mounting orientation (dynamic - can change at runtime)
                 ('mounting.orientation.roll', 0.0),
                 ('mounting.orientation.pitch', 90.0),
@@ -145,10 +128,25 @@ class SonarMapperNode(Node):
                 ('octree.voxel_resolution', 0.05, ParameterDescriptor(read_only=True)),
                 ('octree.use_cpp_backend', True, ParameterDescriptor(read_only=True)),
 
+                # Adaptive (adaptive.*)
+                ('adaptive.update', True, ParameterDescriptor(read_only=True)),
+                ('adaptive.threshold', 0.5, ParameterDescriptor(read_only=True)),
+                ('adaptive.max_ratio', 0.3, ParameterDescriptor(read_only=True)),
+
+                # IWLO (iwlo.*)
+                ('iwlo.sharpness', 3.0, ParameterDescriptor(read_only=True)),
+                ('iwlo.decay_rate', 0.1, ParameterDescriptor(read_only=True)),
+                ('iwlo.min_alpha', 0.1, ParameterDescriptor(read_only=True)),
+                ('iwlo.L_occ', 3.5, ParameterDescriptor(read_only=True)),
+                ('iwlo.L_free', -3.0, ParameterDescriptor(read_only=True)),
+                ('iwlo.L_min', -10.0, ParameterDescriptor(read_only=True)),
+                ('iwlo.L_max', 10.0, ParameterDescriptor(read_only=True)),
+
                 # Out-of-Core settings (outofcore.*)
                 ('outofcore.use', False, ParameterDescriptor(read_only=True)),
                 ('outofcore.map_path', '/workspace/data/map_tiles', ParameterDescriptor(read_only=True)),
                 ('outofcore.tile_size', 10.0, ParameterDescriptor(read_only=True)),
+                ('outofcore.cache_size', 16, ParameterDescriptor(read_only=True)),
 
                 # Frame IDs (frames.*)
                 ('frames.sonar', 'sonar_link', ParameterDescriptor(read_only=True)),
@@ -351,9 +349,6 @@ class SonarMapperNode(Node):
         All non-read-only parameters are supported.
         """
         # Track which C++ backend updates are needed
-        update_iwlo = False
-        update_log_odds = False
-        update_adaptive = False
         update_intensity = False
         update_orientation = False
 
@@ -393,45 +388,6 @@ class SonarMapperNode(Node):
                 self.mapper.dynamic_expansion = bool(value)
                 # Note: currently stored but not actively used in mapping logic
 
-            # === Adaptive ===
-            elif name == 'adaptive.update':
-                self.mapper.adaptive_update = bool(value)
-                update_adaptive = True
-            elif name == 'adaptive.threshold':
-                self.mapper.adaptive_threshold = float(value)
-                update_adaptive = True
-            elif name == 'adaptive.max_ratio':
-                self.mapper.adaptive_max_ratio = float(value)
-                update_adaptive = True
-
-            # === IWLO ===
-            elif name == 'iwlo.sharpness':
-                self.mapper.sharpness = float(value)
-                update_iwlo = True
-            elif name == 'iwlo.decay_rate':
-                self.mapper.decay_rate = float(value)
-                update_iwlo = True
-            elif name == 'iwlo.min_alpha':
-                self.mapper.min_alpha = float(value)
-                update_iwlo = True
-            elif name == 'iwlo.L_occ':
-                self.mapper.log_odds_occupied = float(value)
-                update_log_odds = True
-            elif name == 'iwlo.L_free':
-                self.mapper.log_odds_free = float(value)
-                update_log_odds = True
-            elif name == 'iwlo.L_min':
-                self.mapper.L_min = float(value)
-                update_iwlo = True
-            elif name == 'iwlo.L_max':
-                self.mapper.L_max = float(value)
-                update_iwlo = True
-
-            # === Out-of-Core ===
-            elif name == 'outofcore.cache_size':
-                # Cache size change requires backend method if available
-                pass  # Limited runtime support
-
             # === Mounting Orientation ===
             elif name == 'mounting.orientation.roll':
                 self.mapper.sonar_orientation[0] = np.radians(float(value))
@@ -470,32 +426,12 @@ class SonarMapperNode(Node):
 
             self.get_logger().debug(f'{name} updated: {value}')
 
-        # Apply batched C++ backend updates
-        if hasattr(self.mapper, 'octree') and self.mapper.octree is not None:
-            if update_iwlo:
-                self.mapper.octree.set_iwlo_params(
-                    getattr(self.mapper, 'sharpness', 3.0),
-                    getattr(self.mapper, 'decay_rate', 0.1),
-                    getattr(self.mapper, 'min_alpha', 0.1),
-                    getattr(self.mapper, 'L_min', -10.0),
-                    getattr(self.mapper, 'L_max', 10.0)
-                )
-            if update_log_odds:
-                self.mapper.octree.set_log_odds_params(
-                    self.mapper.log_odds_occupied,
-                    self.mapper.log_odds_free
-                )
-            if update_adaptive:
-                self.mapper.octree.set_adaptive_params(
-                    getattr(self.mapper, 'adaptive_update', True),
-                    getattr(self.mapper, 'adaptive_threshold', 0.5),
-                    getattr(self.mapper, 'adaptive_max_ratio', 0.3)
-                )
-            if update_intensity:
-                self.mapper.octree.set_intensity_params(
-                    self.mapper.intensity_threshold,
-                    getattr(self.mapper, 'intensity_max', 255)
-                )
+        # Apply C++ backend updates
+        if update_intensity and hasattr(self.mapper, 'octree') and self.mapper.octree is not None:
+            self.mapper.octree.set_intensity_params(
+                self.mapper.intensity_threshold,
+                getattr(self.mapper, 'intensity_max', 255)
+            )
 
         # Update transform matrix and TF if orientation changed
         if update_orientation:
