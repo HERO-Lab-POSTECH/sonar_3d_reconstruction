@@ -1,21 +1,14 @@
 # Map Visualizer Node Parameters
-# NOTE: map_path, resolution, tile_size, frame_id, occupied_threshold are
-#       automatically loaded from common.yaml.
+# NOTE: Common parameters (map_path, resolution, tile_size, occupied_threshold, frames.map)
+#       are passed from common.yaml via launch file.
 
 map_visualizer:
   ros__parameters:
-    #===== Visualizer-specific Parameters =====
+    # === Visualizer-specific parameters ===
+    publish_rate: 1.0           # Hz - topic publishing frequency
+    auto_refresh: true          # Periodically reload tiles from disk
+    refresh_interval: 5.0       # seconds - reload interval
+
     visualization:
-      mode: "octomap"                         # "octomap", "pointcloud", or "all"
-    publish_rate: 1.0                         # Hz - topic publishing rate
-    auto_refresh: true                        # Auto refresh from disk
-    refresh_interval: 5.0                     # seconds - interval to reload tiles from disk
-
-    # Published topics:
-    # /map_octomap (octomap_msgs/Octomap) - For RViz OctoMap plugin
-    # /map_pointcloud (sensor_msgs/PointCloud2) - Point cloud with intensity
-
-# Visualization Modes:
-# - "octomap": Publish OctoMap message only (use RViz OctoMap plugin)
-# - "pointcloud": Publish PointCloud2 only (intensity = probability)
-# - "all": Publish both OctoMap + PointCloud2
+      mode: "pointcloud"        # "octomap", "pointcloud", or "all"
+                                # NOTE: occupied_threshold only works in pointcloud mode!

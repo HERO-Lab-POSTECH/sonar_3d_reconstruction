@@ -57,30 +57,24 @@ class MapVisualizerNode(Node):
     def __init__(self):
         super().__init__('map_visualizer')
 
-        # Parameter descriptors
+        # Read-only descriptor
         read_only = ParameterDescriptor(read_only=True)
-        vis_mode_desc = ParameterDescriptor(
-            description='Visualization output mode',
-            additional_constraints="Allowed: 'octomap', 'pointcloud', 'all'"
-        )
 
-        # Declare parameters (from common.yaml via launch)
-        self.declare_parameters(
-            namespace='',
-            parameters=[
-                # === Read-only parameters (from common.yaml) ===
-                ('outofcore.map_path', '/workspace/data/map_tiles', read_only),
-                ('octree.voxel_resolution', 0.1, read_only),
-                ('outofcore.tile_size', 10.0, read_only),
-                ('frames.map', 'camera_init', read_only),
-                ('publish_rate', 1.0, read_only),
-                ('auto_refresh', True, read_only),
-                ('refresh_interval', 10.0, read_only),
-                # === Dynamic parameters ===
-                ('mapping.occupied_threshold', 0.7),
-                ('visualization.mode', 'octomap', vis_mode_desc),
-            ]
-        )
+        # Declare parameters individually (avoids type inference issues)
+        # String parameters
+        self.declare_parameter('outofcore.map_path', '/workspace/data/map_tiles', read_only)
+        self.declare_parameter('frames.map', 'camera_init', read_only)
+        self.declare_parameter('visualization.mode', 'octomap')
+
+        # Float parameters
+        self.declare_parameter('octree.voxel_resolution', 0.1, read_only)
+        self.declare_parameter('outofcore.tile_size', 10.0, read_only)
+        self.declare_parameter('publish_rate', 1.0, read_only)
+        self.declare_parameter('refresh_interval', 10.0, read_only)
+        self.declare_parameter('mapping.occupied_threshold', 0.7)
+
+        # Bool parameters
+        self.declare_parameter('auto_refresh', True, read_only)
 
         # Get parameters
         self.map_path = self.get_parameter('outofcore.map_path').value
