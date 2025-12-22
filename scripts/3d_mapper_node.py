@@ -178,7 +178,6 @@ class SonarMapperNode(Node):
                     ('robot_detection.topic', '/sonar_robot_detections', ParameterDescriptor(read_only=True)),
                 ]
             )
-            self.get_logger().info('Robot detection enabled')
 
         # === Step 3: Conditional parameters (crosstalk) ===
         if self.enable_crosstalk:
@@ -192,7 +191,6 @@ class SonarMapperNode(Node):
                     ('crosstalk.azimuth_threshold', 0.5),
                 ]
             )
-            self.get_logger().info('Crosstalk filter enabled')
         
         # Load configuration from ROS2 parameters using dataclass
         config_dataclass = SonarMapperConfig.from_ros_params(self)
@@ -218,8 +216,7 @@ class SonarMapperNode(Node):
             range_topic = sonar_topic.rsplit('/image', 1)[0] + '/param/range'
         else:
             range_topic = sonar_topic + '/param/range'
-        self.get_logger().info(f'Auto-generated range_topic: {range_topic}')
-        
+
         # Store robot detection settings (topic only available when enabled)
         # Note: self.enable_robot_detection already set at Step 1
         self.robot_detection_topic = config['robot_detection']['topic'] if self.enable_robot_detection else None
@@ -315,7 +312,6 @@ class SonarMapperNode(Node):
             self.range_callback,
             qos_profile
         )
-        self.get_logger().info(f'Subscribed to range topic: {range_topic}')
 
         # Create timer for periodic publishing
         if not self.use_outofcore:
@@ -337,10 +333,16 @@ class SonarMapperNode(Node):
         
         # Initialization summary (single line)
         mode_str = "out-of-core" if self.use_outofcore else "in-memory"
+        features = []
+        if self.enable_robot_detection:
+            features.append("robot-det")
+        if self.enable_crosstalk:
+            features.append("crosstalk")
+        features_str = f" [{'+'.join(features)}]" if features else ""
         self.get_logger().info(
-            f'Mapper initialized: {config["voxel_resolution"]}m res, '
+            f'Mapper: {config["voxel_resolution"]}m, '
             f'{config["horizontal_fov"]}°x{config["vertical_aperture"]}° FOV, '
-            f'{mode_str} mode'
+            f'{mode_str}{features_str}'
         )
     
     def parameter_callback(self, params):

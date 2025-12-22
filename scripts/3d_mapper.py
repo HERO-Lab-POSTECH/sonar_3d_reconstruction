@@ -231,12 +231,7 @@ class SonarTo3DMapper:
         
         # Update with provided config
         if config:
-            # DEBUG: Print incoming config
-            import sys
-            print(f"[3D_MAPPER DEBUG] Incoming config keys: {list(config.keys())}", file=sys.stderr, flush=True)
-            print(f"[3D_MAPPER DEBUG] config['outofcore_tile_size'] = {config.get('outofcore_tile_size', 'NOT FOUND')}", file=sys.stderr, flush=True)
             default_config.update(config)
-            print(f"[3D_MAPPER DEBUG] After update: default_config['outofcore_tile_size'] = {default_config.get('outofcore_tile_size')}", file=sys.stderr, flush=True)
 
         # Store parameters
         self.horizontal_fov = np.radians(default_config['horizontal_fov'])
@@ -310,14 +305,6 @@ class SonarTo3DMapper:
             map_path = default_config.get('outofcore_map_path', '/workspace/data/map_tiles')
             tile_size = default_config.get('outofcore_tile_size', 10.0)
             cache_size = default_config.get('outofcore_cache_size', 16)
-
-            # DEBUG: Print values before C++ call
-            import sys
-            print(f"[3D_MAPPER] Creating OutofcoreTileMapper:", file=sys.stderr, flush=True)
-            print(f"  map_path={map_path}", file=sys.stderr, flush=True)
-            print(f"  resolution={self.voxel_resolution}", file=sys.stderr, flush=True)
-            print(f"  tile_size={tile_size} (type={type(tile_size).__name__})", file=sys.stderr, flush=True)
-            print(f"  cache_size={cache_size}", file=sys.stderr, flush=True)
 
             self.octree = OutofcoreTileMapper(
                 map_path,

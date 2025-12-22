@@ -48,13 +48,6 @@ OutofcoreTileMapper::OutofcoreTileMapper(const std::string& map_path,
     })
     , occupied_threshold_(0.7)  // Default from config
 {
-    // DEBUG: Print received values
-    std::cerr << "[OutofcoreTileMapper C++] Constructor called with:" << std::endl;
-    std::cerr << "  map_path=" << map_path << std::endl;
-    std::cerr << "  resolution=" << resolution << std::endl;
-    std::cerr << "  tile_size=" << tile_size << std::endl;
-    std::cerr << "  cache_size=" << cache_size << std::endl;
-
     // Initialize tile manager
     if (!tile_manager_.initialize()) {
         std::cerr << "[OutofcoreTileMapper] Warning: Failed to initialize tile manager" << std::endl;

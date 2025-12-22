@@ -127,11 +127,6 @@ class WorldInitBroadcaster(Node):
         roll, pitch, _ = euler_from_rotation_matrix(R)
         yaw = 0.0  # Force yaw to 0
 
-        self.get_logger().info(
-            f'Gravity alignment: roll={np.degrees(roll):.2f}°, '
-            f'pitch={np.degrees(pitch):.2f}° (mean_acc: {mean_acc})'
-        )
-
         # Convert to quaternion (negate for correct direction)
         q = quaternion_from_euler(-roll, -pitch, yaw)
 
@@ -157,7 +152,7 @@ class WorldInitBroadcaster(Node):
 
         self.initialized = True
         self.get_logger().info(
-            f'Published static TF: {self.parent_frame} → {self.child_frame}'
+            f'TF: {self.parent_frame}→{self.child_frame} (R={np.degrees(roll):.1f}°, P={np.degrees(pitch):.1f}°)'
         )
 
         # Unsubscribe from IMU
