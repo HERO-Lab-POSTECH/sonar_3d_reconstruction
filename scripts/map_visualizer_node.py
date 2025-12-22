@@ -22,6 +22,7 @@ import time
 # ROS2 message imports
 from sensor_msgs.msg import PointCloud2, PointField
 from std_msgs.msg import Header, Int32MultiArray
+from rcl_interfaces.msg import SetParametersResult, ParameterDescriptor
 
 # OctoMap message import
 try:
@@ -60,22 +61,24 @@ class MapVisualizerNode(Node):
         self.declare_parameters(
             namespace='',
             parameters=[
+                # === Read-only parameters ===
                 # common.yaml namespaced parameter names (used first)
-                ('outofcore.map_path', ''),
-                ('octree.voxel_resolution', 0.0),
-                ('outofcore.tile_size', 0.0),
-                ('frames.map', ''),
-                ('mapping.occupied_threshold', 0.0),
+                ('outofcore.map_path', '', ParameterDescriptor(read_only=True)),
+                ('octree.voxel_resolution', 0.0, ParameterDescriptor(read_only=True)),
+                ('outofcore.tile_size', 0.0, ParameterDescriptor(read_only=True)),
+                ('frames.map', '', ParameterDescriptor(read_only=True)),
                 # Visualizer-specific parameters (fallback)
-                ('map_path', '/workspace/data/map_tiles'),
-                ('resolution', 0.1),
-                ('tile_size', 10.0),
-                ('frame_id', 'camera_init'),
+                ('map_path', '/workspace/data/map_tiles', ParameterDescriptor(read_only=True)),
+                ('resolution', 0.1, ParameterDescriptor(read_only=True)),
+                ('tile_size', 10.0, ParameterDescriptor(read_only=True)),
+                ('frame_id', 'camera_init', ParameterDescriptor(read_only=True)),
+                ('publish_rate', 1.0, ParameterDescriptor(read_only=True)),
+                ('auto_refresh', True, ParameterDescriptor(read_only=True)),
+                ('refresh_interval', 10.0, ParameterDescriptor(read_only=True)),
+                # === Dynamic parameters ===
+                ('mapping.occupied_threshold', 0.0),
                 ('occupied_threshold', 0.7),
-                ('publish_rate', 1.0),
                 ('visualization_mode', 'octomap'),  # 'octomap', 'pointcloud', or 'all'
-                ('auto_refresh', True),
-                ('refresh_interval', 10.0),
             ]
         )
 
@@ -96,6 +99,9 @@ class MapVisualizerNode(Node):
         self.auto_refresh = self.get_parameter('auto_refresh').value
         self.refresh_interval = self.get_parameter('refresh_interval').value
         self.last_refresh_time = 0.0
+
+        # Register parameter callback for dynamic updates
+        self.add_on_set_parameters_callback(self.parameter_callback)
 
         # Fallback to pointcloud if octomap_msgs not available
         if self.visualization_mode == 'octomap' and not OCTOMAP_MSGS_AVAILABLE:
@@ -154,6 +160,22 @@ class MapVisualizerNode(Node):
         self.get_logger().info(
             f'Visualizer: {self.visualization_mode} mode, {self.publish_rate}Hz'
         )
+
+    def parameter_callback(self, params):
+        """Handle dynamic parameter updates"""
+        for param in params:
+            if param.name in ('mapping.occupied_threshold', 'occupied_threshold'):
+                self.occupied_threshold = float(param.value)
+                self.get_logger().info(f'occupied_threshold updated: {param.value}')
+            elif param.name == 'visualization_mode':
+                new_mode = str(param.value)
+                if new_mode in ('octomap', 'pointcloud', 'all'):
+                    if new_mode == 'octomap' and not OCTOMAP_MSGS_AVAILABLE:
+                        self.get_logger().warn('octomap_msgs not available')
+                    else:
+                        self.visualization_mode = new_mode
+                        self.get_logger().info(f'visualization_mode updated: {new_mode}')
+        return SetParametersResult(successful=True)
 
     def tile_update_callback(self, msg: Int32MultiArray):
         """Receive updated tile indices from mapper node"""
