@@ -2,9 +2,37 @@
 #include <iostream>
 #include <algorithm>
 #include <sstream>
+#include <cstdio>
+#include <unistd.h>
 
 namespace sonar_3d_reconstruction
 {
+
+// RAII class to suppress stdout/stderr at file descriptor level
+class SuppressOutput {
+public:
+    SuppressOutput() {
+        std::cout.flush();
+        std::cerr.flush();
+        fflush(stdout);
+        fflush(stderr);
+        stdout_fd_ = dup(fileno(stdout));
+        stderr_fd_ = dup(fileno(stderr));
+        freopen("/dev/null", "w", stdout);
+        freopen("/dev/null", "w", stderr);
+    }
+    ~SuppressOutput() {
+        fflush(stdout);
+        fflush(stderr);
+        dup2(stdout_fd_, fileno(stdout));
+        dup2(stderr_fd_, fileno(stderr));
+        close(stdout_fd_);
+        close(stderr_fd_);
+    }
+private:
+    int stdout_fd_;
+    int stderr_fd_;
+};
 
 OutofcoreTileMapper::OutofcoreTileMapper(const std::string& map_path,
                                          double resolution,
@@ -414,36 +442,24 @@ std::unique_ptr<octomap::OcTree> OutofcoreTileMapper::get_full_merged_octree()
 bool OutofcoreTileMapper::save_merged_octree(const std::string& filepath)
 {
     auto merged = get_full_merged_octree();
-    // Suppress OctoMap stdout/stderr
-    std::streambuf* old_cout = std::cout.rdbuf(nullptr);
-    std::streambuf* old_cerr = std::cerr.rdbuf(nullptr);
-    bool result = merged->writeBinary(filepath);
-    std::cout.rdbuf(old_cout);
-    std::cerr.rdbuf(old_cerr);
-    return result;
+    SuppressOutput suppress;
+    return merged->writeBinary(filepath);
 }
 
 std::pair<std::vector<int8_t>, std::string> OutofcoreTileMapper::get_octree_binary()
 {
     // Suppress ALL OctoMap stdout/stderr (including tile loading and writing)
-    std::streambuf* old_cout = std::cout.rdbuf(nullptr);
-    std::streambuf* old_cerr = std::cerr.rdbuf(nullptr);
+    SuppressOutput suppress;
 
     // Use get_full_merged_octree to include ALL tiles (not just cached)
     auto merged = get_full_merged_octree();
     if (!merged || merged->size() == 0) {
-        std::cout.rdbuf(old_cout);
-        std::cerr.rdbuf(old_cerr);
         return {{}, ""};
     }
 
     // Serialize to stringstream
     std::stringstream ss;
     merged->writeBinaryData(ss);
-
-    // Restore stdout/stderr
-    std::cout.rdbuf(old_cout);
-    std::cerr.rdbuf(old_cerr);
 
     // Convert to vector<int8_t>
     std::string str = ss.str();

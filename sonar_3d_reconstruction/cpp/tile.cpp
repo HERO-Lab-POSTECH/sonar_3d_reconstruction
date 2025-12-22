@@ -4,11 +4,44 @@
 #include <iostream>
 #include <filesystem>
 #include <algorithm>
+#include <cstdio>
+#include <unistd.h>
 
 namespace fs = std::filesystem;
 
 namespace sonar_3d_reconstruction
 {
+
+// RAII class to suppress stdout/stderr at file descriptor level
+class SuppressOutput {
+public:
+    SuppressOutput() {
+        // Flush before redirecting
+        std::cout.flush();
+        std::cerr.flush();
+        fflush(stdout);
+        fflush(stderr);
+        // Save original file descriptors
+        stdout_fd_ = dup(fileno(stdout));
+        stderr_fd_ = dup(fileno(stderr));
+        // Redirect to /dev/null
+        freopen("/dev/null", "w", stdout);
+        freopen("/dev/null", "w", stderr);
+    }
+    ~SuppressOutput() {
+        // Flush before restoring
+        fflush(stdout);
+        fflush(stderr);
+        // Restore original file descriptors
+        dup2(stdout_fd_, fileno(stdout));
+        dup2(stderr_fd_, fileno(stderr));
+        close(stdout_fd_);
+        close(stderr_fd_);
+    }
+private:
+    int stdout_fd_;
+    int stderr_fd_;
+};
 
 Tile::Tile(const TileIndex& index, double resolution, double tile_size)
     : index_(index)
@@ -145,13 +178,13 @@ bool Tile::save(const std::string& tile_dir)
     // This optimizes storage and enables proper visualization of large uniform regions
     octree_->prune();
 
-    // Save octree to .bt file (suppress OctoMap stdout/stderr)
+    // Save octree to .bt file (suppress OctoMap stdout/stderr at fd level)
     std::string octree_path = tile_dir + "/octree.bt";
-    std::streambuf* old_cout = std::cout.rdbuf(nullptr);
-    std::streambuf* old_cerr = std::cerr.rdbuf(nullptr);
-    bool write_ok = octree_->writeBinary(octree_path);
-    std::cout.rdbuf(old_cout);
-    std::cerr.rdbuf(old_cerr);
+    bool write_ok;
+    {
+        SuppressOutput suppress;
+        write_ok = octree_->writeBinary(octree_path);
+    }
     if (!write_ok) {
         return false;
     }
@@ -169,14 +202,14 @@ bool Tile::save(const std::string& tile_dir)
 
 bool Tile::load(const std::string& tile_dir)
 {
-    // Load octree from .bt file (suppress OctoMap stdout/stderr)
+    // Load octree from .bt file (suppress OctoMap stdout/stderr at fd level)
     std::string octree_path = tile_dir + "/octree.bt";
     if (fs::exists(octree_path)) {
-        std::streambuf* old_cout = std::cout.rdbuf(nullptr);
-        std::streambuf* old_cerr = std::cerr.rdbuf(nullptr);
-        bool read_ok = octree_->readBinary(octree_path);
-        std::cout.rdbuf(old_cout);
-        std::cerr.rdbuf(old_cerr);
+        bool read_ok;
+        {
+            SuppressOutput suppress;
+            read_ok = octree_->readBinary(octree_path);
+        }
         if (!read_ok) {
             return false;
         }
