@@ -355,7 +355,6 @@ class SonarMapperNode(Node):
         update_log_odds = False
         update_adaptive = False
         update_intensity = False
-        update_crosstalk = False
         update_orientation = False
 
         for param in params:
@@ -392,6 +391,7 @@ class SonarMapperNode(Node):
             # === Octree ===
             elif name == 'octree.dynamic_expansion':
                 self.mapper.dynamic_expansion = bool(value)
+                # Note: currently stored but not actively used in mapping logic
 
             # === Adaptive ===
             elif name == 'adaptive.update':
@@ -451,22 +451,22 @@ class SonarMapperNode(Node):
             elif name == 'robot_detection.min_threshold':
                 self.mapper.robot_min_threshold = int(value)
 
-            # === Crosstalk (conditional) ===
+            # === Crosstalk (conditional) - update actual filter object ===
             elif name == 'crosstalk.morpho_enabled':
-                self.mapper.morpho_filter_enabled = bool(value)
-                update_crosstalk = True
+                if self.mapper.crosstalk_filter is not None:
+                    self.mapper.crosstalk_filter.morpho_enabled = bool(value)
             elif name == 'crosstalk.morpho_kernel_size':
-                self.mapper.morpho_kernel_size = int(value)
-                update_crosstalk = True
+                if self.mapper.crosstalk_filter is not None:
+                    self.mapper.crosstalk_filter.kernel_size = int(value)
             elif name == 'crosstalk.morpho_kernel_shape':
-                self.mapper.morpho_kernel_shape = str(value)
-                update_crosstalk = True
+                if self.mapper.crosstalk_filter is not None:
+                    self.mapper.crosstalk_filter.kernel_shape = str(value)
             elif name == 'crosstalk.azimuth_enabled':
-                self.mapper.azimuth_check_enabled = bool(value)
-                update_crosstalk = True
+                if self.mapper.crosstalk_filter is not None:
+                    self.mapper.crosstalk_filter.azimuth_check_enabled = bool(value)
             elif name == 'crosstalk.azimuth_threshold':
-                self.mapper.azimuth_consistency_threshold = float(value)
-                update_crosstalk = True
+                if self.mapper.crosstalk_filter is not None:
+                    self.mapper.crosstalk_filter.consistency_threshold = float(value)
 
             self.get_logger().debug(f'{name} updated: {value}')
 
