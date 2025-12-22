@@ -3,78 +3,93 @@
 
 sonar_3d_mapper:
   ros__parameters:
-    #===== Sonar Sensor =====
-    horizontal_fov: 130.0        # degrees
-    vertical_aperture: 20.0      # degrees
-    max_range: 3.5              # meters
-    min_range: 1.0               # meters
-    intensity_threshold: 120     # 0-255
+    #===== Filtering (Dynamic) =====
+    filtering:
+      min_range: 1.0               # meters (max_range is received from /param/range topic)
+      intensity_threshold: 120     # 0-255
 
-    #===== Sonar Mounting (relative to base_link) =====
-    sonar_position:
-      x: 0.0
-      y: 0.0
-      z: -0.1
-    sonar_orientation:
-      roll: 0.0                  # degrees
-      pitch: 90.0                # degrees (90 = pointing down)
-      yaw: 0.0                   # degrees
+    #===== Mapping (Dynamic) =====
+    mapping:
+      occupied_threshold: 0.7      # prob >= this = occupied, prob < this = free
+      angular_cone_width: 0.5      # 0.5 = 0% overlap (strict), 1.0 = 100% overlap (permissive)
 
-    #===== Voxel Map =====
-    voxel_resolution: 0.1      # meters
-    use_cpp_backend: true
+    #===== Processing (Dynamic) =====
+    processing:
+      frame_skip: 5                # process every N frames
 
-    #===== Out-of-Core Storage =====
-    # Enable disk-based tile storage for large maps (장시간 매핑용)
-    # When enabled, map is stored on disk instead of RAM
-    use_outofcore: true                              # true = disk-based, false = RAM-based
-    outofcore_map_path: "/workspace/map_tiles"   # Tile storage directory
-    outofcore_tile_size: 0.4                         # Tile size in meters 
-    outofcore_cache_size: 16                         # Max tiles in memory (128 = most tiles stay cached)
+    #===== Visualization (Dynamic) =====
+    visualization:
+      show_opencv_visualization: true
+      pointcloud_publish_rate: 10.0  # Hz - PointCloud2 publishing rate (in-memory mode)
+      tile_save_interval: 5.0       # seconds - dirty tile save interval (out-of-core mode)
 
-    #===== Probability Update =====
-    # IWLO (Intensity-Weighted Log-Odds) is the only supported method
-    # IWLO combines Bayesian log-odds with intensity-weighted updates
-    # IWLO-specific params are in method_iwlo.yaml, loaded via launch file
+    #===== Octree =====
+    octree:
+      voxel_resolution: 0.1        # meters (read-only)
+      use_cpp_backend: true        # (read-only)
+      dynamic_expansion: true      # (dynamic)
 
-    #===== Probability Threshold =====
-    occupied_threshold: 0.7      # prob >= this = occupied, prob < this = free
+    #===== Sonar Hardware (Read-only) =====
+    sonar:
+      horizontal_fov: 130.0        # degrees
+      vertical_aperture: 20.0      # degrees
 
-    #===== Shadow Region Protection =====
-    # Angular cone width for bearing overlap protection
-    # 0.5 = 0% overlap (strict), 1.0 = 100% overlap (permissive)
-    angular_cone_width: 0.5
+    #===== Mounting =====
+    mounting:
+      position:                    # (read-only)
+        x: 0.0
+        y: 0.0
+        z: -0.1
+      orientation:                 # (dynamic - can change at runtime)
+        roll: 0.0                  # degrees
+        pitch: 90.0                # degrees (90 = pointing down)
+        yaw: 0.0                   # degrees
 
-    #===== Cross-talk Filter =====
-    # 상세 설정은 config/crosstalk_filter.yaml 참조
-    crosstalk_filter_enabled: false
+    #===== Out-of-Core Storage (Read-only) =====
+    outofcore:
+      use: true                              # true = disk-based, false = RAM-based
+      map_path: "/workspace/map_tiles"       # Tile storage directory
+      tile_size: 0.4                         # Tile size in meters
+      cache_size: 16                         # Max tiles in memory
 
-    #===== Processing =====
-    frame_skip: 5                # process every N frames
-    # Note: Free space carving is always enabled for noise reduction
-    # All tiles (including free-only) are saved for complete map representation
-    enable_robot_detection: false
+    #===== Crosstalk Filter =====
+    # When enabled=true, detailed settings are loaded from config/crosstalk_filter.yaml
+    crosstalk:
+      enabled: false
 
-    #===== ROS2 Interface =====
-    sonar_frame_id: "sonar_link"
-    base_frame_id: "body"
-    map_frame_id: "camera_init"  # RViz에서 world_init을 fixed frame으로 설정
-    publish_tf: false
+    #===== Frame IDs (Read-only) =====
+    frames:
+      sonar: "sonar_link"
+      base: "body"
+      map: "camera_init"           # Set world_init as fixed frame in RViz
+      publish_tf: false
 
-    sonar_topic: "/sensor/sonar/oculus/m3000d/image"
-    odometry_topic: "/fast_lio/odometry"
-    pointcloud_topic: "/sonar_3d_map"
-    marker_topic: "/sonar_3d_map_markers"
-    range_topic: "/sensor/sonar/oculus/param/range"  # Dynamic range from sonar driver
+    #===== Topics (Read-only) =====
+    topics:
+      sonar: "/sensor/sonar/oculus/m3000d/image"  # range_topic is auto-generated: {base}/param/range
+      odometry: "/fast_lio/odometry"
+      pointcloud: "/sonar_3d_map"
+      marker: "/sonar_3d_map_markers"
 
-    #===== Visualization =====
-    show_free_space: false
-    show_opencv_visualization: true
-    pointcloud_publish_rate: 10.0  # Hz - PointCloud2 publishing rate (in-memory mode)
-    tile_save_interval: 5.0       # seconds - dirty tile save interval (out-of-core mode)
-    use_sim_time: true
+    #===== Robot Detection =====
+    # When enabled=true, terrain_detection params are also used
+    robot_detection:
+      enabled: false
+      min_threshold: 180
+      topic: "/sonar_robot_detections"
+    terrain_detection:
+      min_threshold: 80
+      max_threshold: 180
+
+    #===== Recording (Read-only) =====
+    recording:
+      bag: false
+      base_path: "/workspace/data/experiments"  # Base directory for recordings
+      prefix: "test"
+      # Output path is auto-generated: {record_base_path}/YYYYMMDD_HHMMSS/
 
     #===== Launch Options =====
+    use_sim_time: true
     launch_fast_lio: true
     launch_rviz: true
     rviz_config: "3d_mapping.rviz"  # rviz config file name (in rviz/ folder)
@@ -83,8 +98,3 @@ sonar_3d_mapper:
     play_bag: true
     bag_file: "/workspace/data/5_hyeongsan_gang/20241205_slam_test/slam_test_v3_raw"
     bag_playback_rate: 1.0
-
-    #===== Bag Recording =====
-    record_bag: false
-    record_base_path: "/workspace/data/experiments"  # Base directory for recordings
-    # Output path is auto-generated: {record_base_path}/YYYYMMDD_HHMMSS/

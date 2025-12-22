@@ -84,7 +84,7 @@ void OutofcoreTileMapper::batch_update_iwlo(const Eigen::MatrixXd& points,
         // Update bounds
         tile_manager_.update_bounds(tile_idx);
     }
-    // 저장은 주기적 타이머에서 처리 (3d_mapper_node.py)
+    // Saving is handled by periodic timer in 3d_mapper_node.py
 }
 
 void OutofcoreTileMapper::set_iwlo_params(double sharpness, double decay_rate, double min_alpha,
@@ -540,7 +540,7 @@ void OutofcoreTileMapper::on_tile_eviction(const TileIndex& idx, std::unique_ptr
     if (tile && tile->is_dirty()) {
         std::string tile_dir = tile_manager_.get_tile_directory(idx);
         if (tile->save(tile_dir)) {
-            // 저장 성공 시 인덱스 기록 (visualizer 알림용)
+            // Record index on successful save (for visualizer notification)
             std::lock_guard<std::mutex> lock(saved_tiles_mutex_);
             recently_saved_tiles_.push_back(idx);
         }
@@ -551,8 +551,8 @@ void OutofcoreTileMapper::save_dirty_tiles_early()
 {
     std::lock_guard<std::mutex> lock(cache_mutex_);
 
-    // 캐시가 아직 차지 않았을 때만 실행
-    // 캐시가 가득 차면 eviction 시에 저장됨
+    // Only execute when cache is not yet full
+    // When cache is full, tiles are saved during eviction
     if (tile_cache_.size() >= cache_size_) {
         return;
     }

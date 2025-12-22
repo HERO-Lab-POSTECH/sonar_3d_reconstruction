@@ -240,7 +240,7 @@ private:
 
     mutable std::mutex cache_mutex_;
     mutable std::mutex saved_tiles_mutex_;
-    std::vector<TileIndex> recently_saved_tiles_;  // Eviction 시 저장된 타일 인덱스
+    std::vector<TileIndex> recently_saved_tiles_;  // Tile indices saved during eviction
 
     /**
      * Get or load a tile (thread-safe)

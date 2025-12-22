@@ -64,8 +64,8 @@ def generate_timestamped_map_path(context, *args, **kwargs):
             crosstalk_config,
             {
                 'use_sim_time': use_sim_time == 'true',
-                'sonar_orientation.pitch': float(sonar_pitch),
-                'outofcore_map_path': map_path,  # Override map path
+                'mounting.orientation.pitch': float(sonar_pitch),
+                'outofcore.map_path': map_path,  # Override map path
             }
         ],
         output='screen'
@@ -73,7 +73,7 @@ def generate_timestamped_map_path(context, *args, **kwargs):
 
     # Map Visualizer node (if enabled)
     if launch_visualizer.lower() == 'true':
-        # Read common params for visualizer
+        # Read common params for visualizer (namespaced structure)
         with open(common_config, 'r') as f:
             vis_common_params = yaml.safe_load(f)['sonar_3d_mapper']['ros__parameters']
 
@@ -85,12 +85,14 @@ def generate_timestamped_map_path(context, *args, **kwargs):
                 map_visualizer_config,
                 {
                     'use_sim_time': use_sim_time == 'true',
-                    'outofcore_map_path': map_path,
+                    'outofcore.map_path': map_path,
                     'map_path': map_path,
-                    # Pass common.yaml parameters explicitly (different namespace)
-                    'outofcore_tile_size': vis_common_params.get('outofcore_tile_size', 10.0),
-                    'voxel_resolution': vis_common_params.get('voxel_resolution', 0.1),
-                    'outofcore_cache_size': vis_common_params.get('outofcore_cache_size', 16),
+                    # Pass common.yaml parameters explicitly (namespaced)
+                    'outofcore.tile_size': vis_common_params.get('outofcore', {}).get('tile_size', 10.0),
+                    'octree.voxel_resolution': vis_common_params.get('octree', {}).get('voxel_resolution', 0.1),
+                    'outofcore.cache_size': vis_common_params.get('outofcore', {}).get('cache_size', 16),
+                    'mapping.occupied_threshold': vis_common_params.get('mapping', {}).get('occupied_threshold', 0.7),
+                    'frames.map': vis_common_params.get('frames', {}).get('map', 'camera_init'),
                 }
             ],
             output='screen'

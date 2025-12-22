@@ -11,13 +11,13 @@ namespace py = pybind11;
 namespace sonar_3d_reconstruction
 {
 
-// 고성능 소나 레이 처리 클래스
+// High-performance sonar ray processing class
 class RayProcessor
 {
 public:
     RayProcessor() = default;
     
-    // 다중 베어링 각도에 대한 3D 좌표 계산 (OpenMP 병렬화)
+    // Calculate 3D coordinates for multiple bearing angles (OpenMP parallelized)
     std::vector<std::vector<double>> process_sonar_rays(
         const std::vector<double>& ranges,
         const std::vector<double>& bearings,
@@ -28,7 +28,7 @@ public:
         std::vector<std::vector<double>> points;
         points.reserve(ranges.size() * bearings.size() * vertical_angles.size());
         
-        // Eigen 회전 행렬 생성
+        // Create Eigen rotation matrix
         Eigen::Matrix3d R = create_rotation_matrix(sensor_rotation[0], 
                                                   sensor_rotation[1], 
                                                   sensor_rotation[2]);
@@ -41,13 +41,13 @@ public:
                     double bearing = bearings[b];
                     double vertical = vertical_angles[v];
                     
-                    // 소나 좌표계에서 3D 좌표 계산
+                    // Calculate 3D coordinates in sonar coordinate system
                     Eigen::Vector3d sonar_point;
                     sonar_point << range * cos(vertical) * cos(bearing),
                                    range * cos(vertical) * sin(bearing),
                                    range * sin(vertical);
                     
-                    // 센서 회전 및 위치 변환
+                    // Apply sensor rotation and position transform
                     Eigen::Vector3d world_point = R * sonar_point;
                     world_point[0] += sensor_origin[0];
                     world_point[1] += sensor_origin[1];
@@ -64,7 +64,7 @@ public:
         return points;
     }
     
-    // DDA 알고리즘을 이용한 레이 트레이싱
+    // Ray tracing using DDA algorithm
     std::vector<std::vector<double>> trace_ray_dda(
         const std::vector<double>& start,
         const std::vector<double>& end,
@@ -75,7 +75,7 @@ public:
         Eigen::Vector3d start_pos(start[0], start[1], start[2]);
         Eigen::Vector3d end_pos(end[0], end[1], end[2]);
         
-        // DDA 알고리즘 구현
+        // DDA algorithm implementation
         Eigen::Vector3d direction = (end_pos - start_pos).normalized();
         double distance = (end_pos - start_pos).norm();
         
@@ -91,7 +91,7 @@ public:
         return voxels;
     }
     
-    // 배치 레이 처리 (여러 레이를 동시에 처리)
+    // Batch ray processing (process multiple rays simultaneously)
     std::vector<std::vector<std::vector<double>>> process_ray_batch(
         const std::vector<std::vector<double>>& starts,
         const std::vector<std::vector<double>>& ends,
@@ -114,7 +114,7 @@ public:
     }
 
 private:
-    // 롤, 피치, 요 각도로부터 회전 행렬 생성
+    // Create rotation matrix from roll, pitch, yaw angles
     Eigen::Matrix3d create_rotation_matrix(double roll, double pitch, double yaw)
     {
         Eigen::Matrix3d Rx, Ry, Rz;
@@ -138,18 +138,18 @@ private:
 }  // namespace sonar_3d_reconstruction
 
 PYBIND11_MODULE(ray_processor, m) {
-    m.doc() = "고성능 소나 레이 처리 모듈";
-    
+    m.doc() = "High-performance sonar ray processing module";
+
     py::class_<sonar_3d_reconstruction::RayProcessor>(m, "RayProcessor")
         .def(py::init<>())
         .def("process_sonar_rays", &sonar_3d_reconstruction::RayProcessor::process_sonar_rays,
-             "소나 레이 처리 (병렬)", 
-             py::arg("ranges"), py::arg("bearings"), py::arg("vertical_angles"), 
+             "Process sonar rays (parallelized)",
+             py::arg("ranges"), py::arg("bearings"), py::arg("vertical_angles"),
              py::arg("sensor_origin"), py::arg("sensor_rotation"))
         .def("trace_ray_dda", &sonar_3d_reconstruction::RayProcessor::trace_ray_dda,
-             "DDA 레이 트레이싱", 
+             "DDA ray tracing",
              py::arg("start"), py::arg("end"), py::arg("voxel_size") = 0.1)
         .def("process_ray_batch", &sonar_3d_reconstruction::RayProcessor::process_ray_batch,
-             "배치 레이 처리", 
+             "Batch ray processing",
              py::arg("starts"), py::arg("ends"), py::arg("voxel_size") = 0.1);
 }

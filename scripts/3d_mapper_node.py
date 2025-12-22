@@ -25,6 +25,9 @@ from tf2_ros import StaticTransformBroadcaster
 # Message filters for time synchronization
 from message_filters import Subscriber, ApproximateTimeSynchronizer
 
+# Parameter callback and descriptor
+from rcl_interfaces.msg import SetParametersResult, ParameterDescriptor
+
 # OpenCV for image processing
 from cv_bridge import CvBridge
 import cv2
@@ -72,134 +75,154 @@ class SonarMapperNode(Node):
     
     def __init__(self):
         super().__init__('sonar_3d_mapper')
-        
+
+        # === Step 1: Declare conditional feature flags first ===
+        self.declare_parameter('robot_detection.enabled', False)
+        self.declare_parameter('crosstalk.enabled', False)
+        self.enable_robot_detection = self.get_parameter('robot_detection.enabled').value
+        self.enable_crosstalk = self.get_parameter('crosstalk.enabled').value
+
         # Declare parameters with default values (lowest priority - priority 4)
         # These defaults will be overridden by YAML, launch file, or command line args
         self.declare_parameters(
             namespace='',
             parameters=[
-                # Sonar parameters
-                ('horizontal_fov', 130.0),
-                ('vertical_aperture', 20.0),
-                ('max_range', 10.0),
-                ('min_range', 0.5),
-                ('intensity_threshold', 35),
-                
-                # Terrain detection (for robot detection mode)
-                ('terrain_detection.min_threshold', 80),
-                ('terrain_detection.max_threshold', 180),
-                
-                # Robot detection mode
-                ('enable_robot_detection', False),
-                ('robot_detection.min_threshold', 180),
-                ('robot_detection.topic', '/sonar_robot_detections'),
-                
-                # Sonar mounting (relative to base_link)
-                ('sonar_position.x', 0.0),
-                ('sonar_position.y', 0.0),
-                ('sonar_position.z', -0.5),
-                ('sonar_orientation.roll', 0.0),  # degrees
-                ('sonar_orientation.pitch', 90.0),  # degrees (90 = pointing down)
-                ('sonar_orientation.yaw', 0.0),  # degrees
-                
-                # Octree parameters
-                ('voxel_resolution', 0.05),
-                ('dynamic_expansion', True),
-                ('z_filter_min', -5.0),
-                ('z_filter_enabled', True),
-                
-                # Adaptive update parameters
-                ('adaptive_update', True),
-                ('adaptive_threshold', 0.5),
-                ('adaptive_max_ratio', 0.3),
+                # === Dynamic Parameters (can be changed at runtime) ===
+                # Filtering (filtering.*)
+                ('filtering.min_range', 0.5),
+                ('filtering.intensity_threshold', 35),
 
-                # Probability threshold (2-class: occupied vs free)
-                ('occupied_threshold', 0.7),  # Probability >= 0.7 = occupied, < 0.7 = free
+                # Mapping (mapping.*)
+                ('mapping.occupied_threshold', 0.7),
+                ('mapping.angular_cone_width', 0.5),
 
-                # Shadow region protection
-                ('angular_cone_width', 0.5),  # 0.5 = 0% overlap, 1.0 = full overlap
+                # Processing (processing.*)
+                ('processing.frame_skip', 1),
 
-                # IWLO (Intensity-Weighted Log-Odds) parameters
-                ('sharpness', 3.0),      # Sigmoid steepness for intensity-to-weight (1.0~5.0)
-                ('decay_rate', 0.1),     # Learning rate decay rate (0.05~0.5)
-                ('min_alpha', 0.1),      # Minimum learning rate for change detection (0.01~0.3)
-                ('L_occ', 3.5),          # Log-odds occupied increment
-                ('L_free', -3.0),        # Log-odds free decrement
-                ('L_min', -10.0),        # Saturation lower bound
-                ('L_max', 10.0),         # Saturation upper bound
+                # Visualization (visualization.*)
+                ('visualization.show_opencv_visualization', False),
+                ('visualization.pointcloud_publish_rate', 10.0),
+                ('visualization.tile_save_interval', 5.0),
 
-                # Backend selection
-                ('use_cpp_backend', True),  # Use high-performance C++ hierarchical octree by default
+                # Octree (octree.*)
+                ('octree.dynamic_expansion', True),
 
-                # Out-of-Core parameters (disk-based storage for large maps)
-                ('use_outofcore', False),   # Enable disk-based tile storage
-                ('outofcore_map_path', '/workspace/data/map_tiles'),  # Tile storage directory
-                ('outofcore_tile_size', 10.0),   # Tile size in meters
-                ('outofcore_cache_size', 16),    # Max tiles in memory
+                # Adaptive (adaptive.*)
+                ('adaptive.update', True),
+                ('adaptive.threshold', 0.5),
+                ('adaptive.max_ratio', 0.3),
 
-                # Cross-talk filter parameters
-                ('crosstalk_filter_enabled', False),
-                ('morpho_filter_enabled', True),
-                ('morpho_kernel_size', 5),
-                ('morpho_kernel_shape', 'rect'),
-                ('azimuth_check_enabled', True),
-                ('azimuth_consistency_threshold', 0.5),
+                # IWLO (iwlo.*)
+                ('iwlo.sharpness', 3.0),
+                ('iwlo.decay_rate', 0.1),
+                ('iwlo.min_alpha', 0.1),
+                ('iwlo.L_occ', 3.5),
+                ('iwlo.L_free', -3.0),
+                ('iwlo.L_min', -10.0),
+                ('iwlo.L_max', 10.0),
 
-                # Processing parameters
-                ('frame_skip', 1),  # Process every N frames
+                # Out-of-Core cache
+                ('outofcore.cache_size', 16),
 
-                # Publishing parameters
-                ('show_free_space', False),
-                
-                # Frame IDs
-                ('sonar_frame_id', 'sonar_link'),
-                ('base_frame_id', 'base_link'),
-                ('map_frame_id', 'map'),
-                ('publish_tf', True),
-                
-                # Topics
-                ('sonar_topic', '/sensor/sonar/oculus/m750d/image'),
-                ('odometry_topic', '/fast_lio/odometry'),
-                ('pointcloud_topic', '/sonar_3d_map'),
-                ('marker_topic', '/sonar_3d_map_markers'),
-                ('range_topic', '/sensor/sonar/oculus/param/range'),  # Dynamic range from sonar
+                # Mounting orientation (dynamic - can change at runtime)
+                ('mounting.orientation.roll', 0.0),
+                ('mounting.orientation.pitch', 90.0),
+                ('mounting.orientation.yaw', 0.0),
 
-                # Visualization
-                ('show_opencv_visualization', False),
-                ('pointcloud_publish_rate', 10.0),  # Hz
-                ('tile_save_interval', 5.0),        # seconds
+                # === Read-only Parameters (cannot change at runtime) ===
+                # Sonar hardware (sonar.*)
+                ('sonar.horizontal_fov', 130.0, ParameterDescriptor(read_only=True)),
+                ('sonar.vertical_aperture', 20.0, ParameterDescriptor(read_only=True)),
 
-                # Bag recording (auto-increment)
-                ('record_bag', False),
-                ('record_base_path', '/workspace/data/experiments'),
-                ('record_prefix', 'test')
+                # Mounting position (read-only)
+                ('mounting.position.x', 0.0, ParameterDescriptor(read_only=True)),
+                ('mounting.position.y', 0.0, ParameterDescriptor(read_only=True)),
+                ('mounting.position.z', -0.5, ParameterDescriptor(read_only=True)),
+
+                # Octree structure (octree.*)
+                ('octree.voxel_resolution', 0.05, ParameterDescriptor(read_only=True)),
+                ('octree.use_cpp_backend', True, ParameterDescriptor(read_only=True)),
+
+                # Out-of-Core settings (outofcore.*)
+                ('outofcore.use', False, ParameterDescriptor(read_only=True)),
+                ('outofcore.map_path', '/workspace/data/map_tiles', ParameterDescriptor(read_only=True)),
+                ('outofcore.tile_size', 10.0, ParameterDescriptor(read_only=True)),
+
+                # Frame IDs (frames.*)
+                ('frames.sonar', 'sonar_link', ParameterDescriptor(read_only=True)),
+                ('frames.base', 'base_link', ParameterDescriptor(read_only=True)),
+                ('frames.map', 'map', ParameterDescriptor(read_only=True)),
+                ('frames.publish_tf', True, ParameterDescriptor(read_only=True)),
+
+                # Topics (topics.*)
+                ('topics.sonar', '/sensor/sonar/oculus/m750d/image', ParameterDescriptor(read_only=True)),
+                ('topics.odometry', '/fast_lio/odometry', ParameterDescriptor(read_only=True)),
+                ('topics.pointcloud', '/sonar_3d_map', ParameterDescriptor(read_only=True)),
+                ('topics.marker', '/sonar_3d_map_markers', ParameterDescriptor(read_only=True)),
+
+                # Recording (recording.*)
+                ('recording.bag', False, ParameterDescriptor(read_only=True)),
+                ('recording.base_path', '/workspace/data/experiments', ParameterDescriptor(read_only=True)),
+                ('recording.prefix', 'test', ParameterDescriptor(read_only=True))
             ]
         )
+
+        # === Step 2: Conditional parameters (robot_detection) ===
+        if self.enable_robot_detection:
+            self.declare_parameters(
+                namespace='',
+                parameters=[
+                    ('terrain_detection.min_threshold', 80),
+                    ('terrain_detection.max_threshold', 180),
+                    ('robot_detection.min_threshold', 180),
+                    ('robot_detection.topic', '/sonar_robot_detections', ParameterDescriptor(read_only=True)),
+                ]
+            )
+            self.get_logger().info('Robot detection enabled')
+
+        # === Step 3: Conditional parameters (crosstalk) ===
+        if self.enable_crosstalk:
+            self.declare_parameters(
+                namespace='',
+                parameters=[
+                    ('crosstalk.morpho_enabled', True),
+                    ('crosstalk.morpho_kernel_size', 5),
+                    ('crosstalk.morpho_kernel_shape', 'rect'),
+                    ('crosstalk.azimuth_enabled', True),
+                    ('crosstalk.azimuth_threshold', 0.5),
+                ]
+            )
+            self.get_logger().info('Crosstalk filter enabled')
         
         # Load configuration from ROS2 parameters using dataclass
         config_dataclass = SonarMapperConfig.from_ros_params(self)
         config = config_dataclass.to_mapper_dict()
         
-        # Get other parameters
-        self.show_free_space = self.get_parameter('show_free_space').value
-        self.sonar_frame_id = self.get_parameter('sonar_frame_id').value
-        self.base_frame_id = self.get_parameter('base_frame_id').value
-        self.map_frame_id = self.get_parameter('map_frame_id').value
-        self.publish_tf = self.get_parameter('publish_tf').value
-        self.show_opencv_visualization = self.get_parameter('show_opencv_visualization').value
-        self.pointcloud_publish_rate = self.get_parameter('pointcloud_publish_rate').value
-        self.tile_save_interval = self.get_parameter('tile_save_interval').value
+        # Get other parameters (with namespaced names)
+        self.sonar_frame_id = self.get_parameter('frames.sonar').value
+        self.base_frame_id = self.get_parameter('frames.base').value
+        self.map_frame_id = self.get_parameter('frames.map').value
+        self.publish_tf = self.get_parameter('frames.publish_tf').value
+        self.show_opencv_visualization = self.get_parameter('visualization.show_opencv_visualization').value
+        self.pointcloud_publish_rate = self.get_parameter('visualization.pointcloud_publish_rate').value
+        self.tile_save_interval = self.get_parameter('visualization.tile_save_interval').value
 
-        # Get topic names
-        sonar_topic = self.get_parameter('sonar_topic').value
-        odometry_topic = self.get_parameter('odometry_topic').value
-        pointcloud_topic = self.get_parameter('pointcloud_topic').value
-        marker_topic = self.get_parameter('marker_topic').value
-        range_topic = self.get_parameter('range_topic').value
+        # Get topic names (with namespaced names)
+        sonar_topic = self.get_parameter('topics.sonar').value
+        odometry_topic = self.get_parameter('topics.odometry').value
+        pointcloud_topic = self.get_parameter('topics.pointcloud').value
+        marker_topic = self.get_parameter('topics.marker').value
+
+        # Auto-generate range_topic from sonar_topic: /sensor/sonar/.../image -> /sensor/sonar/.../param/range
+        if sonar_topic.endswith('/image'):
+            range_topic = sonar_topic.rsplit('/image', 1)[0] + '/param/range'
+        else:
+            range_topic = sonar_topic + '/param/range'
+        self.get_logger().info(f'Auto-generated range_topic: {range_topic}')
         
-        # Store robot detection settings
-        self.enable_robot_detection = config['enable_robot_detection']
-        self.robot_detection_topic = config['robot_detection']['topic']
+        # Store robot detection settings (topic only available when enabled)
+        # Note: self.enable_robot_detection already set at Step 1
+        self.robot_detection_topic = config['robot_detection']['topic'] if self.enable_robot_detection else None
 
         # Store out-of-core mode flag
         self.use_outofcore = config['use_outofcore']
@@ -228,6 +251,9 @@ class SonarMapperNode(Node):
         self.frame_count = 0
         self.frame_skip = config['frame_skip']
         self.last_publish_time = time.time()
+
+        # Register parameter change callback for dynamic updates
+        self.add_on_set_parameters_callback(self.parameter_callback)
         
         # QoS profile for best effort subscription
         qos_profile = QoSProfile(
@@ -297,14 +323,14 @@ class SonarMapperNode(Node):
             publish_interval = 1.0 / self.pointcloud_publish_rate
             self.timer = self.create_timer(publish_interval, self.publish_pointcloud)
         else:
-            # Out-of-core mode: eviction 기반 + 주기적 저장
+            # Out-of-core mode: eviction-based + periodic saving
             self.timer = None
             self.tile_update_pub = self.create_publisher(
                 Int32MultiArray,
                 '/updated_tile_indices',
                 10
             )
-            # 주기적으로 dirty 타일 저장 + visualizer 알림
+            # Periodically save dirty tiles + notify visualizer
             self.flush_timer = self.create_timer(self.tile_save_interval, self.periodic_flush_and_notify)
         
         # No need for TF timer anymore since we use static transform
@@ -317,6 +343,37 @@ class SonarMapperNode(Node):
             f'{mode_str} mode'
         )
     
+    def parameter_callback(self, params):
+        """
+        Handle dynamic parameter updates at runtime
+
+        Supported parameters (namespaced):
+        - filtering.intensity_threshold: Noise filtering level (0-255)
+        - filtering.min_range: Minimum range filter in meters
+        - mapping.occupied_threshold: Occupancy probability threshold (0.0-1.0)
+        - processing.frame_skip: Process every N frames (1+)
+
+        Args:
+            params: List of Parameter objects being changed
+
+        Returns:
+            SetParametersResult indicating success/failure
+        """
+        for param in params:
+            if param.name == 'filtering.intensity_threshold':
+                self.mapper.intensity_threshold = int(param.value)
+                self.get_logger().info(f'filtering.intensity_threshold updated: {param.value}')
+            elif param.name == 'filtering.min_range':
+                self.mapper.min_range = float(param.value)
+                self.get_logger().info(f'filtering.min_range updated: {param.value}m')
+            elif param.name == 'mapping.occupied_threshold':
+                self.mapper.occupied_threshold = float(param.value)
+                self.get_logger().info(f'mapping.occupied_threshold updated: {param.value}')
+            elif param.name == 'processing.frame_skip':
+                self.frame_skip = int(param.value)
+                self.get_logger().info(f'processing.frame_skip updated: {param.value}')
+        return SetParametersResult(successful=True)
+
     def _decode_sonar_image(self, sonar_msg: Image) -> np.ndarray:
         """
         Decode ROS Image message to numpy array
@@ -379,7 +436,10 @@ class SonarMapperNode(Node):
         if new_range > 0 and new_range != self.mapper.max_range:
             old_range = self.mapper.max_range
             self.mapper.update_max_range(new_range)
-            self.get_logger().info(f'max_range updated: {old_range:.1f}m -> {new_range:.1f}m')
+            if old_range is None:
+                self.get_logger().info(f'max_range received: {new_range:.1f}m')
+            else:
+                self.get_logger().info(f'max_range updated: {old_range:.1f}m -> {new_range:.1f}m')
 
     def synchronized_callback(self, sonar_msg: Image, odom_msg: Odometry):
         """
@@ -394,6 +454,16 @@ class SonarMapperNode(Node):
         # Frame skipping logic - check BEFORE decoding
         if self.frame_count % self.frame_skip != 0:
             return
+
+        # Check if max_range has been received from /param/range topic
+        if self.mapper.max_range is None:
+            if self.frame_count % 50 == 1:  # Log warning every 50 frames
+                self.get_logger().warn(
+                    'Waiting for max_range from /param/range topic. '
+                    'Sonar frames will be skipped until range is received.'
+                )
+            return
+
         # Decode image (only for processed frames)
         sonar_image = self._decode_sonar_image(sonar_msg)
         if sonar_image is None:
@@ -430,7 +500,7 @@ class SonarMapperNode(Node):
                 f'{stats["processing_time"]*1000:.1f}ms'
             )
 
-        # Out-of-core 모드: eviction으로 저장된 타일 알림
+        # Out-of-core mode: notify tiles saved via eviction
         if self.use_outofcore:
             self.notify_saved_tiles()
     
@@ -468,7 +538,7 @@ class SonarMapperNode(Node):
         self.tf_static_broadcaster.sendTransform(t)
     
     def notify_saved_tiles(self):
-        """Eviction으로 저장된 타일 인덱스를 visualizer에 알림 (out-of-core 모드)"""
+        """Notify visualizer of tile indices saved via eviction (out-of-core mode)"""
         if not self.use_outofcore:
             return
 
@@ -485,7 +555,7 @@ class SonarMapperNode(Node):
                 self.tile_update_pub.publish(msg)
 
     def periodic_flush_and_notify(self):
-        """5초 주기로 모든 dirty 타일을 저장하고 visualizer에 알림 (out-of-core 모드)"""
+        """Periodically save all dirty tiles and notify visualizer (out-of-core mode)"""
         if not self.use_outofcore:
             return
 
@@ -506,16 +576,12 @@ class SonarMapperNode(Node):
         if self.use_outofcore:
             return
 
-        # Get point cloud from mapper
-        result = self.mapper.get_point_cloud(include_free=self.show_free_space)
-        
-        if self.show_free_space:
-            # Publish as marker array with colors
-            self.publish_marker_array(result)
-        else:
-            # Publish as PointCloud2
-            if result['num_occupied'] > 0:
-                self.publish_pointcloud2(result['points'], result['probabilities'])
+        # Get point cloud from mapper (occupied voxels only)
+        result = self.mapper.get_point_cloud(include_free=False)
+
+        # Publish as PointCloud2
+        if result['num_occupied'] > 0:
+            self.publish_pointcloud2(result['points'], result['probabilities'])
         
         # Publish robot detections if enabled
         if self.enable_robot_detection:
@@ -640,30 +706,7 @@ class SonarMapperNode(Node):
             
             marker_array.markers.append(marker)
             marker_id += 1
-        
-        # Create marker for free voxels (blue) if enabled
-        if self.show_free_space and len(result['free']) > 0:
-            marker = Marker()
-            marker.header.frame_id = self.map_frame_id
-            marker.header.stamp = self.get_clock().now().to_msg()
-            marker.id = marker_id
-            marker.type = Marker.CUBE_LIST
-            marker.action = Marker.ADD
-            marker.scale.x = self.mapper.voxel_resolution
-            marker.scale.y = self.mapper.voxel_resolution
-            marker.scale.z = self.mapper.voxel_resolution
-            marker.color.r = 0.0
-            marker.color.g = 0.0
-            marker.color.b = 1.0
-            marker.color.a = 0.3
-            
-            for point, prob in result['free']:
-                p = marker.points.add()
-                p.x, p.y, p.z = point
-            
-            marker_array.markers.append(marker)
-            marker_id += 1
-        
+
         # Create marker for unknown voxels (yellow)
         if len(result.get('unknown', [])) > 0:
             marker = Marker()

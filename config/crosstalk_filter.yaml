@@ -1,22 +1,21 @@
 # Cross-talk Noise Filter Configuration
-# 멀티빔 소나의 가로 줄무늬 노이즈 억제 설정
+# Suppresses horizontal stripe noise from multibeam sonar
 
 sonar_3d_mapper:
   ros__parameters:
-    #===== Morphological Filter =====
-    # 가로 줄무늬 제거를 위한 형태학적 필터 (세로 커널)
-    morpho_filter_enabled: true
-    morpho_kernel_size: 7            # 커널 크기 (홀수 추천: 3, 5, 7)
-    morpho_kernel_shape: "rect"      # rect, ellipse, cross
+    #===== Crosstalk Filter (Dynamic) =====
+    crosstalk:
+      # Morphological filter for horizontal stripe removal (vertical kernel)
+      morpho_enabled: true
+      morpho_kernel_size: 7            # Kernel size (odd recommended: 3, 5, 7)
+      morpho_kernel_shape: "rect"      # rect, ellipse, cross
 
-    #===== Azimuth Consistency Check =====
-    # 방위각 일관성 검사: 모든 방위각에서 동일하게 높은 강도 = 노이즈
-    # intensity_threshold는 common.yaml의 값을 사용
-    azimuth_check_enabled: true
-    azimuth_consistency_threshold: 0.5  # 전체 beam 중 몇 %가 threshold 이상이면 노이즈
+      # Azimuth consistency check: uniform high intensity across all azimuths = noise
+      # intensity_threshold uses value from common.yaml
+      azimuth_enabled: true
+      azimuth_threshold: 0.5           # Classify as noise if % of beams above threshold
 
-    #===== Advanced Options =====
-    # 적응형 threshold (실험적)
-    adaptive_threshold_enabled: false
-    adaptive_block_size: 11
-    adaptive_c: 2
+      # Adaptive threshold (experimental)
+      adaptive_enabled: false
+      adaptive_block_size: 11
+      adaptive_c: 2

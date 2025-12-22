@@ -10,20 +10,23 @@
 
 sonar_3d_mapper:
   ros__parameters:
-    # Log-odds bounds (Saturation limits - OctoMap style)
-    L_occ: 2.0          # Max occupied log-odds increment
-    L_free: -4.0        # Free space log-odds decrement
-    L_min: -12.0        # Lower bound (P ~ 0.00005)
-    L_max: 8.0         # Upper bound (P ~ 0.99995)
+    #===== IWLO Parameters (Dynamic) =====
+    iwlo:
+      # Log-odds bounds (Saturation limits - OctoMap style)
+      L_occ: 2.0          # Max occupied log-odds increment
+      L_free: -4.0        # Free space log-odds decrement
+      L_min: -12.0        # Lower bound (P ~ 0.00005)
+      L_max: 8.0          # Upper bound (P ~ 0.99995)
 
-    # Intensity-to-weight sigmoid transformation
-    sharpness: 0.1      # Sigmoid steepness (stonefish recommended)
+      # Intensity-to-weight sigmoid transformation
+      sharpness: 0.1      # Sigmoid steepness (stonefish recommended)
 
-    # Observation count decay (learning rate annealing)
-    decay_rate: 0.1     # Alpha decay rate (0.05~0.5)
-    min_alpha: 0.3      # Minimum learning rate (for change detection)
+      # Observation count decay (learning rate annealing)
+      decay_rate: 0.1     # Alpha decay rate (0.05~0.5)
+      min_alpha: 0.3      # Minimum learning rate (for change detection)
 
-    # Adaptive update - bidirectional protection enabled
-    adaptive_update: true
-    adaptive_threshold: 0.5
-    adaptive_max_ratio: 0.3
+    #===== Adaptive Update (Dynamic) =====
+    adaptive:
+      update: true
+      threshold: 0.5
+      max_ratio: 0.3

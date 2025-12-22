@@ -30,7 +30,7 @@ try:
 except ImportError:
     OCTOMAP_MSGS_AVAILABLE = False
 
-# C++ 모듈 임포트
+# Import C++ module
 try:
     import sys
     import importlib.util
@@ -56,16 +56,17 @@ class MapVisualizerNode(Node):
     def __init__(self):
         super().__init__('map_visualizer')
 
-        # Declare parameters (common.yaml 파라미터명 + visualizer 전용 파라미터)
+        # Declare parameters (common.yaml namespaced names + visualizer-specific parameters)
         self.declare_parameters(
             namespace='',
             parameters=[
-                # common.yaml 파라미터명 (우선 사용)
-                ('outofcore_map_path', ''),
-                ('voxel_resolution', 0.0),
-                ('outofcore_tile_size', 0.0),
-                ('map_frame_id', ''),
-                # visualizer 전용 파라미터 (fallback)
+                # common.yaml namespaced parameter names (used first)
+                ('outofcore.map_path', ''),
+                ('octree.voxel_resolution', 0.0),
+                ('outofcore.tile_size', 0.0),
+                ('frames.map', ''),
+                ('mapping.occupied_threshold', 0.0),
+                # Visualizer-specific parameters (fallback)
                 ('map_path', '/workspace/data/map_tiles'),
                 ('resolution', 0.1),
                 ('tile_size', 10.0),
@@ -78,18 +79,18 @@ class MapVisualizerNode(Node):
             ]
         )
 
-        # Get parameters (common.yaml 파라미터 우선, 없으면 visualizer 파라미터 사용)
+        # Get parameters (common.yaml namespaced parameters take priority, fallback to visualizer parameters)
         def get_with_fallback(primary, fallback):
             val = self.get_parameter(primary).value
             if val == '' or val == 0 or val == 0.0:
                 return self.get_parameter(fallback).value
             return val
 
-        self.map_path = get_with_fallback('outofcore_map_path', 'map_path')
-        self.resolution = get_with_fallback('voxel_resolution', 'resolution')
-        self.tile_size = get_with_fallback('outofcore_tile_size', 'tile_size')
-        self.frame_id = get_with_fallback('map_frame_id', 'frame_id')
-        self.occupied_threshold = self.get_parameter('occupied_threshold').value
+        self.map_path = get_with_fallback('outofcore.map_path', 'map_path')
+        self.resolution = get_with_fallback('octree.voxel_resolution', 'resolution')
+        self.tile_size = get_with_fallback('outofcore.tile_size', 'tile_size')
+        self.frame_id = get_with_fallback('frames.map', 'frame_id')
+        self.occupied_threshold = get_with_fallback('mapping.occupied_threshold', 'occupied_threshold')
         self.publish_rate = self.get_parameter('publish_rate').value
         self.visualization_mode = self.get_parameter('visualization_mode').value
         self.auto_refresh = self.get_parameter('auto_refresh').value
@@ -113,7 +114,7 @@ class MapVisualizerNode(Node):
                     4  # Minimal cache - visualizer loads all tiles via get_all_occupied_voxels()
                 )
 
-                # 모든 타일 preload (시각화를 위해 필수)
+                # Preload all tiles (required for visualization)
                 tile_indices = self.mapper.get_all_tile_indices()
                 if len(tile_indices) > 0:
                     min_x = min(t.x for t in tile_indices) * self.tile_size - self.tile_size
@@ -144,7 +145,7 @@ class MapVisualizerNode(Node):
             self.tile_update_callback,
             10
         )
-        self.pending_tile_updates = []  # 대기 중인 타일 업데이트
+        self.pending_tile_updates = []  # Pending tile updates
 
         # Timer for periodic publishing
         self.timer = self.create_timer(1.0 / self.publish_rate, self.publish_callback)
@@ -155,7 +156,7 @@ class MapVisualizerNode(Node):
         )
 
     def tile_update_callback(self, msg: Int32MultiArray):
-        """mapper 노드에서 업데이트된 타일 인덱스 수신"""
+        """Receive updated tile indices from mapper node"""
         if len(msg.data) == 0 or len(msg.data) % 3 != 0:
             return
 
@@ -164,12 +165,12 @@ class MapVisualizerNode(Node):
         for i in range(0, len(msg.data), 3):
             tile_indices.append(TileIndex(msg.data[i], msg.data[i+1], msg.data[i+2]))
 
-        # 대기 리스트에 추가 (publish_callback에서 처리)
+        # Add to pending list (processed in publish_callback)
         self.pending_tile_updates.extend(tile_indices)
         self.get_logger().debug(f'Received {len(tile_indices)} tile update(s)')
 
     def reload_specific_tiles(self, tile_indices):
-        """특정 타일만 디스크에서 다시 로드 (선택적 리로드)"""
+        """Reload only specific tiles from disk (selective reload)"""
         if self.mapper is None or len(tile_indices) == 0:
             return
 
@@ -179,12 +180,12 @@ class MapVisualizerNode(Node):
             pass
 
     def reload_tiles(self):
-        """디스크에서 타일 다시 로드 (auto_refresh용)"""
+        """Reload tiles from disk (for auto_refresh)"""
         if self.mapper is None:
             return
 
         try:
-            # 새 mapper 인스턴스 생성하여 최신 타일 로드
+            # Create new mapper instance to load latest tiles
             self.mapper = OutofcoreTileMapper(
                 self.map_path,
                 self.resolution,
@@ -192,7 +193,7 @@ class MapVisualizerNode(Node):
                 4  # Minimal cache - visualizer loads all tiles via get_all_occupied_voxels()
             )
 
-            # 모든 타일 preload
+            # Preload all tiles
             tile_indices = self.mapper.get_all_tile_indices()
             if len(tile_indices) > 0:
                 min_x = min(t.x for t in tile_indices) * self.tile_size - self.tile_size
@@ -209,9 +210,9 @@ class MapVisualizerNode(Node):
             pass
 
     def publish_callback(self):
-        """주기적으로 맵 시각화 발행"""
+        """Periodically publish map visualization"""
         if self.mapper is None:
-            # 맵 로드 재시도 (silent)
+            # Retry map loading (silent)
             if os.path.exists(self.map_path) and CPP_MODULE_AVAILABLE:
                 try:
                     self.mapper = OutofcoreTileMapper(
@@ -224,13 +225,13 @@ class MapVisualizerNode(Node):
                     pass
             return
 
-        # 선택적 리로드: mapper에서 업데이트된 타일만 리로드 (우선)
+        # Selective reload: reload only tiles updated from mapper (priority)
         if len(self.pending_tile_updates) > 0:
             self.reload_specific_tiles(self.pending_tile_updates)
             self.pending_tile_updates = []
             self.last_refresh_time = time.time()  # Reset refresh timer
 
-        # Fallback: auto_refresh가 활성화되고 토픽 업데이트가 없으면 전체 리로드
+        # Fallback: full reload if auto_refresh enabled and no topic updates
         current_time = time.time()
         if self.auto_refresh and (current_time - self.last_refresh_time) >= self.refresh_interval:
             self.reload_tiles()
@@ -240,7 +241,7 @@ class MapVisualizerNode(Node):
             stamp = self.get_clock().now().to_msg()
 
             if self.visualization_mode == 'all':
-                # 둘 다 발행
+                # Publish both
                 if self.octomap_pub is not None:
                     self.publish_octomap(stamp)
                 self.publish_pointcloud(stamp)
@@ -253,7 +254,7 @@ class MapVisualizerNode(Node):
             self.get_logger().error(f'Visualization error: {e}')
 
     def publish_octomap(self, stamp):
-        """OctoMap 메시지 발행 (RViz OctoMap 플러그인용)"""
+        """Publish OctoMap message (for RViz OctoMap plugin)"""
         try:
             # Get binary octree data from C++ module
             data, tree_id = self.mapper.get_octree_binary()
@@ -278,8 +279,8 @@ class MapVisualizerNode(Node):
             pass
 
     def publish_pointcloud(self, stamp):
-        """PointCloud2 발행"""
-        # get_all_occupied_voxels: 모든 타일에서 복셀 로드 (캐시 제한 없음)
+        """Publish PointCloud2"""
+        # get_all_occupied_voxels: loads voxels from all tiles (no cache limit)
         voxels = self.mapper.get_all_occupied_voxels(self.occupied_threshold)
 
         if len(voxels) == 0:

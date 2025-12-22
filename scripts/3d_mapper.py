@@ -23,16 +23,16 @@ try:
 except ImportError:
     CV2_AVAILABLE = False
 
-# C++ 모듈 임포트 시도
+# Try to import C++ module
 try:
-    # ROS2 install 경로에서 직접 모듈 임포트
+    # Import module directly from ROS2 install path
     import sys
     import importlib.util
 
     install_path = "/workspace/ros2_ws/install/sonar_3d_reconstruction/local/lib/python3.10/dist-packages"
     cpp_file = f"{install_path}/sonar_3d_reconstruction/sonar_3d_reconstruction_cpp.cpython-310-x86_64-linux-gnu.so"
 
-    # 직접 로드 방식
+    # Direct loading method
     spec = importlib.util.spec_from_file_location("sonar_3d_reconstruction_cpp", cpp_file)
     cpp_module = importlib.util.module_from_spec(spec)
     sys.modules["sonar_3d_reconstruction_cpp"] = cpp_module
@@ -52,10 +52,10 @@ except Exception as e:
 
 class CrosstalkFilter:
     """
-    Cross-talk 노이즈 필터 (가로 줄무늬 제거)
+    Cross-talk noise filter (horizontal stripe removal)
 
-    멀티빔 소나에서 발생하는 cross-talk 노이즈는 모든 방위각에서 동일한 range에
-    높은 강도가 나타나는 가로 줄무늬 형태로 나타남.
+    Cross-talk noise in multibeam sonar appears as horizontal stripes where
+    high intensity values occur at the same range across all azimuths.
     """
 
     def __init__(self, kernel_size=5, kernel_shape="rect",
@@ -65,10 +65,10 @@ class CrosstalkFilter:
         Initialize cross-talk filter
 
         Args:
-            kernel_size: Morphological kernel size (홀수 권장)
+            kernel_size: Morphological kernel size (odd number recommended)
             kernel_shape: Kernel shape ("rect", "ellipse", "cross")
-            consistency_threshold: 전체 beam 중 몇 %가 threshold 이상이면 노이즈
-            intensity_threshold: 높은 강도 판정 기준
+            consistency_threshold: Ratio of beams above threshold to classify as noise
+            intensity_threshold: Threshold for high intensity detection
             morpho_enabled: Enable morphological filtering
             azimuth_check_enabled: Enable azimuth consistency check
         """
@@ -94,11 +94,11 @@ class CrosstalkFilter:
         """
         filtered = polar_img.copy()
 
-        # 1. Morphological opening (가로 줄무늬 제거)
+        # 1. Morphological opening (horizontal stripe removal)
         if self.morpho_enabled:
             filtered = self._morphological_filter(filtered)
 
-        # 2. Azimuth consistency check (방위각 일관성 검사)
+        # 2. Azimuth consistency check
         if self.azimuth_check_enabled:
             mask = self._generate_crosstalk_mask(filtered)
             filtered = filtered * mask
@@ -107,15 +107,15 @@ class CrosstalkFilter:
 
     def _morphological_filter(self, img):
         """
-        가로 줄무늬 제거를 위한 morphological opening
+        Morphological opening to remove horizontal stripes
 
-        세로 방향 커널을 사용하여 가로 줄무늬를 제거.
+        Uses a vertical kernel to remove horizontal stripes.
         Opening = Erosion -> Dilation
         """
         if not CV2_AVAILABLE:
             return img
 
-        # 세로 방향 커널 (가로 줄무늬 제거)
+        # Vertical kernel (removes horizontal stripes)
         if self.kernel_shape == "rect":
             kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, self.kernel_size))
         elif self.kernel_shape == "ellipse":
@@ -128,9 +128,9 @@ class CrosstalkFilter:
 
     def _generate_crosstalk_mask(self, polar_img):
         """
-        방위각 일관성 검사로 cross-talk 마스크 생성
+        Generate cross-talk mask using azimuth consistency check
 
-        모든 방위각에서 동일한 range에 높은 강도가 나타나면 노이즈로 판정.
+        Classifies as noise if high intensity appears at the same range across all azimuths.
 
         Args:
             polar_img: Polar sonar image (range_bins x bearing_bins)
@@ -141,14 +141,14 @@ class CrosstalkFilter:
         num_beams, num_ranges = polar_img.shape
         mask = np.ones_like(polar_img, dtype=np.float32)
 
-        # 각 range에 대해 검사
+        # Check each range bin
         for r in range(num_ranges):
             range_slice = polar_img[:, r]
 
-            # 높은 강도를 가진 beam의 비율 계산
+            # Calculate ratio of beams with high intensity
             high_ratio = np.sum(range_slice > self.intensity_threshold) / num_beams
 
-            # Threshold 이상이면 해당 range를 노이즈로 판정
+            # Classify as noise if ratio exceeds threshold
             if high_ratio > self.consistency_threshold:
                 mask[:, r] = 0.0
 
@@ -176,7 +176,7 @@ class SonarTo3DMapper:
             # Sonar parameters
             'horizontal_fov': 130.0,       # degrees
             'vertical_aperture': 20.0,     # degrees
-            'max_range': 10.0,             # meters
+            # max_range is received dynamically from /param/range topic
             'min_range': 0.5,              # meters
             'intensity_threshold': 35,     # 0-255 scale
 
@@ -241,7 +241,7 @@ class SonarTo3DMapper:
         # Store parameters
         self.horizontal_fov = np.radians(default_config['horizontal_fov'])
         self.vertical_aperture = np.radians(default_config['vertical_aperture'])
-        self.max_range = default_config['max_range']
+        self.max_range = None  # Set dynamically from /param/range topic
         self.min_range = default_config['min_range']
         self.intensity_threshold = default_config['intensity_threshold']
         
@@ -262,10 +262,6 @@ class SonarTo3DMapper:
         self.voxel_resolution = default_config['voxel_resolution']
         self.occupied_threshold = default_config['occupied_threshold']
         self.dynamic_expansion = default_config['dynamic_expansion']
-        
-        # Z-axis filtering
-        self.z_filter_min = default_config.get('z_filter_min', -5.0)
-        self.z_filter_enabled = default_config.get('z_filter_enabled', False)
 
         # Shadow region protection
         self.angular_cone_width = default_config.get('angular_cone_width', 0.5)
@@ -392,7 +388,7 @@ class SonarTo3DMapper:
                 kernel_size=default_config.get('morpho_kernel_size', 5),
                 kernel_shape=default_config.get('morpho_kernel_shape', 'rect'),
                 consistency_threshold=default_config.get('azimuth_consistency_threshold', 0.5),
-                intensity_threshold=self.intensity_threshold,  # common.yaml의 intensity_threshold 사용
+                intensity_threshold=self.intensity_threshold,  # Uses intensity_threshold from common.yaml
                 morpho_enabled=default_config.get('morpho_filter_enabled', True),
                 azimuth_check_enabled=default_config.get('azimuth_check_enabled', True)
             )
@@ -623,10 +619,6 @@ class SonarTo3DMapper:
                 pt_sonar = np.array([x_sonar, y_sonar, z_sonar, 1.0])
                 pt_world = T_sonar_to_world @ pt_sonar
 
-                # Apply Z-axis filter if enabled
-                if self.z_filter_enabled and pt_world[2] < self.z_filter_min:
-                    continue
-
                 updates.append((pt_world[:3], self.log_odds_free, 'free', None))
         
         # Process occupied regions (dense)
@@ -664,10 +656,6 @@ class SonarTo3DMapper:
                         # Transform to world
                         pt_sonar = np.array([x_sonar, y_sonar, z_sonar, 1.0])
                         pt_world = T_sonar_to_world @ pt_sonar
-                        
-                        # Apply Z-axis filter if enabled
-                        if self.z_filter_enabled and pt_world[2] < self.z_filter_min:
-                            continue
 
                         # Add to regular map updates with intensity value
                         updates.append((pt_world[:3], self.log_odds_occupied, 'occupied', float(intensity)))
@@ -796,22 +784,22 @@ class SonarTo3DMapper:
         num_free = 0
         
         if self.use_cpp and CPP_MODULE_AVAILABLE:
-            # C++ 배치 업데이트 사용
+            # Use C++ batch update
             points_list = []
             log_odds_list = []
-            intensities_list = []  # IWLO용 intensity 배열
+            intensities_list = []  # Intensity array for IWLO
             is_occupied_list = []
 
             for key, update_info in voxel_updates.items():
                 if update_info['count'] > 0:
                     avg_update = update_info['sum'] / update_info['count']
 
-                    # 키를 월드 좌표로 변환
+                    # Convert key to world coordinates
                     world_point = self.key_to_world(key)
                     points_list.append(world_point)
                     log_odds_list.append(avg_update)
 
-                    # IWLO용 intensity 수집 (없으면 0)
+                    # Collect intensity for IWLO (default to 0 if not present)
                     intensity_val = update_info.get('intensity', 0.0)
                     intensities_list.append(intensity_val if intensity_val else 0.0)
 
@@ -823,14 +811,14 @@ class SonarTo3DMapper:
                     else:
                         num_free += 1
 
-            # NumPy 배열로 변환하여 배치 업데이트
+            # Convert to NumPy arrays for batch update
             if points_list:
                 points_array = np.array(points_list, dtype=np.float64)
                 log_odds_array = np.array(log_odds_list, dtype=np.float64)
                 intensities_array = np.array(intensities_list, dtype=np.float64)
                 is_occupied_array = np.array(is_occupied_list, dtype=bool)
 
-                # C++ 배치 업데이트 실행 (IWLO only)
+                # Execute C++ batch update (IWLO only)
                 self.octree.batch_update_iwlo(
                     points_array, intensities_array, is_occupied_array
                 )
@@ -866,7 +854,7 @@ class SonarTo3DMapper:
         if include_free:
             warnings.warn("Free space voxel retrieval is not supported. Only occupied voxels returned.")
 
-        # C++에서 점유 복셀 조회
+        # Query occupied voxels from C++
         occupied_data = self.octree.get_occupied_voxels(self.occupied_threshold)
 
         if len(occupied_data) > 0:
@@ -876,7 +864,7 @@ class SonarTo3DMapper:
             points = np.empty((0, 3))
             probabilities = np.empty(0)
 
-        # 메모리 사용량 통계
+        # Memory usage statistics
         memory_stats = self.octree.get_memory_usage()
 
         return {
@@ -901,7 +889,7 @@ class SonarTo3DMapper:
 
     def get_memory_stats(self) -> Dict[str, Any]:
         """Get detailed memory usage statistics"""
-        # C++ 메모리 통계
+        # C++ memory statistics
         stats = self.octree.get_memory_usage()
 
         if self.use_outofcore:
@@ -981,37 +969,36 @@ class SonarTo3DMapper:
 
 if __name__ == "__main__":
     """
-    3D Mapper 기본 테스트
+    3D Mapper basic test
     """
-    print("🚀 3D Mapper 기본 테스트")
-    
-    # 기본 설정
+    print("3D Mapper basic test")
+
+    # Basic configuration
     config = {
         'voxel_resolution': 0.1,
         'occupied_threshold': 0.6,
         'intensity_threshold': 30,
-        'max_range': 8.0
     }
-    
-    # 매퍼 초기화
-    print(f"\n매퍼 초기화 - C++ 모듈: {'사용 가능' if CPP_MODULE_AVAILABLE else '사용 불가'}")
+
+    # Initialize mapper
+    print(f"\nMapper init - C++ module: {'available' if CPP_MODULE_AVAILABLE else 'unavailable'}")
     mapper = SonarTo3DMapper(config)
-    
-    # 테스트 이미지 생성
+
+    # Create test image
     test_image = np.zeros((500, 256), dtype=np.uint8)
-    test_image[100:150, 120:140] = 80  # 객체
-    
-    # 프레임 처리 테스트
-    print("\n프레임 처리 테스트...")
+    test_image[100:150, 120:140] = 80  # Object
+
+    # Frame processing test
+    print("\nFrame processing test...")
     stats = mapper.process_sonar_image(test_image, [0, 0, 0], [0, 0, 0, 1])
-    print(f"처리 결과: {stats['num_occupied']}개 점유 복셀, {stats['processing_time']:.3f}s")
-    
-    # 포인트 클라우드 조회
+    print(f"Result: {stats['num_occupied']} occupied voxels, {stats['processing_time']:.3f}s")
+
+    # Query point cloud
     point_cloud = mapper.get_point_cloud()
-    print(f"포인트 클라우드: {point_cloud['num_occupied']}개 점")
-    
-    # 메모리 통계
+    print(f"Point cloud: {point_cloud['num_occupied']} points")
+
+    # Memory statistics
     memory_stats = mapper.get_memory_stats()
-    print(f"메모리 사용량: {memory_stats}")
-    
-    print("\n✅ 테스트 완료")
+    print(f"Memory usage: {memory_stats}")
+
+    print("\nTest completed")

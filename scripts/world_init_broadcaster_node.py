@@ -2,11 +2,11 @@
 """
 World Init TF Broadcaster Node
 
-IMU 가속도 데이터를 사용해 초기 수평면을 계산하고
-world_init → camera_init Static TF를 발행합니다.
+Uses IMU acceleration data to calculate initial horizontal plane and
+broadcasts world_init -> camera_init Static TF.
 
-TF 구조:
-  world_init (수평면) → camera_init (기울어진 초기 자세) → body
+TF structure:
+  world_init (horizontal plane) -> camera_init (tilted initial pose) -> body
 
 Author: Sonar 3D Reconstruction Team
 """
@@ -62,7 +62,7 @@ class WorldInitBroadcaster(Node):
 
         # Parameters
         self.declare_parameter('imu_topic', '/sensor/ins/livox_mid360/imu')
-        self.declare_parameter('init_samples', 50)  # IMU 샘플 수
+        self.declare_parameter('init_samples', 50)  # Number of IMU samples
         self.declare_parameter('parent_frame', 'world_init')
         self.declare_parameter('child_frame', 'camera_init')
 
