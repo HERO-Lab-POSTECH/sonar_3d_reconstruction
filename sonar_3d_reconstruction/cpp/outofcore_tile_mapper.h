@@ -158,9 +158,10 @@ public:
     /**
      * Get merged OcTree for all tiles (loads from disk)
      * WARNING: May be slow for large maps
+     * @param min_probability Minimum probability threshold (default: include all)
      * @return Unique pointer to merged OcTree
      */
-    std::unique_ptr<octomap::OcTree> get_full_merged_octree();
+    std::unique_ptr<octomap::OcTree> get_full_merged_octree(double min_probability = -1.0);
 
     /**
      * Save merged octree to file
@@ -171,9 +172,10 @@ public:
 
     /**
      * Get merged octree as binary data (for ROS octomap_msgs)
+     * @param min_probability Minimum probability threshold for occupied voxels
      * @return Pair of (binary_data, tree_id) - empty if no data
      */
-    std::pair<std::vector<int8_t>, std::string> get_octree_binary();
+    std::pair<std::vector<int8_t>, std::string> get_octree_binary(double min_probability = 0.5);
 
     /**
      * Get number of tiles currently in cache

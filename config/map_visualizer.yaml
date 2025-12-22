@@ -10,5 +10,5 @@ map_visualizer:
     refresh_interval: 5.0       # seconds - reload interval
 
     visualization:
-      mode: "pointcloud"        # "octomap", "pointcloud", or "all"
+      mode: 1                   # 0=pointcloud, 1=octomap, 2=all
                                 # NOTE: occupied_threshold only works in pointcloud mode!

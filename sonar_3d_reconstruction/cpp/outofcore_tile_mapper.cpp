@@ -4,6 +4,8 @@
 #include <sstream>
 #include <cstdio>
 #include <unistd.h>
+#include <limits>
+#include <cmath>
 
 namespace sonar_3d_reconstruction
 {
@@ -363,61 +365,33 @@ std::unique_ptr<octomap::OcTree> OutofcoreTileMapper::get_merged_octree()
     return merged;
 }
 
-std::unique_ptr<octomap::OcTree> OutofcoreTileMapper::get_full_merged_octree()
+std::unique_ptr<octomap::OcTree> OutofcoreTileMapper::get_full_merged_octree(double min_probability)
 {
     auto merged = std::make_unique<octomap::OcTree>(resolution_);
-    unsigned int max_depth = merged->getTreeDepth();
 
     // Get all tiles
     auto tile_indices = tile_manager_.list_all_tiles();
+
+    size_t total_voxels = 0;
 
     for (const auto& idx : tile_indices) {
         // Load tile
         Tile* tile = get_or_load_tile(idx);
 
-        if (tile && tile->get_octree()) {
-            octomap::OcTree* src_tree = tile->get_octree();
+        if (tile) {
+            // Use tile's get_occupied_voxels which filters using iwlo_meta_
+            // This ensures consistency with pointcloud output
+            auto voxels = tile->get_occupied_voxels(min_probability);
+            total_voxels += voxels.size();
 
-            // Iterate through leaf nodes
-            for (auto it = src_tree->begin_leafs();
-                 it != src_tree->end_leafs(); ++it) {
-
-                float log_odds = it->getLogOdds();
-                unsigned int node_depth = it.getDepth();
-                octomap::point3d center = it.getCoordinate();
-
-                if (node_depth == max_depth) {
-                    // Max depth node: copy directly
-                    octomap::OcTreeNode* node = merged->updateNode(center, true, true);
-                    if (node) {
-                        node->setLogOdds(log_odds);
-                    }
-                } else {
-                    // Pruned (larger) node: fill entire volume with max-res voxels
-                    // This preserves the full volume of pruned nodes
-                    double node_size = it.getSize();
-                    double half_size = node_size / 2.0;
-
-                    // Calculate bounding box corners
-                    octomap::point3d min_pt(center.x() - half_size + resolution_/2,
-                                           center.y() - half_size + resolution_/2,
-                                           center.z() - half_size + resolution_/2);
-                    octomap::point3d max_pt(center.x() + half_size - resolution_/2,
-                                           center.y() + half_size - resolution_/2,
-                                           center.z() + half_size - resolution_/2);
-
-                    // Fill all max-resolution voxels within this node's volume
-                    for (double x = min_pt.x(); x <= max_pt.x() + resolution_/4; x += resolution_) {
-                        for (double y = min_pt.y(); y <= max_pt.y() + resolution_/4; y += resolution_) {
-                            for (double z = min_pt.z(); z <= max_pt.z() + resolution_/4; z += resolution_) {
-                                octomap::OcTreeNode* node = merged->updateNode(
-                                    octomap::point3d(x, y, z), true, true);
-                                if (node) {
-                                    node->setLogOdds(log_odds);
-                                }
-                            }
-                        }
-                    }
+            // Add each voxel to merged octree
+            for (const auto& v : voxels) {
+                octomap::point3d pt(v.x, v.y, v.z);
+                octomap::OcTreeNode* node = merged->updateNode(pt, true, true);
+                if (node) {
+                    // Convert probability back to log-odds
+                    double log_odds = std::log(v.probability / (1.0 - v.probability));
+                    node->setLogOdds(log_odds);
                 }
             }
         }
@@ -439,16 +413,16 @@ bool OutofcoreTileMapper::save_merged_octree(const std::string& filepath)
     return merged->writeBinary(filepath);
 }
 
-std::pair<std::vector<int8_t>, std::string> OutofcoreTileMapper::get_octree_binary()
+std::pair<std::vector<int8_t>, std::string> OutofcoreTileMapper::get_octree_binary(double min_probability)
 {
-    // Suppress ALL OctoMap stdout/stderr (including tile loading and writing)
-    SuppressOutput suppress;
-
-    // Use get_full_merged_octree to include ALL tiles (not just cached)
-    auto merged = get_full_merged_octree();
+    // Get merged octree (debug output happens inside)
+    auto merged = get_full_merged_octree(min_probability);
     if (!merged || merged->size() == 0) {
         return {{}, ""};
     }
+
+    // Suppress stdout/stderr only during serialization
+    SuppressOutput suppress;
 
     // Serialize to stringstream
     std::stringstream ss;

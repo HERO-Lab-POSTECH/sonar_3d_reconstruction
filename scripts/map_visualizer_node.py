@@ -22,7 +22,7 @@ import time
 # ROS2 message imports
 from sensor_msgs.msg import PointCloud2, PointField
 from std_msgs.msg import Header, Int32MultiArray
-from rcl_interfaces.msg import SetParametersResult, ParameterDescriptor
+from rcl_interfaces.msg import SetParametersResult, ParameterDescriptor, IntegerRange
 
 # OctoMap message import
 try:
@@ -54,17 +54,31 @@ except Exception:
 class MapVisualizerNode(Node):
     """ROS2 Node for map visualization from tile files"""
 
+    # Visualization mode constants
+    VIS_MODE_POINTCLOUD = 0  # Default - supports occupied_threshold
+    VIS_MODE_OCTOMAP = 1
+    VIS_MODE_ALL = 2
+    VIS_MODE_NAMES = ['pointcloud', 'octomap', 'all']
+
     def __init__(self):
         super().__init__('map_visualizer')
 
         # Read-only descriptor
         read_only = ParameterDescriptor(read_only=True)
 
+        # Visualization mode descriptor with integer range (0=pointcloud, 1=octomap, 2=all)
+        vis_mode_desc = ParameterDescriptor(
+            description='0=pointcloud, 1=octomap, 2=all (threshold only works in pointcloud)',
+            integer_range=[IntegerRange(from_value=0, to_value=2, step=1)]
+        )
+
         # Declare parameters individually (avoids type inference issues)
         # String parameters
         self.declare_parameter('outofcore.map_path', '/workspace/data/map_tiles', read_only)
         self.declare_parameter('frames.map', 'camera_init', read_only)
-        self.declare_parameter('visualization.mode', 'octomap')
+
+        # Integer parameters
+        self.declare_parameter('visualization.mode', 0, vis_mode_desc)  # 0=pointcloud
 
         # Float parameters
         self.declare_parameter('octree.voxel_resolution', 0.1, read_only)
@@ -83,7 +97,7 @@ class MapVisualizerNode(Node):
         self.frame_id = self.get_parameter('frames.map').value
         self.occupied_threshold = self.get_parameter('mapping.occupied_threshold').value
         self.publish_rate = self.get_parameter('publish_rate').value
-        self.visualization_mode = self.get_parameter('visualization.mode').value
+        self.visualization_mode = self.get_parameter('visualization.mode').value  # Integer now
         self.auto_refresh = self.get_parameter('auto_refresh').value
         self.refresh_interval = self.get_parameter('refresh_interval').value
         self.last_refresh_time = 0.0
@@ -92,9 +106,9 @@ class MapVisualizerNode(Node):
         self.add_on_set_parameters_callback(self.parameter_callback)
 
         # Fallback to pointcloud if octomap_msgs not available
-        if self.visualization_mode == 'octomap' and not OCTOMAP_MSGS_AVAILABLE:
+        if self.visualization_mode == self.VIS_MODE_OCTOMAP and not OCTOMAP_MSGS_AVAILABLE:
             self.get_logger().warn('octomap_msgs not available, using pointcloud mode')
-            self.visualization_mode = 'pointcloud'
+            self.visualization_mode = self.VIS_MODE_POINTCLOUD
 
         # Initialize mapper (read-only mode)
         self.mapper = None
@@ -146,7 +160,7 @@ class MapVisualizerNode(Node):
 
         # Single-line initialization summary
         self.get_logger().info(
-            f'Visualizer: {self.visualization_mode} mode, {self.publish_rate}Hz'
+            f'Visualizer: {self.VIS_MODE_NAMES[self.visualization_mode]} mode, {self.publish_rate}Hz'
         )
 
     def parameter_callback(self, params):
@@ -156,13 +170,13 @@ class MapVisualizerNode(Node):
                 self.occupied_threshold = float(param.value)
                 self.get_logger().info(f'occupied_threshold: {param.value}')
             elif param.name == 'visualization.mode':
-                new_mode = str(param.value)
-                if new_mode in ('octomap', 'pointcloud', 'all'):
-                    if new_mode == 'octomap' and not OCTOMAP_MSGS_AVAILABLE:
+                new_mode = int(param.value)
+                if 0 <= new_mode <= 2:
+                    if new_mode == self.VIS_MODE_OCTOMAP and not OCTOMAP_MSGS_AVAILABLE:
                         self.get_logger().warn('octomap_msgs not available')
                     else:
                         self.visualization_mode = new_mode
-                        self.get_logger().info(f'visualization.mode: {new_mode}')
+                        self.get_logger().info(f'visualization.mode: {self.VIS_MODE_NAMES[new_mode]}')
         return SetParametersResult(successful=True)
 
     def tile_update_callback(self, msg: Int32MultiArray):
@@ -250,12 +264,12 @@ class MapVisualizerNode(Node):
         try:
             stamp = self.get_clock().now().to_msg()
 
-            if self.visualization_mode == 'all':
+            if self.visualization_mode == self.VIS_MODE_ALL:
                 # Publish both
                 if self.octomap_pub is not None:
                     self.publish_octomap(stamp)
                 self.publish_pointcloud(stamp)
-            elif self.visualization_mode == 'octomap' and self.octomap_pub is not None:
+            elif self.visualization_mode == self.VIS_MODE_OCTOMAP and self.octomap_pub is not None:
                 self.publish_octomap(stamp)
             else:
                 self.publish_pointcloud(stamp)
@@ -266,8 +280,8 @@ class MapVisualizerNode(Node):
     def publish_octomap(self, stamp):
         """Publish OctoMap message (for RViz OctoMap plugin)"""
         try:
-            # Get binary octree data from C++ module
-            data, tree_id = self.mapper.get_octree_binary()
+            # Get binary octree data from C++ module (with threshold filtering)
+            data, tree_id = self.mapper.get_octree_binary(self.occupied_threshold)
 
             if len(data) == 0:
                 return

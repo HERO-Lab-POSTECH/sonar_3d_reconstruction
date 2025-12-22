@@ -221,14 +221,15 @@ PYBIND11_MODULE(sonar_3d_reconstruction_cpp, m) {
         .def("save_merged_octree", &sonar_3d_reconstruction::OutofcoreTileMapper::save_merged_octree,
              py::arg("filepath"),
              "Save merged octree to .bt file")
-        .def("get_octree_binary", [](sonar_3d_reconstruction::OutofcoreTileMapper& self) {
-             auto result = self.get_octree_binary();
+        .def("get_octree_binary", [](sonar_3d_reconstruction::OutofcoreTileMapper& self, double min_probability) {
+             auto result = self.get_octree_binary(min_probability);
              // Convert vector<int8_t> to py::bytes
              return py::make_tuple(
                  py::bytes(reinterpret_cast<const char*>(result.first.data()), result.first.size()),
                  result.second
              );
-         }, "Get octree as binary data (data, tree_id) for ROS octomap_msgs")
+         }, py::arg("min_probability") = 0.5,
+            "Get octree as binary data (data, tree_id) for ROS octomap_msgs, filtered by probability threshold")
         // Statistics
         .def("get_cached_tile_count", &sonar_3d_reconstruction::OutofcoreTileMapper::get_cached_tile_count,
              "Get number of tiles in cache")
