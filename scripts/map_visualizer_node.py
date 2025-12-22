@@ -57,45 +57,39 @@ class MapVisualizerNode(Node):
     def __init__(self):
         super().__init__('map_visualizer')
 
-        # Declare parameters (common.yaml namespaced names + visualizer-specific parameters)
+        # Parameter descriptors
+        read_only = ParameterDescriptor(read_only=True)
+        vis_mode_desc = ParameterDescriptor(
+            description='Visualization output mode',
+            additional_constraints="Allowed: 'octomap', 'pointcloud', 'all'"
+        )
+
+        # Declare parameters (from common.yaml via launch)
         self.declare_parameters(
             namespace='',
             parameters=[
-                # === Read-only parameters ===
-                # common.yaml namespaced parameter names (used first)
-                ('outofcore.map_path', '', ParameterDescriptor(read_only=True)),
-                ('octree.voxel_resolution', 0.0, ParameterDescriptor(read_only=True)),
-                ('outofcore.tile_size', 0.0, ParameterDescriptor(read_only=True)),
-                ('frames.map', '', ParameterDescriptor(read_only=True)),
-                # Visualizer-specific parameters (fallback)
-                ('map_path', '/workspace/data/map_tiles', ParameterDescriptor(read_only=True)),
-                ('resolution', 0.1, ParameterDescriptor(read_only=True)),
-                ('tile_size', 10.0, ParameterDescriptor(read_only=True)),
-                ('frame_id', 'camera_init', ParameterDescriptor(read_only=True)),
-                ('publish_rate', 1.0, ParameterDescriptor(read_only=True)),
-                ('auto_refresh', True, ParameterDescriptor(read_only=True)),
-                ('refresh_interval', 10.0, ParameterDescriptor(read_only=True)),
+                # === Read-only parameters (from common.yaml) ===
+                ('outofcore.map_path', '/workspace/data/map_tiles', read_only),
+                ('octree.voxel_resolution', 0.1, read_only),
+                ('outofcore.tile_size', 10.0, read_only),
+                ('frames.map', 'camera_init', read_only),
+                ('publish_rate', 1.0, read_only),
+                ('auto_refresh', True, read_only),
+                ('refresh_interval', 10.0, read_only),
                 # === Dynamic parameters ===
-                ('mapping.occupied_threshold', 0.0),
-                ('occupied_threshold', 0.7),
-                ('visualization_mode', 'octomap'),  # 'octomap', 'pointcloud', or 'all'
+                ('mapping.occupied_threshold', 0.7),
+                ('visualization.mode', 'octomap', vis_mode_desc),
             ]
         )
 
-        # Get parameters (common.yaml namespaced parameters take priority, fallback to visualizer parameters)
-        def get_with_fallback(primary, fallback):
-            val = self.get_parameter(primary).value
-            if val == '' or val == 0 or val == 0.0:
-                return self.get_parameter(fallback).value
-            return val
-
-        self.map_path = get_with_fallback('outofcore.map_path', 'map_path')
-        self.resolution = get_with_fallback('octree.voxel_resolution', 'resolution')
-        self.tile_size = get_with_fallback('outofcore.tile_size', 'tile_size')
-        self.frame_id = get_with_fallback('frames.map', 'frame_id')
-        self.occupied_threshold = get_with_fallback('mapping.occupied_threshold', 'occupied_threshold')
+        # Get parameters
+        self.map_path = self.get_parameter('outofcore.map_path').value
+        self.resolution = self.get_parameter('octree.voxel_resolution').value
+        self.tile_size = self.get_parameter('outofcore.tile_size').value
+        self.frame_id = self.get_parameter('frames.map').value
+        self.occupied_threshold = self.get_parameter('mapping.occupied_threshold').value
         self.publish_rate = self.get_parameter('publish_rate').value
-        self.visualization_mode = self.get_parameter('visualization_mode').value
+        self.visualization_mode = self.get_parameter('visualization.mode').value
         self.auto_refresh = self.get_parameter('auto_refresh').value
         self.refresh_interval = self.get_parameter('refresh_interval').value
         self.last_refresh_time = 0.0
@@ -164,17 +158,17 @@ class MapVisualizerNode(Node):
     def parameter_callback(self, params):
         """Handle dynamic parameter updates"""
         for param in params:
-            if param.name in ('mapping.occupied_threshold', 'occupied_threshold'):
+            if param.name == 'mapping.occupied_threshold':
                 self.occupied_threshold = float(param.value)
-                self.get_logger().info(f'occupied_threshold updated: {param.value}')
-            elif param.name == 'visualization_mode':
+                self.get_logger().info(f'occupied_threshold: {param.value}')
+            elif param.name == 'visualization.mode':
                 new_mode = str(param.value)
                 if new_mode in ('octomap', 'pointcloud', 'all'):
                     if new_mode == 'octomap' and not OCTOMAP_MSGS_AVAILABLE:
                         self.get_logger().warn('octomap_msgs not available')
                     else:
                         self.visualization_mode = new_mode
-                        self.get_logger().info(f'visualization_mode updated: {new_mode}')
+                        self.get_logger().info(f'visualization.mode: {new_mode}')
         return SetParametersResult(successful=True)
 
     def tile_update_callback(self, msg: Int32MultiArray):
