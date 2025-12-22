@@ -76,9 +76,11 @@ class SonarMapperNode(Node):
     def __init__(self):
         super().__init__('sonar_3d_mapper')
 
-        # === Step 1: Declare conditional feature flags first ===
-        self.declare_parameter('robot_detection.enabled', False)
-        self.declare_parameter('crosstalk.enabled', False)
+        # === Step 1: Declare conditional feature flags first (read-only) ===
+        self.declare_parameter('robot_detection.enabled', False,
+                               ParameterDescriptor(read_only=True))
+        self.declare_parameter('crosstalk.enabled', False,
+                               ParameterDescriptor(read_only=True))
         self.enable_robot_detection = self.get_parameter('robot_detection.enabled').value
         self.enable_crosstalk = self.get_parameter('crosstalk.enabled').value
 
