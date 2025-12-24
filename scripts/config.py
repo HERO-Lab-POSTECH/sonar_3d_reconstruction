@@ -293,6 +293,16 @@ CROSSTALK_PARAMS: List[ParameterDef] = [
     ParameterDef('crosstalk.azimuth_threshold', 0.5,
                  'Azimuth consistency threshold',
                  handler='update_crosstalk'),
+    # Adaptive threshold (experimental)
+    ParameterDef('crosstalk.adaptive_enabled', False,
+                 'Enable adaptive thresholding',
+                 handler='update_crosstalk'),
+    ParameterDef('crosstalk.adaptive_block_size', 11,
+                 'Adaptive threshold block size',
+                 handler='update_crosstalk'),
+    ParameterDef('crosstalk.adaptive_c', 2,
+                 'Adaptive threshold constant C',
+                 handler='update_crosstalk'),
 ]
 
 # Map visualizer parameters
@@ -369,6 +379,10 @@ class CrosstalkConfig:
     morpho_kernel_shape: str = 'rect'
     azimuth_enabled: bool = True
     azimuth_threshold: float = 0.5
+    # Adaptive threshold (experimental)
+    adaptive_enabled: bool = False
+    adaptive_block_size: int = 11
+    adaptive_c: int = 2
 
 
 @dataclass
@@ -469,6 +483,9 @@ class SonarMapperConfig:
                 morpho_kernel_shape=node.get_parameter('crosstalk.morpho_kernel_shape').value,
                 azimuth_enabled=node.get_parameter('crosstalk.azimuth_enabled').value,
                 azimuth_threshold=node.get_parameter('crosstalk.azimuth_threshold').value,
+                adaptive_enabled=node.get_parameter('crosstalk.adaptive_enabled').value,
+                adaptive_block_size=node.get_parameter('crosstalk.adaptive_block_size').value,
+                adaptive_c=node.get_parameter('crosstalk.adaptive_c').value,
             )
         else:
             crosstalk_config = CrosstalkConfig(enabled=False)
@@ -574,6 +591,9 @@ class SonarMapperConfig:
                 morpho_kernel_shape=params_dict.get('crosstalk.morpho_kernel_shape', 'rect'),
                 azimuth_enabled=params_dict.get('crosstalk.azimuth_enabled', True),
                 azimuth_threshold=params_dict.get('crosstalk.azimuth_threshold', 0.5),
+                adaptive_enabled=params_dict.get('crosstalk.adaptive_enabled', False),
+                adaptive_block_size=params_dict.get('crosstalk.adaptive_block_size', 11),
+                adaptive_c=params_dict.get('crosstalk.adaptive_c', 2),
             )
         else:
             crosstalk_config = CrosstalkConfig(enabled=False)
@@ -701,6 +721,9 @@ class SonarMapperConfig:
             'morpho_kernel_shape': self.crosstalk.morpho_kernel_shape,
             'azimuth_check_enabled': self.crosstalk.azimuth_enabled,
             'azimuth_consistency_threshold': self.crosstalk.azimuth_threshold,
+            'adaptive_threshold_enabled': self.crosstalk.adaptive_enabled,
+            'adaptive_block_size': self.crosstalk.adaptive_block_size,
+            'adaptive_c': self.crosstalk.adaptive_c,
 
             'frame_skip': self.frame_skip
         }

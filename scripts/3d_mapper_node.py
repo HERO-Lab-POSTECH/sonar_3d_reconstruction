@@ -327,6 +327,15 @@ class SonarMapperNode(Node):
             elif name == 'crosstalk.azimuth_threshold':
                 if self.mapper.crosstalk_filter is not None:
                     self.mapper.crosstalk_filter.consistency_threshold = float(value)
+            elif name == 'crosstalk.adaptive_enabled':
+                if self.mapper.crosstalk_filter is not None:
+                    self.mapper.crosstalk_filter.adaptive_enabled = bool(value)
+            elif name == 'crosstalk.adaptive_block_size':
+                if self.mapper.crosstalk_filter is not None:
+                    self.mapper.crosstalk_filter.adaptive_block_size = int(value)
+            elif name == 'crosstalk.adaptive_c':
+                if self.mapper.crosstalk_filter is not None:
+                    self.mapper.crosstalk_filter.adaptive_c = int(value)
 
             self.get_logger().debug(f'{name} updated: {value}')
 

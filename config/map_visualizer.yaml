@@ -1,9 +1,24 @@
 # Map Visualizer Node Parameters
-# NOTE: Common parameters (map_path, resolution, tile_size, occupied_threshold, frames.map)
-#       are passed from common.yaml via launch file.
+# NOTE: This file must define ALL parameters needed by map_visualizer node
+#       because ROS2 only loads params matching the node namespace.
 
 map_visualizer:
   ros__parameters:
+    # === Shared parameters (must match common.yaml values) ===
+    # These are duplicated here because common.yaml uses sonar_3d_mapper namespace
+    outofcore:
+      map_path: "/workspace/data/5_khnp/20251219_seafloor_mapping/raw_oculus_m3000d_test_v1/map_tiles"
+      tile_size: 0.4
+
+    octree:
+      voxel_resolution: 0.1
+
+    mapping:
+      occupied_threshold: 0.7
+
+    frames:
+      map: "camera_init"
+
     # === Visualizer-specific parameters ===
     publish_rate: 1.0           # Hz - topic publishing frequency
     auto_refresh: true          # Periodically reload tiles from disk
