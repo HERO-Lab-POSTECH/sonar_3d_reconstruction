@@ -21,6 +21,30 @@
 - **CMakeLists.txt 업데이트**
   - `iwlo_updater.cpp` 빌드 대상에 추가
 
+### Phase 2: VoxelStorage 인터페이스 및 OctreeStorage 구현
+
+#### Added (Phase 2)
+- **VoxelStorage 추상 인터페이스** (`cpp/voxel_storage.h`)
+  - 복셀 저장소의 공통 인터페이스 정의
+  - `get_log_odds()`, `set_log_odds()`, `get_observation_count()` 등
+  - `save()`, `load()`, `sync_to_octree()` 영속성 메서드
+  - `get_occupied_voxels()`, `has_occupied_voxels()` 쿼리 메서드
+
+- **OctreeStorage 구현** (`cpp/octree_storage.h`, `cpp/octree_storage.cpp`)
+  - OctoMap 기반 VoxelStorage 구현
+  - `iwlo_meta_` 해시맵으로 IWLO 메타데이터 관리
+  - 바이너리 파일 포맷으로 IWLO 메타데이터 저장/로드
+  - `sync_to_octree()`: 메타데이터 → OcTree 동기화
+
+#### Changed (Phase 2)
+- **Tile 클래스 완전 재작성**
+  - `tile.h`: `octree_`, `iwlo_meta_`, `dirty_` → `OctreeStorage` 위임
+  - `tile.cpp`: 274줄로 간결화, 저장소 로직 모두 OctreeStorage에 위임
+  - 책임 분리: Tile = 타일 경계 + IWLO 업데이트, OctreeStorage = 저장소 관리
+
+- **CMakeLists.txt 업데이트**
+  - `octree_storage.cpp` 빌드 대상에 추가
+
 ### Removed
 - **미사용 coordinate_transform 코드 제거**
   - `coordinate_transform.cpp`, `coordinate_transform.h` 삭제

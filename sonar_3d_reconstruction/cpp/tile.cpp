@@ -1,60 +1,26 @@
+/**
+ * @file tile.cpp
+ * @brief Tile class implementation using OctreeStorage
+ *
+ * Phase 2 refactoring: Tile now delegates storage to OctreeStorage,
+ * keeping only tile-specific logic (bounds, index, IWLO updates).
+ */
+
 #include "tile.h"
+#include "octree_storage.h"
 #include "iwlo_updater.h"
 #include <cmath>
-#include <fstream>
 #include <iostream>
-#include <filesystem>
 #include <algorithm>
-#include <cstdio>
-#include <unistd.h>
-
-namespace fs = std::filesystem;
 
 namespace sonar_3d_reconstruction
 {
 
-// RAII class to suppress stdout/stderr at file descriptor level
-class SuppressOutput {
-public:
-    SuppressOutput() {
-        // Flush before redirecting
-        std::cout.flush();
-        std::cerr.flush();
-        fflush(stdout);
-        fflush(stderr);
-        // Save original file descriptors
-        stdout_fd_ = dup(fileno(stdout));
-        stderr_fd_ = dup(fileno(stderr));
-        // Redirect to /dev/null
-        freopen("/dev/null", "w", stdout);
-        freopen("/dev/null", "w", stderr);
-    }
-    ~SuppressOutput() {
-        // Flush before restoring
-        fflush(stdout);
-        fflush(stderr);
-        // Restore original file descriptors
-        dup2(stdout_fd_, fileno(stdout));
-        dup2(stderr_fd_, fileno(stderr));
-        close(stdout_fd_);
-        close(stderr_fd_);
-    }
-private:
-    int stdout_fd_;
-    int stderr_fd_;
-};
-
 Tile::Tile(const TileIndex& index, double resolution, double tile_size)
     : index_(index)
-    , resolution_(resolution)
     , tile_size_(tile_size)
-    , octree_(std::make_unique<octomap::OcTree>(resolution))
-    , dirty_(false)
+    , storage_(std::make_unique<OctreeStorage>(resolution))
 {
-    // Configure octree
-    octree_->setOccupancyThres(0.5);
-    octree_->setProbHit(0.7);
-    octree_->setProbMiss(0.3);
 }
 
 Tile::~Tile()
@@ -62,34 +28,39 @@ Tile::~Tile()
     // Unique pointer automatically cleans up
 }
 
+// =============================================================================
+// Static Helper Methods (delegate to IWLOUpdater)
+// =============================================================================
+
 double Tile::log_odds_to_probability(double log_odds)
 {
-    // Delegate to IWLOUpdater (shared implementation)
     return IWLOUpdater::log_odds_to_probability(log_odds);
 }
 
 double Tile::intensity_to_weight(double intensity, const IWLOParams& params)
 {
-    // Delegate to IWLOUpdater (shared implementation)
     return IWLOUpdater::intensity_to_weight(intensity, params);
 }
 
 double Tile::compute_alpha(int observation_count, const IWLOParams& params)
 {
-    // Delegate to IWLOUpdater (shared implementation)
     return IWLOUpdater::compute_alpha(observation_count, params);
 }
 
+// =============================================================================
+// IWLO Update Methods
+// =============================================================================
+
 void Tile::update_voxel(const octomap::point3d& point,
                         double intensity,
-                        bool /* is_occupied */,  // Determined by intensity threshold
+                        bool /* is_occupied */,
                         const IWLOParams& params)
 {
     // Get octree key for this point
-    octomap::OcTreeKey key = octree_->coordToKey(point);
+    octomap::OcTreeKey key = storage_->coord_to_key(point);
 
     // Get or create IWLO metadata
-    auto& meta = iwlo_meta_[key];
+    IWLOMeta& meta = storage_->get_or_create_meta(key);
     meta.observation_count++;
     int n = meta.observation_count;
 
@@ -134,7 +105,7 @@ void Tile::update_voxel(const octomap::point3d& point,
     new_log_odds = std::max(params.L_min, std::min(params.L_max, new_log_odds));
 
     meta.log_odds = new_log_odds;
-    dirty_ = true;
+    storage_->mark_dirty();
 }
 
 void Tile::batch_update(const Eigen::MatrixXd& points,
@@ -153,216 +124,32 @@ void Tile::batch_update(const Eigen::MatrixXd& points,
     }
 }
 
+// =============================================================================
+// Persistence (delegate to OctreeStorage)
+// =============================================================================
+
 bool Tile::save(const std::string& tile_dir)
 {
-    // Create directory if needed
-    try {
-        fs::create_directories(tile_dir);
-    } catch (const std::exception& e) {
-        std::cerr << "[Tile] Failed to create directory: " << tile_dir
-                  << " - " << e.what() << std::endl;
-        return false;
-    }
-
-    // Sync IWLO metadata to octree before saving
-    sync_to_octree();
-
-    // Prune octree before saving (merge identical adjacent nodes)
-    // This optimizes storage and enables proper visualization of large uniform regions
-    octree_->prune();
-
-    // Save octree to .bt file (suppress OctoMap stdout/stderr at fd level)
-    std::string octree_path = tile_dir + "/octree.bt";
-    bool write_ok;
-    {
-        SuppressOutput suppress;
-        write_ok = octree_->writeBinary(octree_path);
-    }
-    if (!write_ok) {
-        return false;
-    }
-
-    // Save IWLO metadata
-    std::string meta_path = tile_dir + "/iwlo_meta.bin";
-    if (!save_iwlo_meta(meta_path)) {
-        std::cerr << "[Tile] Failed to save IWLO metadata: " << meta_path << std::endl;
-        return false;
-    }
-
-    dirty_ = false;
-    return true;
+    return storage_->save(tile_dir);
 }
 
 bool Tile::load(const std::string& tile_dir)
 {
-    // Load octree from .bt file (suppress OctoMap stdout/stderr at fd level)
-    std::string octree_path = tile_dir + "/octree.bt";
-    if (fs::exists(octree_path)) {
-        bool read_ok;
-        {
-            SuppressOutput suppress;
-            read_ok = octree_->readBinary(octree_path);
-        }
-        if (!read_ok) {
-            return false;
-        }
-    } else {
-        // No octree file - start with empty octree
-        octree_->clear();
-    }
-
-    // Load IWLO metadata
-    std::string meta_path = tile_dir + "/iwlo_meta.bin";
-    if (fs::exists(meta_path)) {
-        if (!load_iwlo_meta(meta_path)) {
-            std::cerr << "[Tile] Failed to load IWLO metadata: " << meta_path << std::endl;
-            return false;
-        }
-    } else {
-        // No metadata file - start with empty metadata
-        iwlo_meta_.clear();
-    }
-
-    dirty_ = false;
-    return true;
+    return storage_->load(tile_dir);
 }
 
-bool Tile::save_iwlo_meta(const std::string& filepath)
-{
-    std::ofstream ofs(filepath, std::ios::binary);
-    if (!ofs) {
-        return false;
-    }
-
-    // Write header: magic number + version + count
-    const uint32_t magic = 0x49574C4F;  // "IWLO"
-    const uint32_t version = 1;
-    const uint64_t count = iwlo_meta_.size();
-
-    ofs.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
-    ofs.write(reinterpret_cast<const char*>(&version), sizeof(version));
-    ofs.write(reinterpret_cast<const char*>(&count), sizeof(count));
-
-    // Write each entry: key[3] + log_odds + observation_count
-    for (const auto& [key, meta] : iwlo_meta_) {
-        ofs.write(reinterpret_cast<const char*>(&key[0]), sizeof(unsigned short));
-        ofs.write(reinterpret_cast<const char*>(&key[1]), sizeof(unsigned short));
-        ofs.write(reinterpret_cast<const char*>(&key[2]), sizeof(unsigned short));
-        ofs.write(reinterpret_cast<const char*>(&meta.log_odds), sizeof(double));
-        ofs.write(reinterpret_cast<const char*>(&meta.observation_count), sizeof(int));
-    }
-
-    return ofs.good();
-}
-
-bool Tile::load_iwlo_meta(const std::string& filepath)
-{
-    std::ifstream ifs(filepath, std::ios::binary);
-    if (!ifs) {
-        return false;
-    }
-
-    // Read header
-    uint32_t magic, version;
-    uint64_t count;
-
-    ifs.read(reinterpret_cast<char*>(&magic), sizeof(magic));
-    ifs.read(reinterpret_cast<char*>(&version), sizeof(version));
-    ifs.read(reinterpret_cast<char*>(&count), sizeof(count));
-
-    if (magic != 0x49574C4F) {  // "IWLO"
-        std::cerr << "[Tile] Invalid IWLO metadata file: bad magic number" << std::endl;
-        return false;
-    }
-
-    if (version != 1) {
-        std::cerr << "[Tile] Unsupported IWLO metadata version: " << version << std::endl;
-        return false;
-    }
-
-    // Read entries
-    iwlo_meta_.clear();
-    iwlo_meta_.reserve(count);
-
-    for (uint64_t i = 0; i < count; ++i) {
-        octomap::OcTreeKey key;
-        IWLOMeta meta;
-
-        ifs.read(reinterpret_cast<char*>(&key[0]), sizeof(unsigned short));
-        ifs.read(reinterpret_cast<char*>(&key[1]), sizeof(unsigned short));
-        ifs.read(reinterpret_cast<char*>(&key[2]), sizeof(unsigned short));
-        ifs.read(reinterpret_cast<char*>(&meta.log_odds), sizeof(double));
-        ifs.read(reinterpret_cast<char*>(&meta.observation_count), sizeof(int));
-
-        iwlo_meta_[key] = meta;
-    }
-
-    return ifs.good();
-}
-
-void Tile::sync_to_octree()
-{
-    // Update octree nodes based on IWLO metadata
-    // Preserve actual log_odds values (not just boolean occupied/free)
-    for (const auto& [key, meta] : iwlo_meta_) {
-        // Get coordinate from key
-        octomap::point3d coord = octree_->keyToCoord(key);
-
-        // Create/update node and set actual log_odds value
-        octomap::OcTreeNode* node = octree_->updateNode(coord, true, true);  // lazy_eval=true
-        if (node) {
-            node->setLogOdds(static_cast<float>(meta.log_odds));
-        }
-    }
-
-    // Update inner node occupancy after batch updates
-    octree_->updateInnerOccupancy();
-}
+// =============================================================================
+// Query Methods (delegate to OctreeStorage)
+// =============================================================================
 
 std::vector<OccupiedVoxel> Tile::get_occupied_voxels(double min_probability) const
 {
-    std::vector<OccupiedVoxel> result;
-    result.reserve(iwlo_meta_.size() / 2);  // Estimate half are occupied
-
-    double min_log_odds;
-    if (min_probability >= 1.0) {
-        min_log_odds = 10.0;  // Very high threshold
-    } else if (min_probability <= 0.0) {
-        min_log_odds = -10.0;  // Very low threshold
-    } else {
-        min_log_odds = std::log(min_probability / (1.0 - min_probability));
-    }
-
-    for (const auto& [key, meta] : iwlo_meta_) {
-        if (meta.log_odds > min_log_odds) {
-            octomap::point3d coord = octree_->keyToCoord(key);
-            double prob = log_odds_to_probability(meta.log_odds);
-            result.emplace_back(coord.x(), coord.y(), coord.z(), prob);
-        }
-    }
-
-    return result;
+    return storage_->get_occupied_voxels(min_probability);
 }
 
 bool Tile::has_occupied_voxels(double occupied_threshold) const
 {
-    // Convert probability threshold to log-odds
-    double log_odds_threshold;
-    if (occupied_threshold >= 1.0) {
-        log_odds_threshold = 10.0;
-    } else if (occupied_threshold <= 0.0) {
-        log_odds_threshold = -10.0;
-    } else {
-        log_odds_threshold = std::log(occupied_threshold / (1.0 - occupied_threshold));
-    }
-
-    // Check if any voxel exceeds threshold (early exit)
-    for (const auto& [key, meta] : iwlo_meta_) {
-        if (meta.log_odds >= log_odds_threshold) {
-            return true;
-        }
-    }
-    return false;
+    return storage_->has_occupied_voxels(occupied_threshold);
 }
 
 Eigen::MatrixXd Tile::get_occupied_voxels_matrix(double min_probability) const
@@ -383,6 +170,73 @@ Eigen::MatrixXd Tile::get_occupied_voxels_matrix(double min_probability) const
 
     return result;
 }
+
+// =============================================================================
+// OcTree Access (delegate to OctreeStorage)
+// =============================================================================
+
+octomap::OcTree* Tile::get_octree()
+{
+    return storage_->get_octree();
+}
+
+const octomap::OcTree* Tile::get_octree() const
+{
+    return storage_->get_octree();
+}
+
+// =============================================================================
+// State Management (delegate to OctreeStorage)
+// =============================================================================
+
+bool Tile::is_dirty() const
+{
+    return storage_->is_dirty();
+}
+
+void Tile::mark_clean()
+{
+    storage_->mark_clean();
+}
+
+void Tile::mark_dirty()
+{
+    storage_->mark_dirty();
+}
+
+size_t Tile::get_num_voxels() const
+{
+    return storage_->get_num_voxels();
+}
+
+// =============================================================================
+// Maintenance (delegate to OctreeStorage)
+// =============================================================================
+
+void Tile::sync_to_octree()
+{
+    storage_->sync_to_octree();
+}
+
+void Tile::clear()
+{
+    storage_->clear();
+}
+
+size_t Tile::prune()
+{
+    sync_to_octree();
+    return storage_->prune();
+}
+
+size_t Tile::get_memory_usage() const
+{
+    return storage_->get_memory_usage();
+}
+
+// =============================================================================
+// Tile-specific Methods (bounds, containment)
+// =============================================================================
 
 Eigen::Vector3d Tile::get_min_bound() const
 {
@@ -414,48 +268,6 @@ bool Tile::contains(const octomap::point3d& point) const
     return point.x() >= min_x && point.x() < max_x &&
            point.y() >= min_y && point.y() < max_y &&
            point.z() >= min_z && point.z() < max_z;
-}
-
-void Tile::clear()
-{
-    octree_->clear();
-    iwlo_meta_.clear();
-    dirty_ = true;
-}
-
-size_t Tile::prune()
-{
-    // First sync IWLO metadata to octree
-    sync_to_octree();
-
-    // Get node count before pruning
-    size_t nodes_before = octree_->calcNumNodes();
-
-    // Prune the octree (merge homogeneous child nodes)
-    octree_->prune();
-
-    // Get node count after pruning
-    size_t nodes_after = octree_->calcNumNodes();
-
-    size_t pruned = (nodes_before > nodes_after) ? (nodes_before - nodes_after) : 0;
-
-    if (pruned > 0) {
-        dirty_ = true;
-    }
-
-    return pruned;
-}
-
-size_t Tile::get_memory_usage() const
-{
-    // Estimate memory usage
-    // OcTree: ~32 bytes per node (rough estimate)
-    size_t octree_mem = octree_->calcNumNodes() * 32;
-
-    // IWLO metadata: key (6 bytes) + meta (12 bytes) + overhead (~16 bytes per entry)
-    size_t meta_mem = iwlo_meta_.size() * (6 + 12 + 16);
-
-    return octree_mem + meta_mem;
 }
 
 }  // namespace sonar_3d_reconstruction

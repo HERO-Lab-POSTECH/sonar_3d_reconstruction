@@ -10,6 +10,9 @@
 #include <vector>
 #include <functional>
 
+// Forward declaration
+namespace sonar_3d_reconstruction { class OctreeStorage; }
+
 namespace sonar_3d_reconstruction
 {
 
@@ -201,23 +204,23 @@ public:
      * Get internal OcTree (for visualization/merging)
      * @return Pointer to OcTree (may be null if empty)
      */
-    octomap::OcTree* get_octree() { return octree_.get(); }
-    const octomap::OcTree* get_octree() const { return octree_.get(); }
+    octomap::OcTree* get_octree();
+    const octomap::OcTree* get_octree() const;
 
     /**
      * Check if tile has been modified since last save
      */
-    bool is_dirty() const { return dirty_; }
+    bool is_dirty() const;
 
     /**
      * Mark tile as clean (after saving)
      */
-    void mark_clean() { dirty_ = false; }
+    void mark_clean();
 
     /**
      * Mark tile as dirty (after modification)
      */
-    void mark_dirty() { dirty_ = true; }
+    void mark_dirty();
 
     /**
      * Get tile index
@@ -227,7 +230,7 @@ public:
     /**
      * Get number of voxels in tile
      */
-    size_t get_num_voxels() const { return iwlo_meta_.size(); }
+    size_t get_num_voxels() const;
 
     /**
      * Check if tile has any occupied voxels (for save filtering)
@@ -275,36 +278,23 @@ public:
 
 private:
     TileIndex index_;
-    double resolution_;
     double tile_size_;
-    std::unique_ptr<octomap::OcTree> octree_;
-    std::unordered_map<octomap::OcTreeKey, IWLOMeta, OcTreeKeyHash> iwlo_meta_;
-    bool dirty_;
+    std::unique_ptr<OctreeStorage> storage_;  // Delegated storage
 
     /**
-     * Convert log-odds to probability
+     * Convert log-odds to probability (delegates to IWLOUpdater)
      */
     static double log_odds_to_probability(double log_odds);
 
     /**
-     * Convert intensity to weight (sigmoid function)
+     * Convert intensity to weight (delegates to IWLOUpdater)
      */
     static double intensity_to_weight(double intensity, const IWLOParams& params);
 
     /**
-     * Compute learning rate alpha
+     * Compute learning rate alpha (delegates to IWLOUpdater)
      */
     static double compute_alpha(int observation_count, const IWLOParams& params);
-
-    /**
-     * Save IWLO metadata to binary file
-     */
-    bool save_iwlo_meta(const std::string& filepath);
-
-    /**
-     * Load IWLO metadata from binary file
-     */
-    bool load_iwlo_meta(const std::string& filepath);
 };
 
 }  // namespace sonar_3d_reconstruction
