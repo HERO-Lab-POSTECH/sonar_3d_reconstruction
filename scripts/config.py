@@ -18,10 +18,10 @@ from rcl_interfaces.msg import ParameterDescriptor, SetParametersResult
 class ParameterDef:
     """Parameter definition for ROS2 parameter declaration and management"""
     name: str                           # Parameter name (e.g., "iwlo.sharpness")
-    default: Any                        # Default value (YAML 없을 때 fallback)
-    description: str = ""               # ROS2 ParameterDescriptor용 설명
-    read_only: bool = False             # 런타임 변경 불가 (ParameterDescriptor에 적용)
-    handler: Optional[str] = None       # 동적 업데이트 핸들러 메서드명 (e.g., "update_intensity")
+    default: Any                        # Default value (fallback when YAML not present)
+    description: str = ""               # Description for ROS2 ParameterDescriptor
+    read_only: bool = False             # Immutable at runtime (applied to ParameterDescriptor)
+    handler: Optional[str] = None       # Dynamic update handler method name (e.g., "update_intensity")
 
 
 class ParameterManager:
@@ -322,16 +322,17 @@ VISUALIZER_PARAMS: List[ParameterDef] = [
     ParameterDef('frames.map', 'camera_init',
                  'Map frame ID',
                  read_only=True),
+    # Fallback values when metadata.json not found
     ParameterDef('octree.voxel_resolution', 0.1,
-                 'Octree voxel resolution in meters',
+                 'Fallback voxel resolution (reads from metadata.json if available)',
                  read_only=True),
     ParameterDef('outofcore.tile_size', 10.0,
-                 'Tile size in meters',
+                 'Fallback tile size (reads from metadata.json if available)',
                  read_only=True),
     ParameterDef('publish_rate', 1.0,
                  'Map publishing rate in Hz',
                  read_only=True),
-    ParameterDef('refresh_interval', 10.0,
+    ParameterDef('refresh_interval', 5.0,
                  'Tile refresh interval in seconds',
                  read_only=True),
     ParameterDef('auto_refresh', True,

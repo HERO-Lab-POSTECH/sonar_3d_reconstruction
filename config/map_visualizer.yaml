@@ -1,29 +1,23 @@
 # Map Visualizer Node Parameters
-# NOTE: This file must define ALL parameters needed by map_visualizer node
-#       because ROS2 only loads params matching the node namespace.
+# Values used for standalone execution (overridden by common.yaml when using 3d_mapping.launch)
+# NOTE: resolution, tile_size are automatically read from metadata.json
 
 map_visualizer:
   ros__parameters:
-    # === Shared parameters (must match common.yaml values) ===
-    # These are duplicated here because common.yaml uses sonar_3d_mapper namespace
+    # === Map settings (standalone mode) ===
     outofcore:
-      map_path: "/workspace/data/map_tiles"  # Will be overridden by launch file with timestamped path
-      tile_size: 0.4
-
-    octree:
-      voxel_resolution: 0.1
+      map_path: "/workspace/data/map_tiles"  # Overridden by launch
 
     mapping:
-      occupied_threshold: 0.7
+      occupied_threshold: 0.7   # Overridden by common.yaml via launch
 
     frames:
-      map: "camera_init"
+      map: "camera_init"        # Overridden by common.yaml via launch
 
     # === Visualizer-specific parameters ===
-    publish_rate: 1.0           # Hz - topic publishing frequency
+    publish_rate: 1.0           # Hz
     auto_refresh: true          # Periodically reload tiles from disk
-    refresh_interval: 5.0       # seconds - reload interval
+    refresh_interval: 5.0       # seconds
 
     visualization:
       mode: 1                   # 0=pointcloud, 1=octomap, 2=all
-                                # NOTE: occupied_threshold only works in pointcloud mode!

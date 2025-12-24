@@ -44,13 +44,13 @@ def generate_timestamped_map_path(context, *args, **kwargs):
         yaml_params = yaml.safe_load(f)['sonar_3d_mapper']['ros__parameters']
 
     # Generate timestamped map path
-    # Launch arg로 직접 지정한 경우만 그대로 사용, 아니면 항상 타임스탬프 폴더 생성
+    # Use launch arg if explicitly specified, otherwise create timestamped folder
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     if map_path_arg:
-        # Launch arg로 직접 지정: 그대로 사용
+        # Use explicitly specified launch arg as-is
         map_path = map_path_arg
     else:
-        # YAML base_path 아래에 타임스탬프 폴더 생성
+        # Create timestamped subfolder under YAML base_path
         base_path = yaml_params.get('outofcore', {}).get('map_path', '/workspace/data/map_tiles')
         map_path = os.path.join(base_path, timestamp)
 
@@ -86,12 +86,12 @@ def generate_timestamped_map_path(context, *args, **kwargs):
 
     # Map Visualizer node (if enabled)
     if launch_visualizer.lower() == 'true':
-        # common_config 네임스페이스가 달라서 직접 전달 필요
-        # tile_size, voxel_resolution은 metadata.json에서 자동으로 읽음
+        # Pass values explicitly due to namespace mismatch with common_config
+        # tile_size, voxel_resolution are automatically read from metadata.json
         visualizer_overrides = {
             'use_sim_time': use_sim_time == 'true',
             'outofcore.map_path': map_path,
-            # common.yaml 값 전달 (frames, mapping)
+            # Pass common.yaml values (frames, mapping)
             'frames.map': yaml_params.get('frames', {}).get('map', 'camera_init'),
             'mapping.occupied_threshold': yaml_params.get('mapping', {}).get('occupied_threshold', 0.7),
         }

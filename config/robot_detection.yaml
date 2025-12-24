@@ -8,5 +8,5 @@ sonar_3d_mapper:
       min_threshold: 180         # intensity >= this = robot (high reflectivity)
       topic: "/sonar_robot_detections"
     terrain_detection:
-      min_threshold: 80          # terrain intensity range (common.yaml과 일치)
-      max_threshold: 180         # common.yaml과 일치
+      min_threshold: 80          # terrain intensity range (synced with common.yaml)
+      max_threshold: 180         # synced with common.yaml
