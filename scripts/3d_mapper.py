@@ -491,6 +491,64 @@ class SonarTo3DMapper:
         if new_range > 0:
             self.max_range = new_range
 
+    # === Parameter update handlers for ParameterManager ===
+
+    def update_min_range(self, value: float) -> None:
+        """Update minimum range parameter"""
+        self.min_range = float(value)
+
+    def update_intensity(self, value: int) -> None:
+        """Update intensity threshold and propagate to C++ backend"""
+        self.intensity_threshold = int(value)
+        if hasattr(self, 'octree') and self.octree is not None:
+            self.octree.set_intensity_params(self.intensity_threshold, self.intensity_max)
+
+    def update_occupied_threshold(self, value: float) -> None:
+        """Update occupied threshold parameter"""
+        self.occupied_threshold = float(value)
+
+    def update_angular_cone(self, value: float) -> None:
+        """Update angular cone width parameter"""
+        self.angular_cone_width = float(value)
+
+    def update_frame_skip(self, value: int) -> None:
+        """Update frame skip parameter"""
+        self.frame_skip = int(value)
+
+    def update_visualization(self, value: bool) -> None:
+        """Update visualization flag (handled by node)"""
+        pass  # Node-level parameter
+
+    def update_dynamic_expansion(self, value: bool) -> None:
+        """Update dynamic expansion flag"""
+        self.dynamic_expansion = bool(value)
+
+    def update_orientation(self, value: float) -> None:
+        """
+        Update sonar orientation (roll/pitch/yaw)
+        Note: Requires node-level coordination for TF update
+        """
+        pass  # Node handles this with update_sonar_orientation()
+
+    def update_terrain_min(self, value: int) -> None:
+        """Update terrain minimum threshold"""
+        self.terrain_min_threshold = int(value)
+
+    def update_terrain_max(self, value: int) -> None:
+        """Update terrain maximum threshold"""
+        self.terrain_max_threshold = int(value)
+
+    def update_robot_min(self, value: int) -> None:
+        """Update robot detection minimum threshold"""
+        self.robot_min_threshold = int(value)
+
+    def update_crosstalk(self, value) -> None:
+        """Update crosstalk filter parameters"""
+        if self.crosstalk_filter is not None:
+            # Handler receives any crosstalk.* parameter change
+            # Actual parameter name is checked by node callback
+            pass
+
     def is_bearing_in_valid_fov(self, bearing_angle: float) -> bool:
         """Check if bearing angle is within valid FOV"""
         half_fov = self.horizontal_fov / 2

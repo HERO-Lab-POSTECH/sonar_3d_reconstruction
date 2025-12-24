@@ -49,6 +49,10 @@ spec_config = importlib.util.spec_from_file_location("config",
 config_module = importlib.util.module_from_spec(spec_config)
 spec_config.loader.exec_module(config_module)
 SonarMapperConfig = config_module.SonarMapperConfig
+ParameterManager = config_module.ParameterManager
+MAPPER_PARAMS = config_module.MAPPER_PARAMS
+ROBOT_DETECTION_PARAMS = config_module.ROBOT_DETECTION_PARAMS
+CROSSTALK_PARAMS = config_module.CROSSTALK_PARAMS
 
 
 def get_next_test_number(base_path: str, prefix: str) -> int:
@@ -84,116 +88,23 @@ class SonarMapperNode(Node):
         self.enable_robot_detection = self.get_parameter('robot_detection.enabled').value
         self.enable_crosstalk = self.get_parameter('crosstalk.enabled').value
 
-        # Declare parameters with default values (lowest priority - priority 4)
-        # These defaults will be overridden by YAML, launch file, or command line args
-        self.declare_parameters(
-            namespace='',
-            parameters=[
-                # === Dynamic Parameters (can be changed at runtime) ===
-                # Filtering (filtering.*)
-                ('filtering.min_range', 0.5),
-                ('filtering.intensity_threshold', 35),
-
-                # Mapping (mapping.*)
-                ('mapping.occupied_threshold', 0.7),
-                ('mapping.angular_cone_width', 0.5),
-
-                # Processing (processing.*)
-                ('processing.frame_skip', 1),
-
-                # Visualization (visualization.*)
-                ('visualization.show_opencv_visualization', False),
-                ('visualization.pointcloud_publish_rate', 10.0),
-                ('visualization.tile_save_interval', 5.0),
-
-                # Octree (octree.*)
-                ('octree.dynamic_expansion', True),
-
-                # Mounting orientation (dynamic - can change at runtime)
-                ('mounting.orientation.roll', 0.0),
-                ('mounting.orientation.pitch', 90.0),
-                ('mounting.orientation.yaw', 0.0),
-
-                # === Read-only Parameters (cannot change at runtime) ===
-                # Sonar hardware (sonar.*)
-                ('sonar.horizontal_fov', 130.0, ParameterDescriptor(read_only=True)),
-                ('sonar.vertical_aperture', 20.0, ParameterDescriptor(read_only=True)),
-
-                # Mounting position (read-only)
-                ('mounting.position.x', 0.0, ParameterDescriptor(read_only=True)),
-                ('mounting.position.y', 0.0, ParameterDescriptor(read_only=True)),
-                ('mounting.position.z', -0.5, ParameterDescriptor(read_only=True)),
-
-                # Octree structure (octree.*)
-                ('octree.voxel_resolution', 0.05, ParameterDescriptor(read_only=True)),
-                ('octree.use_cpp_backend', True, ParameterDescriptor(read_only=True)),
-
-                # Adaptive (adaptive.*)
-                ('adaptive.update', True, ParameterDescriptor(read_only=True)),
-                ('adaptive.threshold', 0.5, ParameterDescriptor(read_only=True)),
-                ('adaptive.max_ratio', 0.3, ParameterDescriptor(read_only=True)),
-
-                # IWLO (iwlo.*)
-                ('iwlo.sharpness', 3.0, ParameterDescriptor(read_only=True)),
-                ('iwlo.decay_rate', 0.1, ParameterDescriptor(read_only=True)),
-                ('iwlo.min_alpha', 0.1, ParameterDescriptor(read_only=True)),
-                ('iwlo.L_occ', 3.5, ParameterDescriptor(read_only=True)),
-                ('iwlo.L_free', -3.0, ParameterDescriptor(read_only=True)),
-                ('iwlo.L_min', -10.0, ParameterDescriptor(read_only=True)),
-                ('iwlo.L_max', 10.0, ParameterDescriptor(read_only=True)),
-
-                # Out-of-Core settings (outofcore.*)
-                ('outofcore.use', False, ParameterDescriptor(read_only=True)),
-                ('outofcore.map_path', '/workspace/data/map_tiles', ParameterDescriptor(read_only=True)),
-                ('outofcore.tile_size', 10.0, ParameterDescriptor(read_only=True)),
-                ('outofcore.cache_size', 16, ParameterDescriptor(read_only=True)),
-
-                # Frame IDs (frames.*)
-                ('frames.sonar', 'sonar_link', ParameterDescriptor(read_only=True)),
-                ('frames.base', 'base_link', ParameterDescriptor(read_only=True)),
-                ('frames.map', 'map', ParameterDescriptor(read_only=True)),
-                ('frames.publish_tf', True, ParameterDescriptor(read_only=True)),
-
-                # Topics (topics.*)
-                ('topics.sonar', '/sensor/sonar/oculus/m750d/image', ParameterDescriptor(read_only=True)),
-                ('topics.odometry', '/fast_lio/odometry', ParameterDescriptor(read_only=True)),
-                ('topics.pointcloud', '/sonar_3d_map', ParameterDescriptor(read_only=True)),
-                ('topics.marker', '/sonar_3d_map_markers', ParameterDescriptor(read_only=True)),
-
-                # Recording (recording.*)
-                ('recording.bag', False, ParameterDescriptor(read_only=True)),
-                ('recording.base_path', '/workspace/data/experiments', ParameterDescriptor(read_only=True)),
-                ('recording.prefix', 'test', ParameterDescriptor(read_only=True))
-            ]
-        )
-
-        # === Step 2: Conditional parameters (robot_detection) ===
+        # === Step 2: Declare all parameters using ParameterManager ===
+        params_to_declare = list(MAPPER_PARAMS)
         if self.enable_robot_detection:
-            self.declare_parameters(
-                namespace='',
-                parameters=[
-                    ('terrain_detection.min_threshold', 80),
-                    ('terrain_detection.max_threshold', 180),
-                    ('robot_detection.min_threshold', 180),
-                    ('robot_detection.topic', '/sonar_robot_detections', ParameterDescriptor(read_only=True)),
-                ]
-            )
-
-        # === Step 3: Conditional parameters (crosstalk) ===
+            params_to_declare.extend(ROBOT_DETECTION_PARAMS)
         if self.enable_crosstalk:
-            self.declare_parameters(
-                namespace='',
-                parameters=[
-                    ('crosstalk.morpho_enabled', True),
-                    ('crosstalk.morpho_kernel_size', 5),
-                    ('crosstalk.morpho_kernel_shape', 'rect'),
-                    ('crosstalk.azimuth_enabled', True),
-                    ('crosstalk.azimuth_threshold', 0.5),
-                ]
-            )
-        
-        # Load configuration from ROS2 parameters using dataclass
-        config_dataclass = SonarMapperConfig.from_ros_params(self)
+            params_to_declare.extend(CROSSTALK_PARAMS)
+        ParameterManager.declare_all(self, params_to_declare)
+
+        # === Step 3: Create configuration from parameters ===
+        params_dict = ParameterManager.get_all(self, params_to_declare)
+        params_dict['robot_detection.enabled'] = self.enable_robot_detection
+        params_dict['crosstalk.enabled'] = self.enable_crosstalk
+        config_dataclass = SonarMapperConfig.from_params_dict(
+            params_dict,
+            enable_robot_detection=self.enable_robot_detection,
+            enable_crosstalk=self.enable_crosstalk
+        )
         config = config_dataclass.to_mapper_dict()
         
         # Get other parameters (with namespaced names)
@@ -226,12 +137,12 @@ class SonarMapperNode(Node):
 
         # Initialize mapper
         self.mapper = SonarTo3DMapper(config)
-        
+
         # Backend info (silent - available via get_memory_stats())
-        
+
         # Create CV bridge for image conversion
         self.bridge = CvBridge()
-        
+
         # Initialize static TF broadcaster if enabled
         if self.publish_tf:
             from tf2_ros import StaticTransformBroadcaster
@@ -240,10 +151,10 @@ class SonarMapperNode(Node):
             self.sonar_orientation = config['sonar_orientation']
             # Publish static transform once
             self.publish_static_tf()
-        
+
         # Initialize latest_odometry to None
         self.latest_odometry = None
-        
+
         # Frame counter
         self.frame_count = 0
         self.frame_skip = config['frame_skip']
@@ -350,66 +261,57 @@ class SonarMapperNode(Node):
         Handle dynamic parameter updates at runtime.
         All non-read-only parameters are supported.
         """
-        # Track which C++ backend updates are needed
-        update_intensity = False
+        # Track special cases that need additional processing
         update_orientation = False
+        orientation_changed = False
 
         for param in params:
             name = param.name
             value = param.value
 
-            # === Filtering ===
-            if name == 'filtering.intensity_threshold':
-                self.mapper.intensity_threshold = int(value)
-                update_intensity = True
-            elif name == 'filtering.min_range':
-                self.mapper.min_range = float(value)
-
-            # === Mapping ===
+            # === Standard parameters (delegated to mapper) ===
+            if name == 'filtering.min_range':
+                self.mapper.update_min_range(value)
+            elif name == 'filtering.intensity_threshold':
+                self.mapper.update_intensity(value)
             elif name == 'mapping.occupied_threshold':
-                self.mapper.occupied_threshold = float(value)
+                self.mapper.update_occupied_threshold(value)
             elif name == 'mapping.angular_cone_width':
-                self.mapper.angular_cone_width = float(value)
-
-            # === Processing ===
+                self.mapper.update_angular_cone(value)
             elif name == 'processing.frame_skip':
                 self.frame_skip = int(value)
-                self.mapper.frame_skip = int(value)
+                self.mapper.update_frame_skip(value)
+            elif name == 'octree.dynamic_expansion':
+                self.mapper.update_dynamic_expansion(value)
 
-            # === Visualization ===
+            # === Node-level parameters ===
             elif name == 'visualization.show_opencv_visualization':
                 self.show_opencv_visualization = bool(value)
             elif name == 'visualization.pointcloud_publish_rate':
                 self.pointcloud_publish_rate = float(value)
-                # Note: Timer recreation would require more complex logic
             elif name == 'visualization.tile_save_interval':
                 self.tile_save_interval = float(value)
 
-            # === Octree ===
-            elif name == 'octree.dynamic_expansion':
-                self.mapper.dynamic_expansion = bool(value)
-                # Note: currently stored but not actively used in mapping logic
-
-            # === Mounting Orientation ===
+            # === Mounting Orientation (requires TF update) ===
             elif name == 'mounting.orientation.roll':
                 self.mapper.sonar_orientation[0] = np.radians(float(value))
-                update_orientation = True
+                orientation_changed = True
             elif name == 'mounting.orientation.pitch':
                 self.mapper.sonar_orientation[1] = np.radians(float(value))
-                update_orientation = True
+                orientation_changed = True
             elif name == 'mounting.orientation.yaw':
                 self.mapper.sonar_orientation[2] = np.radians(float(value))
-                update_orientation = True
+                orientation_changed = True
 
-            # === Terrain/Robot Detection (conditional) ===
+            # === Robot Detection (conditional) ===
             elif name == 'terrain_detection.min_threshold':
-                self.mapper.terrain_min_threshold = int(value)
+                self.mapper.update_terrain_min(value)
             elif name == 'terrain_detection.max_threshold':
-                self.mapper.terrain_max_threshold = int(value)
+                self.mapper.update_terrain_max(value)
             elif name == 'robot_detection.min_threshold':
-                self.mapper.robot_min_threshold = int(value)
+                self.mapper.update_robot_min(value)
 
-            # === Crosstalk (conditional) - update actual filter object ===
+            # === Crosstalk (conditional) - direct filter update ===
             elif name == 'crosstalk.morpho_enabled':
                 if self.mapper.crosstalk_filter is not None:
                     self.mapper.crosstalk_filter.morpho_enabled = bool(value)
@@ -428,15 +330,8 @@ class SonarMapperNode(Node):
 
             self.get_logger().debug(f'{name} updated: {value}')
 
-        # Apply C++ backend updates
-        if update_intensity and hasattr(self.mapper, 'octree') and self.mapper.octree is not None:
-            self.mapper.octree.set_intensity_params(
-                self.mapper.intensity_threshold,
-                getattr(self.mapper, 'intensity_max', 255)
-            )
-
         # Update transform matrix and TF if orientation changed
-        if update_orientation:
+        if orientation_changed:
             self.mapper.update_sonar_orientation()
             if self.publish_tf:
                 self.sonar_orientation = self.mapper.sonar_orientation.copy()

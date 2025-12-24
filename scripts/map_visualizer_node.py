@@ -22,7 +22,6 @@ import time
 # ROS2 message imports
 from sensor_msgs.msg import PointCloud2, PointField
 from std_msgs.msg import Header, Int32MultiArray
-from rcl_interfaces.msg import SetParametersResult, ParameterDescriptor, IntegerRange
 
 # OctoMap message import
 try:
@@ -30,6 +29,9 @@ try:
     OCTOMAP_MSGS_AVAILABLE = True
 except ImportError:
     OCTOMAP_MSGS_AVAILABLE = False
+
+# Import parameter management
+from config import ParameterManager, VISUALIZER_PARAMS
 
 # Import C++ module
 try:
@@ -63,47 +65,28 @@ class MapVisualizerNode(Node):
     def __init__(self):
         super().__init__('map_visualizer')
 
-        # Read-only descriptor
-        read_only = ParameterDescriptor(read_only=True)
+        # Declare all parameters using ParameterManager
+        ParameterManager.declare_all(self, VISUALIZER_PARAMS)
 
-        # Visualization mode descriptor with integer range (0=pointcloud, 1=octomap, 2=all)
-        vis_mode_desc = ParameterDescriptor(
-            description='0=pointcloud, 1=octomap, 2=all (threshold only works in pointcloud)',
-            integer_range=[IntegerRange(from_value=0, to_value=2, step=1)]
-        )
+        # Get all parameter values
+        params = ParameterManager.get_all(self, VISUALIZER_PARAMS)
 
-        # Declare parameters individually (avoids type inference issues)
-        # String parameters
-        self.declare_parameter('outofcore.map_path', '/workspace/data/map_tiles', read_only)
-        self.declare_parameter('frames.map', 'camera_init', read_only)
-
-        # Integer parameters
-        self.declare_parameter('visualization.mode', 0, vis_mode_desc)  # 0=pointcloud
-
-        # Float parameters
-        self.declare_parameter('octree.voxel_resolution', 0.1, read_only)
-        self.declare_parameter('outofcore.tile_size', 10.0, read_only)
-        self.declare_parameter('publish_rate', 1.0, read_only)
-        self.declare_parameter('refresh_interval', 10.0, read_only)
-        self.declare_parameter('mapping.occupied_threshold', 0.7)
-
-        # Bool parameters
-        self.declare_parameter('auto_refresh', True, read_only)
-
-        # Get parameters
-        self.map_path = self.get_parameter('outofcore.map_path').value
-        self.resolution = self.get_parameter('octree.voxel_resolution').value
-        self.tile_size = self.get_parameter('outofcore.tile_size').value
-        self.frame_id = self.get_parameter('frames.map').value
-        self.occupied_threshold = self.get_parameter('mapping.occupied_threshold').value
-        self.publish_rate = self.get_parameter('publish_rate').value
-        self.visualization_mode = self.get_parameter('visualization.mode').value  # Integer now
-        self.auto_refresh = self.get_parameter('auto_refresh').value
-        self.refresh_interval = self.get_parameter('refresh_interval').value
+        # Extract parameters
+        self.map_path = params['outofcore.map_path']
+        self.resolution = params['octree.voxel_resolution']
+        self.tile_size = params['outofcore.tile_size']
+        self.frame_id = params['frames.map']
+        self.occupied_threshold = params['mapping.occupied_threshold']
+        self.publish_rate = params['publish_rate']
+        self.visualization_mode = params['visualization.mode']
+        self.auto_refresh = params['auto_refresh']
+        self.refresh_interval = params['refresh_interval']
         self.last_refresh_time = 0.0
 
         # Register parameter callback for dynamic updates
-        self.add_on_set_parameters_callback(self.parameter_callback)
+        self.add_on_set_parameters_callback(
+            ParameterManager.create_callback(self, VISUALIZER_PARAMS, self)
+        )
 
         # Fallback to pointcloud if octomap_msgs not available
         if self.visualization_mode == self.VIS_MODE_OCTOMAP and not OCTOMAP_MSGS_AVAILABLE:
@@ -163,21 +146,21 @@ class MapVisualizerNode(Node):
             f'Visualizer: {self.VIS_MODE_NAMES[self.visualization_mode]} mode, {self.publish_rate}Hz'
         )
 
-    def parameter_callback(self, params):
-        """Handle dynamic parameter updates"""
-        for param in params:
-            if param.name == 'mapping.occupied_threshold':
-                self.occupied_threshold = float(param.value)
-                self.get_logger().info(f'occupied_threshold: {param.value}')
-            elif param.name == 'visualization.mode':
-                new_mode = int(param.value)
-                if 0 <= new_mode <= 2:
-                    if new_mode == self.VIS_MODE_OCTOMAP and not OCTOMAP_MSGS_AVAILABLE:
-                        self.get_logger().warn('octomap_msgs not available')
-                    else:
-                        self.visualization_mode = new_mode
-                        self.get_logger().info(f'visualization.mode: {self.VIS_MODE_NAMES[new_mode]}')
-        return SetParametersResult(successful=True)
+    # Parameter update handlers (called by ParameterManager)
+    def update_occupied_threshold(self, value):
+        """Update occupied threshold dynamically"""
+        self.occupied_threshold = float(value)
+        self.get_logger().info(f'occupied_threshold: {value}')
+
+    def update_visualization_mode(self, value):
+        """Update visualization mode dynamically"""
+        new_mode = int(value)
+        if 0 <= new_mode <= 2:
+            if new_mode == self.VIS_MODE_OCTOMAP and not OCTOMAP_MSGS_AVAILABLE:
+                self.get_logger().warn('octomap_msgs not available')
+            else:
+                self.visualization_mode = new_mode
+                self.get_logger().info(f'visualization.mode: {self.VIS_MODE_NAMES[new_mode]}')
 
     def tile_update_callback(self, msg: Int32MultiArray):
         """Receive updated tile indices from mapper node"""

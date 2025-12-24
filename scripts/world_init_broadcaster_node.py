@@ -19,6 +19,9 @@ from sensor_msgs.msg import Imu
 from geometry_msgs.msg import TransformStamped
 from tf2_ros import StaticTransformBroadcaster
 
+# Import parameter management
+from config import ParameterManager, WORLD_INIT_PARAMS
+
 
 def euler_from_rotation_matrix(R):
     """Extract roll, pitch, yaw from rotation matrix (ZYX convention)"""
@@ -60,16 +63,17 @@ class WorldInitBroadcaster(Node):
     def __init__(self):
         super().__init__('world_init_broadcaster')
 
-        # Parameters
-        self.declare_parameter('imu_topic', '/sensor/ins/livox_mid360/imu')
-        self.declare_parameter('init_samples', 50)  # Number of IMU samples
-        self.declare_parameter('parent_frame', 'world_init')
-        self.declare_parameter('child_frame', 'camera_init')
+        # Declare all parameters using ParameterManager
+        ParameterManager.declare_all(self, WORLD_INIT_PARAMS)
 
-        imu_topic = self.get_parameter('imu_topic').value
-        self.init_samples = self.get_parameter('init_samples').value
-        self.parent_frame = self.get_parameter('parent_frame').value
-        self.child_frame = self.get_parameter('child_frame').value
+        # Get all parameter values
+        params = ParameterManager.get_all(self, WORLD_INIT_PARAMS)
+
+        # Extract parameters
+        imu_topic = params['imu_topic']
+        self.init_samples = params['init_samples']
+        self.parent_frame = params['parent_frame']
+        self.child_frame = params['child_frame']
 
         # State
         self.acc_samples = []
