@@ -1,5 +1,15 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [2025-12-24]
+
+### Removed
+- **미사용 coordinate_transform 코드 제거**
+  - `coordinate_transform.cpp`, `coordinate_transform.h` 삭제
+  - CMakeLists.txt에 빌드 설정 없었고, Python에서 import 안됨
+  - 좌표 변환은 `3d_mapper.py`에서 직접 처리
+
+---
+
 ## [2025-12-04]
 
 ### Added
