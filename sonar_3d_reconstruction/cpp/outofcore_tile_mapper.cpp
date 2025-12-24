@@ -368,40 +368,85 @@ std::unique_ptr<octomap::OcTree> OutofcoreTileMapper::get_merged_octree()
 std::unique_ptr<octomap::OcTree> OutofcoreTileMapper::get_full_merged_octree(double min_probability)
 {
     auto merged = std::make_unique<octomap::OcTree>(resolution_);
+    unsigned int max_depth = merged->getTreeDepth();
+
+    // Convert probability to log-odds threshold
+    double log_odds_threshold = -std::numeric_limits<double>::infinity();
+    if (min_probability > 0.0 && min_probability < 1.0) {
+        log_odds_threshold = std::log(min_probability / (1.0 - min_probability));
+    }
 
     // Get all tiles
     auto tile_indices = tile_manager_.list_all_tiles();
-
-    size_t total_voxels = 0;
 
     for (const auto& idx : tile_indices) {
         // Load tile
         Tile* tile = get_or_load_tile(idx);
 
-        if (tile) {
-            // Use tile's get_occupied_voxels which filters using iwlo_meta_
-            // This ensures consistency with pointcloud output
-            auto voxels = tile->get_occupied_voxels(min_probability);
-            total_voxels += voxels.size();
+        if (tile && tile->get_octree()) {
+            octomap::OcTree* src_tree = tile->get_octree();
 
-            // Add each voxel to merged octree
-            for (const auto& v : voxels) {
-                octomap::point3d pt(v.x, v.y, v.z);
-                octomap::OcTreeNode* node = merged->updateNode(pt, true, true);
-                if (node) {
-                    // Convert probability back to log-odds
-                    double log_odds = std::log(v.probability / (1.0 - v.probability));
-                    node->setLogOdds(log_odds);
+            // Iterate through leaf nodes (preserves pruned structure)
+            for (auto it = src_tree->begin_leafs(); it != src_tree->end_leafs(); ++it) {
+                float log_odds = it->getLogOdds();
+
+                // Skip voxels at or below threshold (consistent with pointcloud's > comparison)
+                if (log_odds <= log_odds_threshold) {
+                    continue;
+                }
+
+                unsigned int node_depth = it.getDepth();
+                octomap::point3d center = it.getCoordinate();
+
+                if (node_depth == max_depth) {
+                    // Max depth node: copy directly
+                    octomap::OcTreeNode* node = merged->updateNode(center, true, true);
+                    if (node) {
+                        node->setLogOdds(log_odds);
+                    }
+                } else {
+                    // Pruned (larger) node: expand into max-res voxels with same log_odds
+                    // They will be merged back by prune() since they have identical values
+                    double node_size = it.getSize();
+                    double half_size = node_size / 2.0;
+
+                    octomap::point3d min_pt(center.x() - half_size + resolution_/2,
+                                           center.y() - half_size + resolution_/2,
+                                           center.z() - half_size + resolution_/2);
+                    octomap::point3d max_pt(center.x() + half_size - resolution_/2,
+                                           center.y() + half_size - resolution_/2,
+                                           center.z() + half_size - resolution_/2);
+
+                    for (double x = min_pt.x(); x <= max_pt.x() + resolution_/4; x += resolution_) {
+                        for (double y = min_pt.y(); y <= max_pt.y() + resolution_/4; y += resolution_) {
+                            for (double z = min_pt.z(); z <= max_pt.z() + resolution_/4; z += resolution_) {
+                                octomap::OcTreeNode* node = merged->updateNode(
+                                    octomap::point3d(x, y, z), true, true);
+                                if (node) {
+                                    node->setLogOdds(log_odds);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
-    // Prune identical adjacent nodes to optimize tree structure
+    // Prune merged tree
     merged->prune();
 
     // Update inner occupancy for proper visualization
     merged->updateInnerOccupancy();
+
+    // Debug: count leaves
+    size_t leaf_count = 0;
+    for (auto it = merged->begin_leafs(); it != merged->end_leafs(); ++it) {
+        leaf_count++;
+    }
+    std::cerr << "[OctoMap] threshold=" << min_probability
+              << " log_odds_th=" << log_odds_threshold
+              << " leaves=" << leaf_count << std::endl;
 
     return merged;
 }

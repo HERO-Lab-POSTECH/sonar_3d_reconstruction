@@ -267,6 +267,12 @@ public:
      */
     size_t get_memory_usage() const;
 
+    /**
+     * Sync IWLO metadata to OcTree (for visualization)
+     * Call before accessing octree to ensure log_odds are up-to-date
+     */
+    void sync_to_octree();
+
 private:
     TileIndex index_;
     double resolution_;
@@ -299,11 +305,6 @@ private:
      * Load IWLO metadata from binary file
      */
     bool load_iwlo_meta(const std::string& filepath);
-
-    /**
-     * Sync IWLO metadata to OcTree (for visualization)
-     */
-    void sync_to_octree();
 };
 
 }  // namespace sonar_3d_reconstruction
