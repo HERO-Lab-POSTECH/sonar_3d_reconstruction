@@ -2,6 +2,8 @@
 
 Real-time probabilistic 3D underwater terrain mapping system using Oculus multibeam sonar and Fast-LIO odometry.
 
+**Documentation**: https://luckkim123.github.io/sonar_3d_reconstruction/
+
 ## Features
 
 - **IWLO Probability Update**: Intensity-Weighted Log-Odds Bayesian mapping
