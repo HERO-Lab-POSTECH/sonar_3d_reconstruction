@@ -48,7 +48,7 @@ sonar_3d_mapper:
     #===== Out-of-Core Storage (Read-only) =====
     outofcore:
       use: true                              # true = disk-based, false = RAM-based
-      map_path: "/workspace/data/5_khnp/20251219_seafloor_mapping/raw_oculus_m3000d_test_v2/map_tiles"       # Tile storage directory
+      map_path: "/workspace/data/map_tiles"  # Base directory (timestamped subfolder auto-created)
       tile_size: 0.4                         # Tile size in meters
       cache_size: 16                         # Max tiles in memory
 

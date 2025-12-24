@@ -43,14 +43,16 @@ def generate_timestamped_map_path(context, *args, **kwargs):
     with open(common_config, 'r') as f:
         yaml_params = yaml.safe_load(f)['sonar_3d_mapper']['ros__parameters']
 
-    # Priority: launch arg > YAML > timestamped fallback
+    # Generate timestamped map path
+    # Launch arg로 직접 지정한 경우만 그대로 사용, 아니면 항상 타임스탬프 폴더 생성
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     if map_path_arg:
+        # Launch arg로 직접 지정: 그대로 사용
         map_path = map_path_arg
-    elif yaml_params.get('outofcore', {}).get('map_path'):
-        map_path = yaml_params['outofcore']['map_path']
     else:
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        map_path = f'/workspace/data/map_tiles/{timestamp}'
+        # YAML base_path 아래에 타임스탬프 폴더 생성
+        base_path = yaml_params.get('outofcore', {}).get('map_path', '/workspace/data/map_tiles')
+        map_path = os.path.join(base_path, timestamp)
 
     # Create directory
     os.makedirs(map_path, exist_ok=True)

@@ -7,7 +7,7 @@ map_visualizer:
     # === Shared parameters (must match common.yaml values) ===
     # These are duplicated here because common.yaml uses sonar_3d_mapper namespace
     outofcore:
-      map_path: "/workspace/data/5_khnp/20251219_seafloor_mapping/raw_oculus_m3000d_test_v1/map_tiles"
+      map_path: "/workspace/data/map_tiles"  # Will be overridden by launch file with timestamped path
       tile_size: 0.4
 
     octree:
