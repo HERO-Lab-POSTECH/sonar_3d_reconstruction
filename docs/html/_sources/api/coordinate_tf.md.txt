@@ -1,0 +1,123 @@
+# Coordinate System & TF
+
+Coordinate transformation and TF broadcasting for the sonar 3D mapping system.
+
+---
+
+## TF Tree Structure
+
+```
+world_init (horizontal plane, gravity-aligned)
+    └── camera_init (Fast-LIO initial pose, may be tilted)
+            └── body (robot body from odometry)
+                    └── base_link
+                            └── sonar_link (sonar mounting)
+```
+
+---
+
+## Coordinate Frames
+
+### world_init
+
+Gravity-aligned horizontal reference frame. Created by `world_init_broadcaster_node.py`.
+
+- **Origin**: Same as `camera_init`
+- **Orientation**: Z-axis aligned with gravity (up)
+- **Purpose**: Provides horizontal reference regardless of initial robot tilt
+
+### camera_init
+
+Fast-LIO's initial frame. May be tilted if robot starts on a slope.
+
+### sonar_link
+
+Sonar sensor frame relative to `base_link`.
+
+```
+Sonar Frame (default mounting: pitch=90°, looking down)
+    +X (forward/range direction)
+      ↑
+      │
++Y ←──┼ (left/bearing direction)
+      │
+      ↓ +Z (down)
+```
+
+---
+
+## World Init Broadcaster
+
+**File**: `scripts/world_init_broadcaster_node.py`
+
+Uses IMU acceleration data to compute initial horizontal plane.
+
+### Algorithm
+
+```python
+# 1. Collect N IMU acceleration samples
+mean_acc = average(acc_samples)
+
+# 2. Measured gravity direction (normalized)
+g_measured = mean_acc / norm(mean_acc)
+
+# 3. Reference gravity (z-down in horizontal frame)
+g_reference = [0, 0, 1]
+
+# 4. Compute rotation to align measured → reference
+R = rotation_between_vectors(g_measured, g_reference)
+
+# 5. Extract roll, pitch (yaw = 0)
+roll, pitch = euler_from_rotation_matrix(R)
+
+# 6. Publish: world_init → camera_init
+```
+
+### Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `imu_topic` | `/sensor/ins/livox_mid360/imu` | IMU topic |
+| `init_samples` | 50 | Samples to average |
+| `parent_frame` | `world_init` | Parent frame |
+| `child_frame` | `camera_init` | Child frame |
+
+### Usage
+
+```bash
+ros2 run sonar_3d_reconstruction world_init_broadcaster_node
+```
+
+After initialization, logs: `TF: world_init→camera_init (R=X.X°, P=X.X°)`
+
+---
+
+## Transform Chain
+
+Sonar point to world coordinate:
+
+```
+T_sonar_to_world = T_base_to_world @ T_sonar_to_base
+
+Where:
+  T_base_to_world = from odometry (position + quaternion)
+  T_sonar_to_base = from mounting config (position + RPY)
+```
+
+### In 3d_mapper.py
+
+```python
+# Line 544-551
+x_sonar = range_m * cos(vertical_angle) * cos(bearing_angle)
+y_sonar = -range_m * cos(vertical_angle) * sin(bearing_angle)
+z_sonar = range_m * sin(vertical_angle)
+
+pt_world = T_sonar_to_world @ pt_sonar
+```
+
+---
+
+## Related
+
+- [Configuration Reference](config.md) - Mounting parameters
+- [3d_mapper.py](3d_mapper.md) - Uses coordinate transforms

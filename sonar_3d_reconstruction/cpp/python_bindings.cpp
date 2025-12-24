@@ -4,7 +4,6 @@
 #include <pybind11/numpy.h>
 
 #include "octree_mapper.h"
-#include "ray_casting.h"
 #include "probability_updater.h"
 #include "outofcore_tile_mapper.h"
 
@@ -74,34 +73,6 @@ PYBIND11_MODULE(sonar_3d_reconstruction_cpp, m) {
         .def("load_from_file", &sonar_3d_reconstruction::OctreeMapper::load_from_file,
              py::arg("filename"),
              "Load octree from file");
-
-    // RayCasting class
-    py::class_<sonar_3d_reconstruction::RayCasting>(m, "RayCasting")
-        .def(py::init<>(),
-             "Create RayCasting utility")
-        .def("generate_ray_points", &sonar_3d_reconstruction::RayCasting::generate_ray_points,
-             py::arg("origin"), py::arg("endpoint"), py::arg("resolution"), py::arg("max_range") = -1.0,
-             "Generate points along a ray")
-        .def("cast_multiple_rays", &sonar_3d_reconstruction::RayCasting::cast_multiple_rays,
-             py::arg("origin"), py::arg("endpoints"), py::arg("resolution"), py::arg("max_range") = -1.0,
-             "Cast multiple rays in parallel")
-        .def("generate_sonar_beam_pattern", &sonar_3d_reconstruction::RayCasting::generate_sonar_beam_pattern,
-             py::arg("origin"), py::arg("range"), py::arg("bearing_angle"), 
-             py::arg("vertical_aperture"), py::arg("num_vertical_samples") = 5,
-             "Generate sonar beam pattern")
-        .def("ray_sphere_intersection", &sonar_3d_reconstruction::RayCasting::ray_sphere_intersection,
-             py::arg("ray_origin"), py::arg("ray_direction"), py::arg("sphere_center"), py::arg("sphere_radius"),
-             "Check ray-sphere intersection")
-        .def("is_point_in_sonar_fov", &sonar_3d_reconstruction::RayCasting::is_point_in_sonar_fov,
-             py::arg("sonar_origin"), py::arg("sonar_direction"), py::arg("point"),
-             py::arg("horizontal_fov"), py::arg("vertical_aperture"), py::arg("max_range"),
-             "Check if point is in sonar FOV")
-        .def("compute_sonar_angles", &sonar_3d_reconstruction::RayCasting::compute_sonar_angles,
-             py::arg("sonar_origin"), py::arg("sonar_direction"), py::arg("point"),
-             "Compute bearing and elevation angles")
-        .def("generate_beam_voxels", &sonar_3d_reconstruction::RayCasting::generate_beam_voxels,
-             py::arg("origin"), py::arg("direction"), py::arg("range"), py::arg("beam_width"), py::arg("resolution"),
-             "Generate voxels within beam volume");
 
     // ProbabilityUpdater class (main interface for Python)
     py::class_<sonar_3d_reconstruction::ProbabilityUpdater>(m, "ProbabilityUpdater")

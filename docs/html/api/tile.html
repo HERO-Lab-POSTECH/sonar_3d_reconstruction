@@ -1,0 +1,936 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>tile.cpp / .h &mdash; Sonar 3D Reconstruction 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=8d563738"></script>
+      <script src="../_static/doctools.js?v=9a2dae69"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="tile_manager.cpp / .h" href="tile_manager.html" />
+    <link rel="prev" title="outofcore_tile_mapper.cpp / .h" href="outofcore_tile_mapper.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Sonar 3D Reconstruction
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../readme.html">Sonar 3D Reconstruction</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../readme.html#features">Features</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../readme.html#quick-start">Quick Start</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../readme.html#launch-arguments">Launch Arguments</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../readme.html#configuration">Configuration</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../readme.html#config-files">Config Files</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../readme.html#key-parameters-common-yaml">Key Parameters (common.yaml)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../readme.html#topics">Topics</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../readme.html#subscribe">Subscribe</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../readme.html#publish">Publish</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../readme.html#nodes">Nodes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../readme.html#build">Build</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../readme.html#dependencies">Dependencies</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../readme.html#runtime-dependencies">Runtime Dependencies</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../readme.html#file-structure">File Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../readme.html#coordinate-system">Coordinate System</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Design Documents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../design/iwlo_design.html">Intensity-Weighted Log-Odds (IWLO) Probability Update</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../design/iwlo_design.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../design/iwlo_design.html#background">1. Background</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../design/iwlo_design.html#limitations-of-existing-methods">Limitations of Existing Methods</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/iwlo_design.html#iwlo-design-goals">IWLO Design Goals</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../design/iwlo_design.html#mathematical-formulation">2. Mathematical Formulation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../design/iwlo_design.html#intensity-to-weight-transformation">2.1 Intensity-to-Weight Transformation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/iwlo_design.html#learning-rate-decay">2.2 Learning Rate Decay</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/iwlo_design.html#adaptive-scaling">2.3 Adaptive Scaling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/iwlo_design.html#final-update-formula">2.4 Final Update Formula</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../design/iwlo_design.html#parameter-description">3. Parameter Description</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../design/iwlo_design.html#parameter-tuning-guide">Parameter Tuning Guide</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../design/iwlo_design.html#expected-behavior">4. Expected Behavior</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../design/iwlo_design.html#scenario-comparison">Scenario Comparison</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/iwlo_design.html#convergence-characteristics">Convergence Characteristics</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../design/iwlo_design.html#usage">5. Usage</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../design/iwlo_design.html#launch-file">Launch File</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/iwlo_design.html#parameter-override">Parameter Override</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/iwlo_design.html#yaml-configuration">YAML Configuration</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../design/iwlo_design.html#implementation-details">6. Implementation Details</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../design/iwlo_design.html#c-code-probability-updater-cpp">C++ Code (probability_updater.cpp)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/iwlo_design.html#update-logic-probability-updater-cpp-373-384">Update Logic (probability_updater.cpp:373-384)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../design/iwlo_design.html#references">7. References</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../design/iwlo_design.html#changelog">8. Changelog</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../design/voxelmap_fusion.html">Voxelmap Fusion vs Sonar 3D Reconstruction Comparison</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../design/voxelmap_fusion.html#overview">1. Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../design/voxelmap_fusion.html#core-algorithm-comparison">2. Core Algorithm Comparison</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../design/voxelmap_fusion.html#probability-update-methods">2.1 Probability Update Methods</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../design/voxelmap_fusion.html#voxelmap-fusion-weighted-average">voxelmap_fusion: Weighted Average</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../design/voxelmap_fusion.html#sonar-3d-reconstruction-log-odds-bayesian-iwlo">sonar_3d_reconstruction: Log-Odds Bayesian (IWLO)</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../design/voxelmap_fusion.html#occupancy-value-assignment">2.2 Occupancy Value Assignment</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../design/voxelmap_fusion.html#voxelmap-fusion-binary">voxelmap_fusion: Binary</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../design/voxelmap_fusion.html#sonar-3d-reconstruction-intensity-based-iwlo">sonar_3d_reconstruction: Intensity-Based (IWLO)</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../design/voxelmap_fusion.html#data-structures">2.3 Data Structures</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../design/voxelmap_fusion.html#voxelmap-fusion-dense-voxel-grid">voxelmap_fusion: Dense Voxel Grid</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../design/voxelmap_fusion.html#sonar-3d-reconstruction-sparse-octree">sonar_3d_reconstruction: Sparse Octree</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../design/voxelmap_fusion.html#coordinate-transformation">2.4 Coordinate Transformation</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../design/voxelmap_fusion.html#voxelmap-fusion-spherical-segment">voxelmap_fusion: Spherical Segment</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../design/voxelmap_fusion.html#sonar-3d-reconstruction-ray-based">sonar_3d_reconstruction: Ray-based</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../design/voxelmap_fusion.html#performance-comparison">3. Performance Comparison</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../design/voxelmap_fusion.html#advanced-features-of-voxelmap-fusion">4. Advanced Features of voxelmap_fusion</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../design/voxelmap_fusion.html#constraint-tracking-system">4.1 Constraint Tracking System</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/voxelmap_fusion.html#state-change-detection">4.2 State Change Detection</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../design/voxelmap_fusion.html#mathematical-formula-comparison">5. Mathematical Formula Comparison</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../design/voxelmap_fusion.html#probability-update-formulas">5.1 Probability Update Formulas</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/voxelmap_fusion.html#convergence-characteristics-comparison">5.2 Convergence Characteristics Comparison</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../design/voxelmap_fusion.html#conclusion">6. Conclusion</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../design/voxelmap_fusion.html#voxelmap-fusion-advantages-consider-adopting">voxelmap_fusion Advantages (Consider Adopting)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/voxelmap_fusion.html#sonar-3d-reconstruction-advantages-maintain">sonar_3d_reconstruction Advantages (Maintain)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../design/voxelmap_fusion.html#references">References</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../design/refactoring_plan.html">C++ Backend Refactoring Plan</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../design/refactoring_plan.html#current-architecture-analysis">Current Architecture Analysis</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../design/refactoring_plan.html#problem-code-duplication">Problem: Code Duplication</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/refactoring_plan.html#current-class-relationships">Current Class Relationships</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/refactoring_plan.html#issues">Issues</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../design/refactoring_plan.html#refactoring-plan">Refactoring Plan</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../design/refactoring_plan.html#goal">Goal</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/refactoring_plan.html#proposed-architecture">Proposed Architecture</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/refactoring_plan.html#new-class-responsibilities">New Class Responsibilities</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/refactoring_plan.html#iwloupdater-interface-draft">IWLOUpdater Interface (Draft)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/refactoring_plan.html#voxelstorage-interface-draft">VoxelStorage Interface (Draft)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../design/refactoring_plan.html#implementation-steps">Implementation Steps</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../design/refactoring_plan.html#phase-1-extract-iwlo-algorithm">Phase 1: Extract IWLO Algorithm</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/refactoring_plan.html#phase-2-storage-abstraction">Phase 2: Storage Abstraction</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/refactoring_plan.html#phase-3-backend-unification">Phase 3: Backend Unification</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/refactoring_plan.html#phase-4-cleanup">Phase 4: Cleanup</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../design/refactoring_plan.html#benefits">Benefits</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../design/refactoring_plan.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../design/parameter_centralization.html">Parameter Centralization Plan</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../design/parameter_centralization.html#current-problem">Current Problem</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../design/parameter_centralization.html#issues">Issues</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../design/parameter_centralization.html#proposed-solution">Proposed Solution</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../design/parameter_centralization.html#proposed-architecture">Proposed Architecture</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/parameter_centralization.html#parameterdef-structure-draft">ParameterDef Structure (Draft)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/parameter_centralization.html#parameter-definition-example">Parameter Definition Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/parameter_centralization.html#parametermanager-implementation-draft">ParameterManager Implementation (Draft)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/parameter_centralization.html#node-usage-after-refactoring">Node Usage (After Refactoring)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../design/parameter_centralization.html#implementation-steps">Implementation Steps</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../design/parameter_centralization.html#phase-1-create-config-py-infrastructure">Phase 1: Create config.py Infrastructure</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/parameter_centralization.html#phase-2-migrate-3d-mapper-node-py">Phase 2: Migrate 3d_mapper_node.py</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/parameter_centralization.html#phase-3-migrate-other-nodes">Phase 3: Migrate Other Nodes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/parameter_centralization.html#phase-4-documentation-sync">Phase 4: Documentation Sync</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../design/parameter_centralization.html#benefits">Benefits</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../design/parameter_centralization.html#parameter-naming-inconsistency">Parameter Naming Inconsistency</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../design/parameter_centralization.html#id1">Current Problem</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/parameter_centralization.html#recommendation">Recommendation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/parameter_centralization.html#proposed-standard">Proposed Standard</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../design/parameter_centralization.html#implementation">Implementation</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../design/parameter_centralization.html#notes">Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting.html">Troubleshooting</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../troubleshooting.html#issue-log">Issue Log</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../troubleshooting.html#c-backend-probability-fixed-value-bug">[2025-11-27] C++ Backend Probability Fixed Value Bug</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="config.html">Configuration Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="config.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="config.html#parameter-categories">Parameter Categories</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="config.html#sonar-hardware">Sonar Hardware</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config.html#filtering">Filtering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config.html#mounting">Mounting</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config.html#voxel-map">Voxel Map</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config.html#iwlo-algorithm">IWLO Algorithm</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config.html#adaptive-scaling">Adaptive Scaling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config.html#out-of-core-storage">Out-of-Core Storage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config.html#crosstalk-filter">Crosstalk Filter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config.html#robot-detection">Robot Detection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config.html#processing">Processing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="config.html#node-only-parameters">Node-Only Parameters</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="config.html#configuration-flow">Configuration Flow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="config.html#yaml-configuration-example">YAML Configuration Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="config.html#related">Related</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="3d_mapper.html">3d_mapper.py</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="3d_mapper.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="3d_mapper.html#architecture">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="3d_mapper.html#classes">Classes</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="3d_mapper.html#sonarto3dmapper">SonarTo3DMapper</a></li>
+<li class="toctree-l3"><a class="reference internal" href="3d_mapper.html#crosstalkfilter">CrosstalkFilter</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="3d_mapper.html#core-methods">Core Methods</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="3d_mapper.html#process-sonar-image">process_sonar_image</a></li>
+<li class="toctree-l3"><a class="reference internal" href="3d_mapper.html#get-point-cloud">get_point_cloud</a></li>
+<li class="toctree-l3"><a class="reference internal" href="3d_mapper.html#utility-methods">Utility Methods</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="3d_mapper.html#iwlo-algorithm">IWLO Algorithm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="3d_mapper.html#coordinate-system">Coordinate System</a></li>
+<li class="toctree-l2"><a class="reference internal" href="3d_mapper.html#usage-example">Usage Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="3d_mapper.html#related">Related</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="3d_mapper_node.html">3d_mapper_node.py</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="3d_mapper_node.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="3d_mapper_node.html#architecture">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="3d_mapper_node.html#parameters">Parameters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="3d_mapper_node.html#dynamic-parameters">Dynamic Parameters</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="3d_mapper_node.html#registration">Registration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="3d_mapper_node.html#supported-dynamic-parameters">Supported Dynamic Parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="3d_mapper_node.html#read-only-parameters-requires-restart">Read-only Parameters (requires restart)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="3d_mapper_node.html#example-usage">Example Usage</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="3d_mapper_node.html#topics">Topics</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="3d_mapper_node.html#input">Input</a></li>
+<li class="toctree-l3"><a class="reference internal" href="3d_mapper_node.html#output-in-memory-mode">Output (In-Memory Mode)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="3d_mapper_node.html#output-out-of-core-mode">Output (Out-of-Core Mode)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="3d_mapper_node.html#processing-flow">Processing Flow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="3d_mapper_node.html#tf-broadcasting">TF Broadcasting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="3d_mapper_node.html#image-encoding">Image Encoding</a></li>
+<li class="toctree-l2"><a class="reference internal" href="3d_mapper_node.html#mode-comparison">Mode Comparison</a></li>
+<li class="toctree-l2"><a class="reference internal" href="3d_mapper_node.html#usage">Usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="3d_mapper_node.html#related">Related</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="probability_updater.html">probability_updater.cpp / .h</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="probability_updater.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="probability_updater.html#architecture">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="probability_updater.html#class-probabilityupdater">Class: ProbabilityUpdater</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="probability_updater.html#constructor">Constructor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="probability_updater.html#configuration-methods">Configuration Methods</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="probability_updater.html#set-log-odds-params">set_log_odds_params</a></li>
+<li class="toctree-l4"><a class="reference internal" href="probability_updater.html#set-adaptive-params">set_adaptive_params</a></li>
+<li class="toctree-l4"><a class="reference internal" href="probability_updater.html#set-clamping-thresholds">set_clamping_thresholds</a></li>
+<li class="toctree-l4"><a class="reference internal" href="probability_updater.html#set-intensity-params">set_intensity_params</a></li>
+<li class="toctree-l4"><a class="reference internal" href="probability_updater.html#set-iwlo-params">set_iwlo_params</a></li>
+<li class="toctree-l4"><a class="reference internal" href="probability_updater.html#set-occupied-threshold">set_occupied_threshold</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="probability_updater.html#core-update-method">Core Update Method</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="probability_updater.html#batch-update-iwlo">batch_update_iwlo</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="probability_updater.html#query-methods">Query Methods</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="probability_updater.html#get-occupied-voxels">get_occupied_voxels</a></li>
+<li class="toctree-l4"><a class="reference internal" href="probability_updater.html#get-memory-usage">get_memory_usage</a></li>
+<li class="toctree-l4"><a class="reference internal" href="probability_updater.html#get-num-nodes">get_num_nodes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="probability_updater.html#get-resolution">get_resolution</a></li>
+<li class="toctree-l4"><a class="reference internal" href="probability_updater.html#get-observation-count">get_observation_count</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="probability_updater.html#maintenance-methods">Maintenance Methods</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="probability_updater.html#prune-tree">prune_tree</a></li>
+<li class="toctree-l4"><a class="reference internal" href="probability_updater.html#clear">clear</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="probability_updater.html#synchronization-methods">Synchronization Methods</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="probability_updater.html#set-incremental-sync">set_incremental_sync</a></li>
+<li class="toctree-l4"><a class="reference internal" href="probability_updater.html#force-full-sync">force_full_sync</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="probability_updater.html#internal-implementation">Internal Implementation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="probability_updater.html#storage-strategy">Storage Strategy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="probability_updater.html#sync-strategies">Sync Strategies</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="probability_updater.html#probability-conversion">Probability Conversion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="probability_updater.html#usage-example">Usage Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="probability_updater.html#parameter-name-mapping">Parameter Name Mapping</a></li>
+<li class="toctree-l2"><a class="reference internal" href="probability_updater.html#related">Related</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="octree_mapper.html">octree_mapper.cpp / .h</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="octree_mapper.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="octree_mapper.html#architecture">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="octree_mapper.html#struct-memorystats">Struct: MemoryStats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="octree_mapper.html#class-octreemapper">Class: OctreeMapper</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="octree_mapper.html#constructor">Constructor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="octree_mapper.html#update-methods">Update Methods</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="octree_mapper.html#update-point">update_point</a></li>
+<li class="toctree-l4"><a class="reference internal" href="octree_mapper.html#batch-update">batch_update</a></li>
+<li class="toctree-l4"><a class="reference internal" href="octree_mapper.html#batch-update-with-log-odds">batch_update_with_log_odds</a></li>
+<li class="toctree-l4"><a class="reference internal" href="octree_mapper.html#insert-ray">insert_ray</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="octree_mapper.html#query-methods">Query Methods</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="octree_mapper.html#get-occupied-voxels">get_occupied_voxels</a></li>
+<li class="toctree-l4"><a class="reference internal" href="octree_mapper.html#get-memory-usage">get_memory_usage</a></li>
+<li class="toctree-l4"><a class="reference internal" href="octree_mapper.html#get-num-nodes">get_num_nodes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="octree_mapper.html#get-resolution">get_resolution</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="octree_mapper.html#configuration-methods">Configuration Methods</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="octree_mapper.html#set-probability-params">set_probability_params</a></li>
+<li class="toctree-l4"><a class="reference internal" href="octree_mapper.html#set-occupancy-thresholds">set_occupancy_thresholds</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="octree_mapper.html#maintenance-methods">Maintenance Methods</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="octree_mapper.html#prune-tree">prune_tree</a></li>
+<li class="toctree-l4"><a class="reference internal" href="octree_mapper.html#clear">clear</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="octree_mapper.html#file-i-o">File I/O</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="octree_mapper.html#save-to-file">save_to_file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="octree_mapper.html#load-from-file">load_from_file</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="octree_mapper.html#internal-implementation">Internal Implementation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="octree_mapper.html#suppressoutput-class">SuppressOutput Class</a></li>
+<li class="toctree-l3"><a class="reference internal" href="octree_mapper.html#cache-system">Cache System</a></li>
+<li class="toctree-l3"><a class="reference internal" href="octree_mapper.html#point3d-hash">Point3d Hash</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="octree_mapper.html#dual-storage-rationale">Dual Storage Rationale</a></li>
+<li class="toctree-l2"><a class="reference internal" href="octree_mapper.html#usage-example">Usage Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="octree_mapper.html#related">Related</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="outofcore_tile_mapper.html">outofcore_tile_mapper.cpp / .h</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="outofcore_tile_mapper.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="outofcore_tile_mapper.html#architecture">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="outofcore_tile_mapper.html#class-outofcoretilemapper">Class: OutofcoreTileMapper</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="outofcore_tile_mapper.html#constructor">Constructor</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="outofcore_tile_mapper.html#probabilityupdater-compatible-api">ProbabilityUpdater Compatible API</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="outofcore_tile_mapper.html#batch-update-iwlo">batch_update_iwlo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="outofcore_tile_mapper.html#configuration-methods">Configuration Methods</a></li>
+<li class="toctree-l3"><a class="reference internal" href="outofcore_tile_mapper.html#query-methods">Query Methods</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="outofcore_tile_mapper.html#get-occupied-voxels">get_occupied_voxels</a></li>
+<li class="toctree-l4"><a class="reference internal" href="outofcore_tile_mapper.html#get-all-occupied-voxels">get_all_occupied_voxels</a></li>
+<li class="toctree-l4"><a class="reference internal" href="outofcore_tile_mapper.html#get-memory-usage-get-num-nodes">get_memory_usage / get_num_nodes</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="outofcore_tile_mapper.html#extended-api">Extended API</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="outofcore_tile_mapper.html#region-query">Region Query</a></li>
+<li class="toctree-l3"><a class="reference internal" href="outofcore_tile_mapper.html#flush-operations">Flush Operations</a></li>
+<li class="toctree-l3"><a class="reference internal" href="outofcore_tile_mapper.html#merged-octree">Merged OcTree</a></li>
+<li class="toctree-l3"><a class="reference internal" href="outofcore_tile_mapper.html#tile-management">Tile Management</a></li>
+<li class="toctree-l3"><a class="reference internal" href="outofcore_tile_mapper.html#preloading">Preloading</a></li>
+<li class="toctree-l3"><a class="reference internal" href="outofcore_tile_mapper.html#maintenance">Maintenance</a></li>
+<li class="toctree-l3"><a class="reference internal" href="outofcore_tile_mapper.html#visualizer-notification">Visualizer Notification</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="outofcore_tile_mapper.html#internal-implementation">Internal Implementation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="outofcore_tile_mapper.html#lru-cache-with-eviction-callback">LRU Cache with Eviction Callback</a></li>
+<li class="toctree-l3"><a class="reference internal" href="outofcore_tile_mapper.html#point-grouping">Point Grouping</a></li>
+<li class="toctree-l3"><a class="reference internal" href="outofcore_tile_mapper.html#thread-safety">Thread Safety</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="outofcore_tile_mapper.html#ros2-parameter-mapping">ROS2 Parameter Mapping</a></li>
+<li class="toctree-l2"><a class="reference internal" href="outofcore_tile_mapper.html#usage-example">Usage Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="outofcore_tile_mapper.html#comparison-probabilityupdater-vs-outofcoretilemapper">Comparison: ProbabilityUpdater vs OutofcoreTileMapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="outofcore_tile_mapper.html#related">Related</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">tile.cpp / .h</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#data-structures">Data Structures</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#iwlometa">IWLOMeta</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#iwloparams">IWLOParams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#tileindex">TileIndex</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#occupiedvoxel">OccupiedVoxel</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#class-tile">Class: Tile</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#constructor">Constructor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#iwlo-update-methods">IWLO Update Methods</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#update-voxel">update_voxel</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#batch-update">batch_update</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#file-i-o">File I/O</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#save">save</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#load">load</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#iwlo-metadata-file-format">IWLO Metadata File Format</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#query-methods">Query Methods</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#get-occupied-voxels">get_occupied_voxels</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#has-occupied-voxels">has_occupied_voxels</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#bounds">Bounds</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#state-management">State Management</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#maintenance">Maintenance</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#prune">prune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#clear">clear</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#get-memory-usage">get_memory_usage</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#internal-methods">Internal Methods</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#sync-to-octree">sync_to_octree</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#helper-functions">Helper Functions</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#storage-architecture">Storage Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#disk-storage">Disk Storage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#related">Related</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="tile_manager.html">tile_manager.cpp / .h</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="tile_manager.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tile_manager.html#data-structures">Data Structures</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="tile_manager.html#mapmetadata">MapMetadata</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="tile_manager.html#class-tilemanager">Class: TileManager</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="tile_manager.html#constructor">Constructor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="tile_manager.html#initialize">initialize</a></li>
+<li class="toctree-l3"><a class="reference internal" href="tile_manager.html#coordinate-conversion">Coordinate Conversion</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="tile_manager.html#world-to-tile-index">world_to_tile_index</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="tile_manager.html#path-management">Path Management</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="tile_manager.html#get-tile-directory">get_tile_directory</a></li>
+<li class="toctree-l4"><a class="reference internal" href="tile_manager.html#tile-exists">tile_exists</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="tile_manager.html#tile-enumeration">Tile Enumeration</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="tile_manager.html#list-all-tiles">list_all_tiles</a></li>
+<li class="toctree-l4"><a class="reference internal" href="tile_manager.html#get-tiles-in-region">get_tiles_in_region</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="tile_manager.html#metadata-management">Metadata Management</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="tile_manager.html#save-metadata-load-metadata">save_metadata / load_metadata</a></li>
+<li class="toctree-l4"><a class="reference internal" href="tile_manager.html#update-bounds">update_bounds</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="tile_manager.html#tile-operations">Tile Operations</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="tile_manager.html#delete-tile">delete_tile</a></li>
+<li class="toctree-l4"><a class="reference internal" href="tile_manager.html#get-disk-usage">get_disk_usage</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="tile_manager.html#getters">Getters</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="tile_manager.html#directory-structure">Directory Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tile_manager.html#usage-example">Usage Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tile_manager.html#related">Related</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="coordinate_tf.html">Coordinate System &amp; TF</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="coordinate_tf.html#tf-tree-structure">TF Tree Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="coordinate_tf.html#coordinate-frames">Coordinate Frames</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="coordinate_tf.html#world-init">world_init</a></li>
+<li class="toctree-l3"><a class="reference internal" href="coordinate_tf.html#camera-init">camera_init</a></li>
+<li class="toctree-l3"><a class="reference internal" href="coordinate_tf.html#sonar-link">sonar_link</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="coordinate_tf.html#world-init-broadcaster">World Init Broadcaster</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="coordinate_tf.html#algorithm">Algorithm</a></li>
+<li class="toctree-l3"><a class="reference internal" href="coordinate_tf.html#parameters">Parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="coordinate_tf.html#usage">Usage</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="coordinate_tf.html#transform-chain">Transform Chain</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="coordinate_tf.html#in-3d-mapper-py">In 3d_mapper.py</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="coordinate_tf.html#related">Related</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="utilities.html">Utilities</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="utilities.html#map-visualizer-node">Map Visualizer Node</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="utilities.html#visualization-modes">Visualization Modes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="utilities.html#parameters">Parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="utilities.html#topics">Topics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="utilities.html#tile-reload-strategy">Tile Reload Strategy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="utilities.html#usage">Usage</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="utilities.html#c-python-bindings">C++ Python Bindings</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="utilities.html#exposed-classes">Exposed Classes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="utilities.html#helper-structures">Helper Structures</a></li>
+<li class="toctree-l3"><a class="reference internal" href="utilities.html#module-info">Module Info</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="utilities.html#related">Related</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Sonar 3D Reconstruction</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">tile.cpp / .h</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/tile.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="tile-cpp-h">
+<h1>tile.cpp / .h<a class="headerlink" href="#tile-cpp-h" title="Link to this heading"></a></h1>
+<p>C++ individual tile with IWLO algorithm and file I/O.</p>
+<p><strong>Location</strong>: <code class="docutils literal notranslate"><span class="pre">sonar_3d_reconstruction/cpp/tile.cpp</span></code></p>
+<hr class="docutils" />
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">Tile</span></code> represents a single spatial region (10m x 10m x 10m by default) containing an OcTree and IWLO metadata. Each tile can be independently saved/loaded, enabling out-of-core mapping.</p>
+<p><strong>Key Features</strong>:</p>
+<ul class="simple">
+<li><p>IWLO probability update algorithm</p></li>
+<li><p>OcTree + IWLO metadata storage</p></li>
+<li><p>Binary file I/O (octree.bt + iwlo_meta.bin)</p></li>
+<li><p>Dirty flag for change tracking</p></li>
+</ul>
+</section>
+<hr class="docutils" />
+<section id="data-structures">
+<h2>Data Structures<a class="headerlink" href="#data-structures" title="Link to this heading"></a></h2>
+<section id="iwlometa">
+<h3>IWLOMeta<a class="headerlink" href="#iwlometa" title="Link to this heading"></a></h3>
+<p>Per-voxel IWLO metadata.</p>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="k">struct</span><span class="w"> </span><span class="nc">IWLOMeta</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">double</span><span class="w"> </span><span class="n">log_odds</span><span class="p">;</span><span class="w">         </span><span class="c1">// Current log-odds value</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">observation_count</span><span class="p">;</span><span class="w">   </span><span class="c1">// Number of observations</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+</section>
+<section id="iwloparams">
+<h3>IWLOParams<a class="headerlink" href="#iwloparams" title="Link to this heading"></a></h3>
+<p>Algorithm parameters (shared across all tiles).</p>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="k">struct</span><span class="w"> </span><span class="nc">IWLOParams</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">double</span><span class="w"> </span><span class="n">log_odds_occupied</span><span class="p">;</span><span class="w">   </span><span class="c1">// L_occ (default: 3.5)</span>
+<span class="w">    </span><span class="kt">double</span><span class="w"> </span><span class="n">log_odds_free</span><span class="p">;</span><span class="w">       </span><span class="c1">// L_free (default: -3.0)</span>
+<span class="w">    </span><span class="kt">double</span><span class="w"> </span><span class="n">sharpness</span><span class="p">;</span><span class="w">           </span><span class="c1">// Sigmoid steepness (default: 0.1)</span>
+<span class="w">    </span><span class="kt">double</span><span class="w"> </span><span class="n">decay_rate</span><span class="p">;</span><span class="w">          </span><span class="c1">// Learning rate decay (default: 0.1)</span>
+<span class="w">    </span><span class="kt">double</span><span class="w"> </span><span class="n">min_alpha</span><span class="p">;</span><span class="w">           </span><span class="c1">// Minimum learning rate (default: 0.3)</span>
+<span class="w">    </span><span class="kt">double</span><span class="w"> </span><span class="n">L_min</span><span class="p">,</span><span class="w"> </span><span class="n">L_max</span><span class="p">;</span><span class="w">        </span><span class="c1">// Saturation bounds (default: -10.0, 10.0)</span>
+<span class="w">    </span><span class="kt">double</span><span class="w"> </span><span class="n">intensity_threshold</span><span class="p">;</span><span class="w"> </span><span class="c1">// (default: 35.0)</span>
+<span class="w">    </span><span class="kt">double</span><span class="w"> </span><span class="n">intensity_max</span><span class="p">;</span><span class="w">       </span><span class="c1">// (default: 255.0)</span>
+<span class="w">    </span><span class="kt">double</span><span class="w"> </span><span class="n">adaptive_threshold</span><span class="p">;</span><span class="w">  </span><span class="c1">// (default: 0.5)</span>
+<span class="w">    </span><span class="kt">double</span><span class="w"> </span><span class="n">adaptive_max_ratio</span><span class="p">;</span><span class="w">  </span><span class="c1">// (default: 0.3)</span>
+<span class="w">    </span><span class="kt">bool</span><span class="w"> </span><span class="n">adaptive_enabled</span><span class="p">;</span><span class="w">      </span><span class="c1">// (default: true)</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+</section>
+<section id="tileindex">
+<h3>TileIndex<a class="headerlink" href="#tileindex" title="Link to this heading"></a></h3>
+<p>Spatial coordinate in tile grid.</p>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="k">struct</span><span class="w"> </span><span class="nc">TileIndex</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="p">,</span><span class="w"> </span><span class="n">z</span><span class="p">;</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="w"> </span><span class="nf">to_string</span><span class="p">()</span><span class="w"> </span><span class="k">const</span><span class="p">;</span><span class="w">  </span><span class="c1">// &quot;x_y_z&quot;</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+</section>
+<section id="occupiedvoxel">
+<h3>OccupiedVoxel<a class="headerlink" href="#occupiedvoxel" title="Link to this heading"></a></h3>
+<p>Return structure for occupied voxel queries.</p>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="k">struct</span><span class="w"> </span><span class="nc">OccupiedVoxel</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">double</span><span class="w"> </span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="p">,</span><span class="w"> </span><span class="n">z</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">double</span><span class="w"> </span><span class="n">probability</span><span class="p">;</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="class-tile">
+<h2>Class: Tile<a class="headerlink" href="#class-tile" title="Link to this heading"></a></h2>
+<section id="constructor">
+<h3>Constructor<a class="headerlink" href="#constructor" title="Link to this heading"></a></h3>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="n">Tile</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">TileIndex</span><span class="o">&amp;</span><span class="w"> </span><span class="n">index</span><span class="p">,</span><span class="w"> </span><span class="kt">double</span><span class="w"> </span><span class="n">resolution</span><span class="p">,</span><span class="w"> </span><span class="kt">double</span><span class="w"> </span><span class="n">tile_size</span><span class="p">);</span>
+</pre></div>
+</div>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameter</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">index</span></code></p></td>
+<td><p>Tile position in grid</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">resolution</span></code></p></td>
+<td><p>Voxel resolution (meters)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">tile_size</span></code></p></td>
+<td><p>Tile size (meters)</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Initialization</strong>:</p>
+<ul class="simple">
+<li><p>Creates OcTree with given resolution</p></li>
+<li><p>Sets occupancy threshold to 0.5</p></li>
+<li><p>Initializes dirty flag to false</p></li>
+</ul>
+</section>
+<hr class="docutils" />
+<section id="iwlo-update-methods">
+<h3>IWLO Update Methods<a class="headerlink" href="#iwlo-update-methods" title="Link to this heading"></a></h3>
+<section id="update-voxel">
+<h4>update_voxel<a class="headerlink" href="#update-voxel" title="Link to this heading"></a></h4>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="kt">void</span><span class="w"> </span><span class="nf">update_voxel</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">octomap</span><span class="o">::</span><span class="n">point3d</span><span class="o">&amp;</span><span class="w"> </span><span class="n">point</span><span class="p">,</span>
+<span class="w">                  </span><span class="kt">double</span><span class="w"> </span><span class="n">intensity</span><span class="p">,</span>
+<span class="w">                  </span><span class="kt">bool</span><span class="w"> </span><span class="n">is_occupied</span><span class="p">,</span>
+<span class="w">                  </span><span class="k">const</span><span class="w"> </span><span class="n">IWLOParams</span><span class="o">&amp;</span><span class="w"> </span><span class="n">params</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>Update single voxel using IWLO algorithm.</p>
+<p><strong>IWLO Algorithm</strong> (lines 90-144):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>1. Get/create IWLO metadata for voxel key
+2. Compute intensity weight: w = sigmoid(sharpness × (normalized - 0.5))
+3. Compute learning rate: α = max(min_alpha, 1/(1 + decay_rate × n))
+4. Compute adaptive scaling (bidirectional protection)
+5. Compute delta:
+   - Occupied: ΔL = L_occ × w × α × scale
+   - Free: ΔL = L_free × α × scale
+6. Apply: new_log_odds = clamp(old + ΔL, L_min, L_max)
+</pre></div>
+</div>
+<p><strong>Note</strong>: This is the same algorithm as <code class="docutils literal notranslate"><span class="pre">ProbabilityUpdater::batch_update_iwlo()</span></code> - code duplication exists.</p>
+</section>
+<section id="batch-update">
+<h4>batch_update<a class="headerlink" href="#batch-update" title="Link to this heading"></a></h4>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="kt">void</span><span class="w"> </span><span class="nf">batch_update</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">Eigen</span><span class="o">::</span><span class="n">MatrixXd</span><span class="o">&amp;</span><span class="w"> </span><span class="n">points</span><span class="p">,</span>
+<span class="w">                  </span><span class="k">const</span><span class="w"> </span><span class="n">Eigen</span><span class="o">::</span><span class="n">VectorXd</span><span class="o">&amp;</span><span class="w"> </span><span class="n">intensities</span><span class="p">,</span>
+<span class="w">                  </span><span class="k">const</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;&amp;</span><span class="w"> </span><span class="n">is_occupied</span><span class="p">,</span>
+<span class="w">                  </span><span class="k">const</span><span class="w"> </span><span class="n">IWLOParams</span><span class="o">&amp;</span><span class="w"> </span><span class="n">params</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>Batch update - calls <code class="docutils literal notranslate"><span class="pre">update_voxel()</span></code> for each point.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="file-i-o">
+<h3>File I/O<a class="headerlink" href="#file-i-o" title="Link to this heading"></a></h3>
+<section id="save">
+<h4>save<a class="headerlink" href="#save" title="Link to this heading"></a></h4>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="kt">bool</span><span class="w"> </span><span class="nf">save</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;</span><span class="w"> </span><span class="n">tile_dir</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>Save tile to directory.</p>
+<p><strong>Steps</strong>:</p>
+<ol class="arabic simple">
+<li><p>Create directory if needed</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sync_to_octree()</span></code> - copy IWLO log-odds to OcTree nodes</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">octree_-&gt;prune()</span></code> - merge homogeneous nodes</p></li>
+<li><p>Write <code class="docutils literal notranslate"><span class="pre">octree.bt</span></code> (binary OctoMap format)</p></li>
+<li><p>Write <code class="docutils literal notranslate"><span class="pre">iwlo_meta.bin</span></code> (custom binary format)</p></li>
+<li><p>Set <code class="docutils literal notranslate"><span class="pre">dirty_</span> <span class="pre">=</span> <span class="pre">false</span></code></p></li>
+</ol>
+</section>
+<section id="load">
+<h4>load<a class="headerlink" href="#load" title="Link to this heading"></a></h4>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="kt">bool</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;</span><span class="w"> </span><span class="n">tile_dir</span><span class="p">);</span>
+</pre></div>
+</div>
+<p>Load tile from directory.</p>
+<p><strong>Steps</strong>:</p>
+<ol class="arabic simple">
+<li><p>Read <code class="docutils literal notranslate"><span class="pre">octree.bt</span></code> if exists</p></li>
+<li><p>Read <code class="docutils literal notranslate"><span class="pre">iwlo_meta.bin</span></code> if exists</p></li>
+<li><p>Set <code class="docutils literal notranslate"><span class="pre">dirty_</span> <span class="pre">=</span> <span class="pre">false</span></code></p></li>
+</ol>
+</section>
+</section>
+<hr class="docutils" />
+<section id="iwlo-metadata-file-format">
+<h3>IWLO Metadata File Format<a class="headerlink" href="#iwlo-metadata-file-format" title="Link to this heading"></a></h3>
+<p><strong>File</strong>: <code class="docutils literal notranslate"><span class="pre">iwlo_meta.bin</span></code></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Header</span> <span class="p">(</span><span class="mi">16</span> <span class="nb">bytes</span><span class="p">):</span>
+  <span class="o">-</span> <span class="n">magic</span><span class="p">:</span> <span class="n">uint32</span> <span class="p">(</span><span class="mh">0x49574C4F</span> <span class="o">=</span> <span class="s2">&quot;IWLO&quot;</span><span class="p">)</span>
+  <span class="o">-</span> <span class="n">version</span><span class="p">:</span> <span class="n">uint32</span> <span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+  <span class="o">-</span> <span class="n">count</span><span class="p">:</span> <span class="n">uint64</span>
+
+<span class="n">Entries</span> <span class="p">(</span><span class="mi">18</span> <span class="nb">bytes</span> <span class="n">each</span><span class="p">):</span>
+  <span class="o">-</span> <span class="n">key</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span> <span class="n">uint16</span>
+  <span class="o">-</span> <span class="n">key</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span> <span class="n">uint16</span>
+  <span class="o">-</span> <span class="n">key</span><span class="p">[</span><span class="mi">2</span><span class="p">]:</span> <span class="n">uint16</span>
+  <span class="o">-</span> <span class="n">log_odds</span><span class="p">:</span> <span class="n">double</span> <span class="p">(</span><span class="mi">8</span> <span class="nb">bytes</span><span class="p">)</span>
+  <span class="o">-</span> <span class="n">observation_count</span><span class="p">:</span> <span class="nb">int</span> <span class="p">(</span><span class="mi">4</span> <span class="nb">bytes</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="query-methods">
+<h3>Query Methods<a class="headerlink" href="#query-methods" title="Link to this heading"></a></h3>
+<section id="get-occupied-voxels">
+<h4>get_occupied_voxels<a class="headerlink" href="#get-occupied-voxels" title="Link to this heading"></a></h4>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">OccupiedVoxel</span><span class="o">&gt;</span><span class="w"> </span><span class="n">get_occupied_voxels</span><span class="p">(</span><span class="kt">double</span><span class="w"> </span><span class="n">min_probability</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="p">)</span><span class="w"> </span><span class="k">const</span><span class="p">;</span>
+<span class="n">Eigen</span><span class="o">::</span><span class="n">MatrixXd</span><span class="w"> </span><span class="nf">get_occupied_voxels_matrix</span><span class="p">(</span><span class="kt">double</span><span class="w"> </span><span class="n">min_probability</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="p">)</span><span class="w"> </span><span class="k">const</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Return voxels with probability above threshold.</p>
+</section>
+<section id="has-occupied-voxels">
+<h4>has_occupied_voxels<a class="headerlink" href="#has-occupied-voxels" title="Link to this heading"></a></h4>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="kt">bool</span><span class="w"> </span><span class="nf">has_occupied_voxels</span><span class="p">(</span><span class="kt">double</span><span class="w"> </span><span class="n">occupied_threshold</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.5</span><span class="p">)</span><span class="w"> </span><span class="k">const</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Check if any voxel exceeds threshold (early exit optimization).</p>
+</section>
+<section id="bounds">
+<h4>Bounds<a class="headerlink" href="#bounds" title="Link to this heading"></a></h4>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="n">Eigen</span><span class="o">::</span><span class="n">Vector3d</span><span class="w"> </span><span class="nf">get_min_bound</span><span class="p">()</span><span class="w"> </span><span class="k">const</span><span class="p">;</span>
+<span class="n">Eigen</span><span class="o">::</span><span class="n">Vector3d</span><span class="w"> </span><span class="nf">get_max_bound</span><span class="p">()</span><span class="w"> </span><span class="k">const</span><span class="p">;</span>
+<span class="kt">bool</span><span class="w"> </span><span class="nf">contains</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">octomap</span><span class="o">::</span><span class="n">point3d</span><span class="o">&amp;</span><span class="w"> </span><span class="n">point</span><span class="p">)</span><span class="w"> </span><span class="k">const</span><span class="p">;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="state-management">
+<h3>State Management<a class="headerlink" href="#state-management" title="Link to this heading"></a></h3>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="kt">bool</span><span class="w"> </span><span class="nf">is_dirty</span><span class="p">()</span><span class="w"> </span><span class="k">const</span><span class="p">;</span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">mark_dirty</span><span class="p">();</span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">mark_clean</span><span class="p">();</span>
+<span class="k">const</span><span class="w"> </span><span class="n">TileIndex</span><span class="o">&amp;</span><span class="w"> </span><span class="nf">get_index</span><span class="p">()</span><span class="w"> </span><span class="k">const</span><span class="p">;</span>
+<span class="kt">size_t</span><span class="w"> </span><span class="nf">get_num_voxels</span><span class="p">()</span><span class="w"> </span><span class="k">const</span><span class="p">;</span>
+</pre></div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="maintenance">
+<h3>Maintenance<a class="headerlink" href="#maintenance" title="Link to this heading"></a></h3>
+<section id="prune">
+<h4>prune<a class="headerlink" href="#prune" title="Link to this heading"></a></h4>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="kt">size_t</span><span class="w"> </span><span class="nf">prune</span><span class="p">();</span>
+</pre></div>
+</div>
+<p>Sync to OcTree and merge homogeneous nodes. Returns nodes removed.</p>
+</section>
+<section id="clear">
+<h4>clear<a class="headerlink" href="#clear" title="Link to this heading"></a></h4>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="kt">void</span><span class="w"> </span><span class="nf">clear</span><span class="p">();</span>
+</pre></div>
+</div>
+<p>Clear OcTree and IWLO metadata.</p>
+</section>
+<section id="get-memory-usage">
+<h4>get_memory_usage<a class="headerlink" href="#get-memory-usage" title="Link to this heading"></a></h4>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="kt">size_t</span><span class="w"> </span><span class="nf">get_memory_usage</span><span class="p">()</span><span class="w"> </span><span class="k">const</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>Estimate memory usage (OcTree: 32 bytes/node, metadata: 34 bytes/entry).</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="internal-methods">
+<h3>Internal Methods<a class="headerlink" href="#internal-methods" title="Link to this heading"></a></h3>
+<section id="sync-to-octree">
+<h4>sync_to_octree<a class="headerlink" href="#sync-to-octree" title="Link to this heading"></a></h4>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="kt">void</span><span class="w"> </span><span class="nf">sync_to_octree</span><span class="p">();</span>
+</pre></div>
+</div>
+<p>Copy IWLO log-odds values to OcTree nodes for visualization/saving.</p>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="k">auto</span><span class="o">&amp;</span><span class="w"> </span><span class="p">[</span><span class="n">key</span><span class="p">,</span><span class="w"> </span><span class="n">meta</span><span class="p">]</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">iwlo_meta_</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">octomap</span><span class="o">::</span><span class="n">point3d</span><span class="w"> </span><span class="n">coord</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">octree_</span><span class="o">-&gt;</span><span class="n">keyToCoord</span><span class="p">(</span><span class="n">key</span><span class="p">);</span>
+<span class="w">    </span><span class="n">octomap</span><span class="o">::</span><span class="n">OcTreeNode</span><span class="o">*</span><span class="w"> </span><span class="n">node</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">octree_</span><span class="o">-&gt;</span><span class="n">updateNode</span><span class="p">(</span><span class="n">coord</span><span class="p">,</span><span class="w"> </span><span class="nb">true</span><span class="p">,</span><span class="w"> </span><span class="nb">true</span><span class="p">);</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">node</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">node</span><span class="o">-&gt;</span><span class="n">setLogOdds</span><span class="p">(</span><span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="p">(</span><span class="n">meta</span><span class="p">.</span><span class="n">log_odds</span><span class="p">));</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+<span class="n">octree_</span><span class="o">-&gt;</span><span class="n">updateInnerOccupancy</span><span class="p">();</span>
+</pre></div>
+</div>
+</section>
+<section id="helper-functions">
+<h4>Helper Functions<a class="headerlink" href="#helper-functions" title="Link to this heading"></a></h4>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="k">static</span><span class="w"> </span><span class="kt">double</span><span class="w"> </span><span class="nf">log_odds_to_probability</span><span class="p">(</span><span class="kt">double</span><span class="w"> </span><span class="n">log_odds</span><span class="p">);</span>
+<span class="k">static</span><span class="w"> </span><span class="kt">double</span><span class="w"> </span><span class="nf">intensity_to_weight</span><span class="p">(</span><span class="kt">double</span><span class="w"> </span><span class="n">intensity</span><span class="p">,</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">IWLOParams</span><span class="o">&amp;</span><span class="w"> </span><span class="n">params</span><span class="p">);</span>
+<span class="k">static</span><span class="w"> </span><span class="kt">double</span><span class="w"> </span><span class="nf">compute_alpha</span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">observation_count</span><span class="p">,</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">IWLOParams</span><span class="o">&amp;</span><span class="w"> </span><span class="n">params</span><span class="p">);</span>
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+<hr class="docutils" />
+<section id="storage-architecture">
+<h2>Storage Architecture<a class="headerlink" href="#storage-architecture" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>┌─────────────────────────────────────────────────────────────────────┐
+│  Tile                                                               │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │  iwlo_meta_: unordered_map&lt;OcTreeKey, IWLOMeta&gt;             │   │
+│  │  - Primary storage for IWLO algorithm                        │   │
+│  │  - Preserves exact log-odds and observation count            │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│                              │                                      │
+│                              ▼ sync_to_octree()                     │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │  octree_: OcTree                                             │   │
+│  │  - For visualization and spatial queries                     │   │
+│  │  - Prunable for efficient storage                            │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────┘
+</pre></div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="disk-storage">
+<h2>Disk Storage<a class="headerlink" href="#disk-storage" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>tile_0_0_0/
+├── octree.bt      # OctoMap binary (pruned)
+└── iwlo_meta.bin  # IWLO metadata (magic + version + entries)
+</pre></div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="related">
+<h2>Related<a class="headerlink" href="#related" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="outofcore_tile_mapper.html"><span class="std std-doc">outofcore_tile_mapper.cpp</span></a> - Manages multiple tiles</p></li>
+<li><p><a class="reference internal" href="tile_manager.html"><span class="std std-doc">tile_manager.cpp</span></a> - File system operations</p></li>
+<li><p><a class="reference internal" href="../design/iwlo_design.html"><span class="std std-doc">IWLO Design</span></a> - Algorithm details</p></li>
+<li><p><a class="reference internal" href="../design/refactoring_plan.html"><span class="std std-doc">C++ Backend Refactoring Plan</span></a> - IWLO duplication issue</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="outofcore_tile_mapper.html" class="btn btn-neutral float-left" title="outofcore_tile_mapper.cpp / .h" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="tile_manager.html" class="btn btn-neutral float-right" title="tile_manager.cpp / .h" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Seungmin Kim.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

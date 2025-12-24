@@ -1,0 +1,317 @@
+# Configuration Reference
+
+Complete parameter reference for the sonar 3D mapping system.
+
+**Location**: `scripts/config.py`
+
+---
+
+## Overview
+
+Parameters are organized into dataclasses and loaded from ROS2 parameters at node startup. Some parameters can be changed at runtime (dynamic), while others require node restart (read-only).
+
+```
+SonarMapperConfig
+├── Sonar Hardware
+├── Filtering
+├── Mounting
+├── Voxel Map
+├── IWLO Algorithm
+├── Adaptive Scaling
+├── Out-of-Core Storage
+├── Crosstalk Filter (optional)
+└── Robot Detection (optional)
+```
+
+---
+
+## Parameter Categories
+
+### Sonar Hardware
+
+Hardware specifications for Oculus multibeam sonar.
+
+| Parameter | ROS2 Name | Default | Type | Description |
+|-----------|-----------|---------|------|-------------|
+| `horizontal_fov` | `sonar.horizontal_fov` | 130.0 | float | Horizontal field of view in degrees. Oculus M750d supports 130° wide mode. |
+| `vertical_aperture` | `sonar.vertical_aperture` | 20.0 | float | Vertical beam aperture in degrees. Affects vertical spread of each ray. |
+
+**Read-only**: These values are fixed based on sonar hardware.
+
+---
+
+### Filtering
+
+Controls which sonar returns are processed.
+
+| Parameter | ROS2 Name | Default | Dynamic | Description |
+|-----------|-----------|---------|---------|-------------|
+| `min_range` | `filtering.min_range` | 0.5 | Yes | Minimum valid range in meters. Ignores returns closer than this. |
+| `intensity_threshold` | `filtering.intensity_threshold` | 35 | Yes | Intensity threshold (0-255). Returns above this are considered occupied. |
+
+**Tuning Guide**:
+- `intensity_threshold`: Lower values detect weaker returns (more points, more noise). Higher values require stronger reflections (fewer points, less noise). Start with 35-50 for typical underwater environments.
+
+---
+
+### Mounting
+
+Sonar mounting position and orientation relative to `base_link`.
+
+| Parameter | ROS2 Name | Default | Dynamic | Description |
+|-----------|-----------|---------|---------|-------------|
+| `sonar_position[0]` | `mounting.position.x` | 0.0 | No | X offset in meters (forward) |
+| `sonar_position[1]` | `mounting.position.y` | 0.0 | No | Y offset in meters (left) |
+| `sonar_position[2]` | `mounting.position.z` | -0.5 | No | Z offset in meters (down) |
+| `sonar_orientation[0]` | `mounting.orientation.roll` | 0.0 | Yes | Roll angle in degrees |
+| `sonar_orientation[1]` | `mounting.orientation.pitch` | 90.0 | Yes | Pitch angle in degrees |
+| `sonar_orientation[2]` | `mounting.orientation.yaw` | 0.0 | Yes | Yaw angle in degrees |
+
+**Note**: Position is read-only (requires restart). Orientation is dynamic and updates TF when changed.
+
+**Common Configurations**:
+- Downward-looking: `pitch=90°` (default)
+- Forward-looking: `pitch=0°`
+- 45° down: `pitch=45°`
+
+---
+
+### Voxel Map
+
+Controls the 3D occupancy grid structure.
+
+| Parameter | ROS2 Name | Default | Dynamic | Description |
+|-----------|-----------|---------|---------|-------------|
+| `voxel_resolution` | `octree.voxel_resolution` | 0.05 | No | Voxel size in meters. Smaller = higher detail, more memory. |
+| `occupied_threshold` | `mapping.occupied_threshold` | 0.7 | Yes | Probability threshold for occupied classification. |
+| `angular_cone_width` | `mapping.angular_cone_width` | 0.5 | Yes | Vertical cone width in degrees for shadow protection. |
+| `dynamic_expansion` | `octree.dynamic_expansion` | True | Yes | Allow map boundary expansion. |
+| `use_cpp_backend` | `octree.use_cpp_backend` | True | No | Use C++ backend for ~10x speedup. |
+
+**Tuning Guide**:
+- `voxel_resolution`: 0.05m is good for detailed mapping. Use 0.1m for larger areas.
+- `occupied_threshold`: Higher values (0.8-0.9) require more confident observations.
+
+---
+
+### IWLO Algorithm
+
+Intensity-Weighted Log-Odds Bayesian probability update parameters.
+
+| Parameter | ROS2 Name | Default | Description |
+|-----------|-----------|---------|-------------|
+| `L_occ` | `iwlo.L_occ` | 3.5 | Log-odds increment for occupied observations. Higher = faster convergence to occupied. |
+| `L_free` | `iwlo.L_free` | -3.0 | Log-odds decrement for free observations. Lower (more negative) = faster convergence to free. |
+| `L_min` | `iwlo.L_min` | -10.0 | Minimum log-odds (saturation floor). Prevents probability from reaching exactly 0. |
+| `L_max` | `iwlo.L_max` | 10.0 | Maximum log-odds (saturation ceiling). Prevents probability from reaching exactly 1. |
+| `sharpness` | `iwlo.sharpness` | 3.0 | Sigmoid slope for intensity-to-weight conversion. Higher = more binary response. |
+| `decay_rate` | `iwlo.decay_rate` | 0.1 | Learning rate decay factor. Higher = faster stabilization. |
+| `min_alpha` | `iwlo.min_alpha` | 0.1 | Minimum learning rate. Maintains ability to detect changes. |
+| `intensity_max` | - | 255 | Maximum intensity value for normalization. |
+
+**Read-only**: All IWLO parameters require node restart.
+
+**How IWLO Works**:
+```
+Occupied: ΔL = L_occ × w(I) × α(n)
+Free:     ΔL = L_free × α(n)
+
+w(I) = sigmoid(sharpness × (normalized_intensity - 0.5))
+α(n) = max(min_alpha, 1 / (1 + decay_rate × n))
+```
+
+**Tuning Guide**:
+- `sharpness`: Low (0.1-1) for smooth intensity response, High (3-5) for binary-like response
+- `decay_rate`: Low (0.05) for slow convergence, High (0.3-0.5) for fast convergence
+
+See [IWLO Design](../design/iwlo_design.md) for detailed algorithm explanation.
+
+---
+
+### Adaptive Scaling
+
+Suppresses noisy occupied updates in regions already classified as free.
+
+| Parameter | ROS2 Name | Default | Description |
+|-----------|-----------|---------|-------------|
+| `adaptive_update` | `adaptive.update` | True | Enable adaptive scaling. |
+| `adaptive_threshold` | `adaptive.threshold` | 0.5 | Probability threshold below which scaling applies. |
+| `adaptive_max_ratio` | `adaptive.max_ratio` | 0.3 | Maximum scale factor for suppressed updates. |
+
+**Read-only**: Requires node restart.
+
+**How It Works**:
+```
+if current_prob < adaptive_threshold:
+    scale = (current_prob / adaptive_threshold) × adaptive_max_ratio
+else:
+    scale = 1.0
+```
+
+This prevents random noise from flipping free voxels back to occupied.
+
+---
+
+### Out-of-Core Storage
+
+Disk-based tile storage for large-scale mapping.
+
+| Parameter | ROS2 Name | Default | Description |
+|-----------|-----------|---------|-------------|
+| `use_outofcore` | `outofcore.use` | False | Enable disk-based storage. |
+| `outofcore_map_path` | `outofcore.map_path` | "/workspace/data/map_tiles" | Directory for tile storage. |
+| `outofcore_tile_size` | `outofcore.tile_size` | 10.0 | Tile size in meters. |
+| `outofcore_cache_size` | `outofcore.cache_size` | 16 | Number of tiles to keep in memory. |
+
+**Read-only**: Requires node restart.
+
+**When to Use**:
+- Large-scale mapping (>100m×100m)
+- Limited RAM environments
+- Long-duration missions
+
+**Trade-offs**:
+- Slower than in-memory mode
+- Requires `map_visualizer_node` for visualization
+- Enables incremental map updates
+
+---
+
+### Crosstalk Filter
+
+Removes cross-talk noise (horizontal stripes) from multibeam sonar images.
+
+**Enable**: Set `crosstalk.enabled=True` at launch.
+
+| Parameter | ROS2 Name | Default | Dynamic | Description |
+|-----------|-----------|---------|---------|-------------|
+| `morpho_enabled` | `crosstalk.morpho_enabled` | True | Yes | Enable morphological filtering. |
+| `morpho_kernel_size` | `crosstalk.morpho_kernel_size` | 5 | Yes | Kernel size for opening operation. |
+| `morpho_kernel_shape` | `crosstalk.morpho_kernel_shape` | "rect" | Yes | Kernel shape: "rect", "ellipse", "cross". |
+| `azimuth_enabled` | `crosstalk.azimuth_enabled` | True | Yes | Enable azimuth consistency check. |
+| `azimuth_threshold` | `crosstalk.azimuth_threshold` | 0.5 | Yes | Consistency threshold (0-1). |
+
+**How It Works**:
+1. Morphological opening removes small horizontal artifacts
+2. Azimuth consistency check removes isolated noise across beams
+
+---
+
+### Robot Detection
+
+Separates terrain returns from other underwater robot returns based on intensity.
+
+**Enable**: Set `robot_detection.enabled=True` at launch.
+
+| Parameter | ROS2 Name | Default | Dynamic | Description |
+|-----------|-----------|---------|---------|-------------|
+| `terrain_detection.min_threshold` | `terrain_detection.min_threshold` | 80 | Yes | Minimum intensity for terrain. |
+| `terrain_detection.max_threshold` | `terrain_detection.max_threshold` | 180 | Yes | Maximum intensity for terrain. |
+| `robot_detection.min_threshold` | `robot_detection.min_threshold` | 180 | Yes | Minimum intensity for robot detection. |
+| `robot_detection.topic` | `robot_detection.topic` | "/sonar_robot_detections" | No | Output topic for robot detections. |
+
+**Intensity Classification**:
+```
+[0, 80)       → Ignored (too weak)
+[80, 180)     → Terrain
+[180, 255]    → Robot (high reflectivity)
+```
+
+---
+
+### Processing
+
+General processing parameters.
+
+| Parameter | ROS2 Name | Default | Dynamic | Description |
+|-----------|-----------|---------|---------|-------------|
+| `frame_skip` | `processing.frame_skip` | 1 | Yes | Process every Nth frame. Use 2+ for high-rate sonars. |
+
+---
+
+### Node-Only Parameters
+
+These parameters are only used by `3d_mapper_node.py`, not stored in config dataclass.
+
+| Parameter | ROS2 Name | Default | Description |
+|-----------|-----------|---------|-------------|
+| Frame IDs | `frames.sonar` | "sonar_link" | Sonar TF frame |
+| | `frames.base` | "base_link" | Base TF frame |
+| | `frames.map` | "map" | Map TF frame |
+| | `frames.publish_tf` | True | Publish static TF |
+| Topics | `topics.sonar` | "/sensor/sonar/oculus/m750d/image" | Sonar image topic |
+| | `topics.odometry` | "/fast_lio/odometry" | Odometry topic |
+| | `topics.pointcloud` | "/sonar_3d_map" | Output pointcloud |
+| | `topics.marker` | "/sonar_3d_map_markers" | Marker array |
+| Visualization | `visualization.show_opencv_visualization` | False | Show debug windows |
+| | `visualization.pointcloud_publish_rate` | 10.0 | Hz (in-memory) |
+| | `visualization.tile_save_interval` | 5.0 | Seconds (out-of-core) |
+
+---
+
+## Configuration Flow
+
+```
+Launch File / CLI Args
+         ↓
+ROS2 Parameter Server
+         ↓
+SonarMapperConfig.from_ros_params(node)
+         ↓
+config.to_mapper_dict()
+         ↓
+SonarTo3DMapper(config_dict)
+```
+
+---
+
+## YAML Configuration Example
+
+```yaml
+# config/mapper_params.yaml
+sonar_3d_mapper:
+  ros__parameters:
+    # Sonar
+    sonar:
+      horizontal_fov: 130.0
+      vertical_aperture: 20.0
+
+    # Filtering
+    filtering:
+      min_range: 0.5
+      intensity_threshold: 50
+
+    # Mounting
+    mounting:
+      position:
+        x: 0.0
+        y: 0.0
+        z: -0.5
+      orientation:
+        roll: 0.0
+        pitch: 90.0
+        yaw: 0.0
+
+    # Octree
+    octree:
+      voxel_resolution: 0.1
+      use_cpp_backend: true
+
+    # IWLO
+    iwlo:
+      sharpness: 3.0
+      L_occ: 3.5
+      L_free: -3.0
+
+    # Out-of-Core (disabled)
+    outofcore:
+      use: false
+```
+
+---
+
+## Related
+
+- [3d_mapper.py](3d_mapper.md) - Core mapping library
+- [3d_mapper_node.py](3d_mapper_node.md) - ROS2 node wrapper
+- [IWLO Design](../design/iwlo_design.md) - Algorithm details

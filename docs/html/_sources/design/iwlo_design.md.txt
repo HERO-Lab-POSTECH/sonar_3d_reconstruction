@@ -1,0 +1,230 @@
+# Intensity-Weighted Log-Odds (IWLO) Probability Update
+
+## Overview
+
+IWLO is a novel probability update method that combines the advantages of Log-Odds Bayesian and Weighted Average approaches.
+
+**Core Idea**: Transform intensity information through a sigmoid function to modulate log-odds update strength, and decay the learning rate based on observation count to achieve natural convergence.
+
+---
+
+## 1. Background
+
+### Limitations of Existing Methods
+
+| Method | Advantages | Limitations |
+|--------|------------|-------------|
+| **Log-Odds** | Mathematical rigor, fast change detection | Ignores intensity, saturation risk |
+| **Weighted Average** | Uses intensity, natural convergence | Weak Bayesian justification, slow change detection |
+
+### IWLO Design Goals
+
+1. Continuously utilize intensity information
+2. Maintain Log-odds based Bayesian updates
+3. Reflect confidence based on observation count
+4. Maintain appropriate responsiveness to environmental changes
+5. Prevent saturation
+
+---
+
+## 2. Mathematical Formulation
+
+### 2.1 Intensity-to-Weight Transformation
+
+```
+w(I) = sigmoid(sharpness × (normalized - 0.5))
+
+where:
+  normalized = (I - threshold) / (max_intensity - threshold)
+  sigmoid(x) = 1 / (1 + exp(-x))
+```
+
+**Parameters**:
+- `threshold`: Intensity threshold (default: 35)
+- `max_intensity`: Maximum intensity value (default: 255)
+- `sharpness`: Sigmoid slope (default: 0.1)
+
+**Characteristics**:
+- Below threshold: w = 0 (ignored)
+- Mid intensity: smooth transition
+- Maximum intensity: w → 1
+
+### 2.2 Learning Rate Decay
+
+```
+α(n) = max(min_alpha, 1 / (1 + decay_rate × n))
+```
+
+**Parameters**:
+- `decay_rate`: Decay rate (default: 0.1)
+- `min_alpha`: Minimum learning rate (default: 0.3)
+
+**Characteristics**:
+- First observation (n=0): α = 1.0
+- 10 observations (n=10): α ≈ 0.5
+- After convergence: maintains min_alpha for change detection
+
+### 2.3 Adaptive Scaling
+
+```
+if current_prob < adaptive_threshold:
+    scale = (current_prob / adaptive_threshold) × adaptive_max_ratio
+else:
+    scale = 1.0
+```
+
+**Purpose**: Suppress noisy occupied updates on regions already classified as free.
+
+### 2.4 Final Update Formula
+
+**Occupied Update** (intensity > threshold):
+```
+ΔL = L_occ × w(I) × α(n) × scale
+```
+
+**Free Update** (intensity ≤ threshold):
+```
+ΔL = L_free × α(n)
+```
+
+**Application**:
+```
+new_log_odds = clip(old_log_odds + ΔL, L_min, L_max)
+```
+
+---
+
+## 3. Parameter Description
+
+| Parameter | Default | Range | Description |
+|-----------|---------|-------|-------------|
+| `L_occ` | 3.5 | [0.5, 5.0] | Maximum occupied log-odds increment |
+| `L_free` | -3.0 | [-5.0, -0.5] | Free space log-odds increment |
+| `L_min` | -10.0 | [-10.0, 0.0] | Saturation lower bound (P≈0.00005) |
+| `L_max` | 10.0 | [2.0, 10.0] | Saturation upper bound (P≈0.99995) |
+| `sharpness` | 0.1 | [0.1, 5.0] | Sigmoid slope |
+| `decay_rate` | 0.1 | [0.05, 0.5] | Learning rate decay |
+| `min_alpha` | 0.3 | [0.01, 0.5] | Minimum learning rate |
+
+### Parameter Tuning Guide
+
+**sharpness adjustment**:
+- High value (4-5): Sensitive to intensity, approaches binary classification
+- Low value (0.1-1): Insensitive to intensity, smooth transition
+
+**decay_rate adjustment**:
+- High value (0.3-0.5): Fast convergence, weakened change detection
+- Low value (0.05-0.1): Slow convergence, maintains change detection
+
+**min_alpha adjustment**:
+- High value (0.2-0.5): Fast response to environmental changes
+- Low value (0.01-0.1): Stable but slow change detection
+
+---
+
+## 4. Expected Behavior
+
+### Scenario Comparison
+
+| Scenario | Log-Odds | Weighted Avg | IWLO |
+|----------|----------|--------------|------|
+| Strong signal first observation | P=0.82 | P=0.95 | P=0.88 |
+| Weak signal accumulation | Noise accumulation | Slow convergence | Stable convergence |
+| Environmental change | Fast response | Slow response | Appropriate response |
+| Long-term stability | Saturation | Stable | Bounded stability |
+
+### Convergence Characteristics
+
+```
+Observation count vs Probability change:
+n=1:  Strong signal → P=0.7~0.8
+n=5:  Repeated observation → P=0.85~0.90
+n=10: Stabilization → P=0.90~0.95
+n=20: Final convergence → P=0.95~0.97 (L_max limit)
+```
+
+---
+
+## 5. Usage
+
+### Launch File
+```bash
+# Use IWLO method (default)
+ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py
+```
+
+### Parameter Override
+```bash
+ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py \
+    sharpness:=4.0 \
+    decay_rate:=0.2
+```
+
+### YAML Configuration
+```yaml
+# config/method_iwlo.yaml
+sonar_3d_mapper:
+  ros__parameters:
+    L_occ: 3.5
+    L_free: -3.0
+    L_min: -10.0
+    L_max: 10.0
+    sharpness: 0.1
+    decay_rate: 0.1
+    min_alpha: 0.3
+```
+
+---
+
+## 6. Implementation Details
+
+### C++ Code (probability_updater.cpp)
+
+```cpp
+double ProbabilityUpdater::intensity_to_weight(double intensity) const {
+    if (intensity <= intensity_threshold_) return 0.0;
+    double normalized = (intensity - intensity_threshold_) /
+                        (intensity_max_ - intensity_threshold_);
+    double x = sharpness_ * (normalized - 0.5);
+    return 1.0 / (1.0 + std::exp(-x));
+}
+
+double ProbabilityUpdater::compute_alpha(int observation_count) const {
+    return std::max(min_alpha_, 1.0 / (1.0 + decay_rate_ * observation_count));
+}
+```
+
+### Update Logic (probability_updater.cpp:373-384)
+
+```cpp
+double delta_L;
+if (intensity > intensity_threshold_) {
+    // Occupied update: ΔL = L_occ × w(I) × α(n) × scale
+    delta_L = log_odds_occupied_ * w_intensity * alpha_n * adapt_scale;
+} else {
+    // Free space update: ΔL = L_free × α(n) × scale
+    delta_L = log_odds_free_ * alpha_n * adapt_scale;
+}
+
+// Apply update with saturation limits
+double new_log_odds = current_log_odds + delta_L;
+new_log_odds = std::max(L_min_, std::min(L_max_, new_log_odds));
+```
+
+---
+
+## 7. References
+
+1. **Moravec & Elfes (1985)**: Original log-odds Bayesian occupancy grid mapping
+2. **OctoMap (Hornung et al., 2013)**: Saturation limits to prevent dead-locking
+3. **VoxelMap (Yuan et al., 2022)**: Weighted average based real-time mapping
+4. **CMU Sonar (Teixeira et al., 2016)**: Underwater sonar-specific sensor model
+
+---
+
+## 8. Changelog
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2024-12-04 | 1.0 | Initial design and implementation |
+| 2024-12-20 | 1.1 | Extended L_min/L_max bounds, adjusted sharpness default |
