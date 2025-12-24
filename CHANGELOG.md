@@ -45,6 +45,30 @@
 - **CMakeLists.txt 업데이트**
   - `octree_storage.cpp` 빌드 대상에 추가
 
+### Phase 3: IMapperBackend 인터페이스 통합
+
+#### Added (Phase 3)
+- **IMapperBackend 추상 인터페이스** (`cpp/mapper_backend.h`)
+  - RAM/Disk 백엔드의 공통 API 정의
+  - 필수 API: `batch_update_iwlo()`, `set_*_params()`, `get_occupied_voxels()`, `clear()`
+  - 선택적 API: `flush()`, `preload_region()`, `get_disk_usage()`, `prune()`
+  - `get_backend_type()`: "RAM" 또는 "Disk" 반환
+
+#### Changed (Phase 3)
+- **ProbabilityUpdater → IMapperBackend 구현**
+  - `probability_updater.h`: `IMapperBackend` 상속 추가
+  - 모든 공통 메서드에 `override` 키워드 추가
+  - `get_backend_type()` → "RAM" 반환
+  - `prune()` → `prune_tree()` 위임
+
+- **OutofcoreTileMapper → IMapperBackend 구현**
+  - `outofcore_tile_mapper.h`: `IMapperBackend` 상속 추가
+  - 모든 공통 메서드에 `override` 키워드 추가
+  - `get_backend_type()` → "Disk" 반환
+  - `flush()` → `flush_all()` 위임
+  - `prune()` → `prune_all()` 위임
+  - `supports_persistence()` → `true` 반환
+
 ### Removed
 - **미사용 coordinate_transform 코드 제거**
   - `coordinate_transform.cpp`, `coordinate_transform.h` 삭제

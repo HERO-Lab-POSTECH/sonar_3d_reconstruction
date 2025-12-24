@@ -75,7 +75,7 @@ void ProbabilityUpdater::set_clamping_thresholds(double min_prob, double max_pro
 
 // batch_update() method removed - using IWLO only
 
-Eigen::MatrixXd ProbabilityUpdater::get_occupied_voxels(double min_probability) const
+Eigen::MatrixXd ProbabilityUpdater::get_occupied_voxels(double min_probability)
 {
     return octree_mapper_->get_occupied_voxels(min_probability);
 }

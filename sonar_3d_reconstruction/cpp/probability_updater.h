@@ -1,6 +1,7 @@
 #ifndef SONAR_3D_RECONSTRUCTION__PROBABILITY_UPDATER_H_
 #define SONAR_3D_RECONSTRUCTION__PROBABILITY_UPDATER_H_
 
+#include "mapper_backend.h"
 #include "octree_mapper.h"
 #include <Eigen/Dense>
 #include <vector>
@@ -12,8 +13,10 @@ namespace sonar_3d_reconstruction
 /**
  * High-level probabilistic updater that wraps OctreeMapper
  * Provides Python-friendly interface for sonar data processing
+ *
+ * Implements IMapperBackend interface (In-Memory/RAM backend)
  */
-class ProbabilityUpdater
+class ProbabilityUpdater : public IMapperBackend
 {
 public:
     /**
@@ -29,7 +32,7 @@ public:
      * @param log_odds_occupied Log-odds increment for occupied voxels
      * @param log_odds_free Log-odds decrement for free voxels
      */
-    void set_log_odds_params(double log_odds_occupied, double log_odds_free);
+    void set_log_odds_params(double log_odds_occupied, double log_odds_free) override;
     
     /**
      * Set adaptive update parameters
@@ -37,7 +40,7 @@ public:
      * @param adaptive_threshold Threshold for adaptive behavior
      * @param adaptive_max_ratio Maximum update ratio for adaptive behavior
      */
-    void set_adaptive_params(bool adaptive_enabled, double adaptive_threshold, double adaptive_max_ratio);
+    void set_adaptive_params(bool adaptive_enabled, double adaptive_threshold, double adaptive_max_ratio) override;
     
     /**
      * Set probability clamping thresholds
@@ -53,49 +56,54 @@ public:
      * @param min_probability Minimum probability threshold
      * @return Nx4 matrix [x, y, z, probability]
      */
-    Eigen::MatrixXd get_occupied_voxels(double min_probability = 0.5) const;
+    Eigen::MatrixXd get_occupied_voxels(double min_probability = 0.5) override;
     
     /**
      * Get memory usage statistics
      * @return MemoryStats structure
      */
-    MemoryStats get_memory_usage() const;
+    MemoryStats get_memory_usage() const override;
     
     /**
      * Get number of nodes in octree
      * @return Total number of nodes
      */
-    size_t get_num_nodes() const;
+    size_t get_num_nodes() const override;
     
     /**
      * Get octree resolution
      * @return Voxel resolution in meters
      */
-    double get_resolution() const;
+    double get_resolution() const override;
     
     /**
      * Prune unnecessary nodes to reduce memory usage
      * @return Number of nodes removed
      */
     size_t prune_tree();
+
+    /**
+     * Prune (IMapperBackend interface)
+     */
+    size_t prune() override { return prune_tree(); }
     
     /**
      * Clear all data from octree
      */
-    void clear();
+    void clear() override;
 
     /**
      * Set threshold for probability classification (2-class: occupied vs free)
      * @param occupied_thresh Occupied threshold (default: 0.7), prob >= this = occupied
      */
-    void set_occupied_threshold(double occupied_thresh);
+    void set_occupied_threshold(double occupied_thresh) override;
 
     /**
      * Set intensity normalization parameters
      * @param intensity_threshold Minimum intensity to consider (default: 35.0)
      * @param intensity_max Maximum intensity value (default: 255.0)
      */
-    void set_intensity_params(double intensity_threshold, double intensity_max);
+    void set_intensity_params(double intensity_threshold, double intensity_max) override;
 
     /**
      * Set IWLO (Intensity-Weighted Log-Odds) parameters
@@ -106,7 +114,7 @@ public:
      * @param L_max Saturation upper bound (default: 3.5)
      */
     void set_iwlo_params(double sharpness, double decay_rate, double min_alpha,
-                         double L_min, double L_max);
+                         double L_min, double L_max) override;
 
     /**
      * Batch update using IWLO (Intensity-Weighted Log-Odds) method
@@ -119,7 +127,7 @@ public:
         const Eigen::MatrixXd& points,
         const Eigen::VectorXd& intensities,
         const std::vector<bool>& is_occupied
-    );
+    ) override;
 
     // batch_update_weighted_average() removed - using IWLO only
 
@@ -140,6 +148,12 @@ public:
      * Force full synchronization from voxels_log_odds_ to octree_mapper_
      */
     void force_full_sync();
+
+    /**
+     * Get backend type (IMapperBackend interface)
+     * @return "RAM"
+     */
+    std::string get_backend_type() const override { return "RAM"; }
 
 private:
     std::unique_ptr<OctreeMapper> octree_mapper_;

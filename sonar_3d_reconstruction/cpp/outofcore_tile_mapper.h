@@ -1,6 +1,7 @@
 #ifndef SONAR_3D_RECONSTRUCTION__OUTOFCORE_TILE_MAPPER_H_
 #define SONAR_3D_RECONSTRUCTION__OUTOFCORE_TILE_MAPPER_H_
 
+#include "mapper_backend.h"
 #include "tile.h"
 #include "tile_manager.h"
 #include "lru_cache.h"
@@ -21,8 +22,10 @@ namespace sonar_3d_reconstruction
  * - LRU cache for tile management
  * - IWLO (Intensity-Weighted Log-Odds) algorithm support
  * - API compatible with existing ProbabilityUpdater
+ *
+ * Implements IMapperBackend interface (Out-of-Core/Disk backend)
  */
-class OutofcoreTileMapper
+class OutofcoreTileMapper : public IMapperBackend
 {
 public:
     /**
@@ -53,40 +56,40 @@ public:
      */
     void batch_update_iwlo(const Eigen::MatrixXd& points,
                            const Eigen::VectorXd& intensities,
-                           const std::vector<bool>& is_occupied);
+                           const std::vector<bool>& is_occupied) override;
 
     /**
      * Set IWLO parameters
      */
     void set_iwlo_params(double sharpness, double decay_rate, double min_alpha,
-                         double L_min, double L_max);
+                         double L_min, double L_max) override;
 
     /**
      * Set log-odds parameters
      */
-    void set_log_odds_params(double log_odds_occupied, double log_odds_free);
+    void set_log_odds_params(double log_odds_occupied, double log_odds_free) override;
 
     /**
      * Set intensity parameters
      */
-    void set_intensity_params(double intensity_threshold, double intensity_max);
+    void set_intensity_params(double intensity_threshold, double intensity_max) override;
 
     /**
      * Set occupied threshold for tile save filtering
      */
-    void set_occupied_threshold(double threshold);
+    void set_occupied_threshold(double threshold) override;
 
     /**
      * Set adaptive parameters
      */
-    void set_adaptive_params(bool enabled, double threshold, double max_ratio);
+    void set_adaptive_params(bool enabled, double threshold, double max_ratio) override;
 
     /**
      * Get all occupied voxels from cached tiles only
      * @param min_probability Minimum probability threshold
      * @return Nx4 matrix [x, y, z, probability]
      */
-    Eigen::MatrixXd get_occupied_voxels(double min_probability = 0.5);
+    Eigen::MatrixXd get_occupied_voxels(double min_probability = 0.5) override;
 
     /**
      * Get ALL occupied voxels from ALL tiles (loads from disk)
@@ -99,22 +102,22 @@ public:
     /**
      * Get memory usage statistics
      */
-    MemoryStats get_memory_usage() const;
+    MemoryStats get_memory_usage() const override;
 
     /**
      * Clear all data
      */
-    void clear();
+    void clear() override;
 
     /**
      * Get resolution
      */
-    double get_resolution() const { return resolution_; }
+    double get_resolution() const override { return resolution_; }
 
     /**
      * Get total number of nodes across all cached tiles
      */
-    size_t get_num_nodes() const;
+    size_t get_num_nodes() const override;
 
     // ============== Extended API ==============
 
@@ -193,17 +196,17 @@ public:
     std::vector<TileIndex> get_all_tile_indices() const;
 
     /**
-     * Get disk usage in bytes
+     * Get disk usage in bytes (IMapperBackend interface)
      */
-    size_t get_disk_usage() const;
+    size_t get_disk_usage() const override;
 
     /**
-     * Preload tiles in a region
+     * Preload tiles in a region (IMapperBackend interface)
      * @param min_bound Minimum corner
      * @param max_bound Maximum corner
      */
     void preload_region(const Eigen::Vector3d& min_bound,
-                        const Eigen::Vector3d& max_bound);
+                        const Eigen::Vector3d& max_bound) override;
 
     /**
      * Reload specific tiles from disk (for visualization sync)
@@ -218,9 +221,31 @@ public:
     size_t prune_all();
 
     /**
+     * Prune (IMapperBackend interface)
+     */
+    size_t prune() override { return prune_all(); }
+
+    /**
      * Get IWLO parameters
      */
     const IWLOParams& get_iwlo_params() const { return iwlo_params_; }
+
+    // ============== IMapperBackend Optional API ==============
+
+    /**
+     * Flush data to persistent storage
+     */
+    void flush() override { flush_all(); }
+
+    /**
+     * Check if backend supports persistent storage
+     */
+    bool supports_persistence() const override { return true; }
+
+    /**
+     * Get backend type
+     */
+    std::string get_backend_type() const override { return "Disk"; }
 
     /**
      * Get and clear recently saved tiles (from eviction)
