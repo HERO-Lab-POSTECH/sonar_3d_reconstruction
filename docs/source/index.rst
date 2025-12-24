@@ -24,7 +24,6 @@ Features
    design/iwlo_design
    design/octree_mapping
    design/outofcore_design
-   design/parameter_centralization
    troubleshooting
 
 .. toctree::
