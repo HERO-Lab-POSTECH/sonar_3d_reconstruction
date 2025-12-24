@@ -2,9 +2,9 @@
 
 ## Overview
 
-IWLO is a novel probability update method that combines the advantages of Log-Odds Bayesian and Weighted Average approaches.
+IWLO는 ==Log-Odds Bayesian==과 ==Weighted Average== 방식의 장점을 결합한 확률 업데이트 방법이다.
 
-**Core Idea**: Transform intensity information through a sigmoid function to modulate log-odds update strength, and decay the learning rate based on observation count to achieve natural convergence.
+**Core Idea**: Intensity 정보를 sigmoid 함수로 변환하여 log-odds 업데이트 강도를 조절하고, 관측 횟수에 따라 learning rate를 감쇠시켜 자연스러운 수렴을 달성한다.
 
 ---
 
@@ -19,201 +19,221 @@ IWLO is a novel probability update method that combines the advantages of Log-Od
 
 ### IWLO Design Goals
 
-1. Continuously utilize intensity information
-2. Maintain Log-odds based Bayesian updates
-3. Reflect confidence based on observation count
-4. Maintain appropriate responsiveness to environmental changes
-5. Prevent saturation
+1. Intensity 정보를 지속적으로 활용
+2. Log-odds 기반 Bayesian 업데이트 유지
+3. 관측 횟수에 따른 신뢰도 반영
+4. 환경 변화에 대한 적절한 반응성 유지
+5. Saturation 방지
 
 ---
 
 ## 2. Mathematical Formulation
 
-### 2.1 Intensity-to-Weight Transformation
+### 2.1 Probability-Log-Odds Transformation
+
+**Definition:**
+
+$$L = \log\left(\frac{P}{1-P}\right)$$
+
+$$P = \frac{1}{1 + e^{-L}}$$
+
+**Property**: Log-odds 공간에서 업데이트는 ==덧셈 연산==으로 이루어진다.
+
+---
+
+### 2.2 Intensity-to-Weight Transformation
+
+**Definition:**
+
+$$w(I) = \begin{cases}
+0 & \text{if } I \leq I_{th} \\
+\sigma\left(\gamma \cdot \left(\frac{I - I_{th}}{I_{max} - I_{th}} - 0.5\right)\right) & \text{otherwise}
+\end{cases}$$
+
+where $\sigma(x) = \frac{1}{1 + e^{-x}}$ (sigmoid function)
+
+**Parameters:**
+
+| Parameter | Symbol | Default | Range | Description |
+|-----------|--------|---------|-------|-------------|
+| Intensity threshold | $I_{th}$ | 35 | [0, 100] | 최소 유효 intensity |
+| Maximum intensity | $I_{max}$ | 255 | [100, 255] | 정규화 기준 최대값 |
+| Sharpness | $\gamma$ | 0.1 | [0.1, 5.0] | Sigmoid 기울기 |
+
+**Characteristics:**
+- $I \leq I_{th}$: $w = 0$ (무시)
+- $I = I_{th} + 0.5(I_{max} - I_{th})$: $w = 0.5$ (중간)
+- $I \to I_{max}$: $w \to 1$ (최대)
+
+---
+
+### 2.3 Learning Rate Decay
+
+**Definition:**
+
+$$\alpha(n) = \max\left(\alpha_{min}, \frac{1}{1 + \lambda \cdot n}\right)$$
+
+**Parameters:**
+
+| Parameter | Symbol | Default | Range | Description |
+|-----------|--------|---------|-------|-------------|
+| Decay rate | $\lambda$ | 0.1 | [0.05, 0.5] | 감쇠 속도 |
+| Minimum alpha | $\alpha_{min}$ | 0.3 | [0.01, 0.5] | 최소 learning rate |
+
+**Characteristics:**
+- $n=0$: $\alpha = 1.0$ (첫 관측)
+- $n \to \infty$: $\alpha \to \alpha_{min}$ (환경 변화 감지 유지)
+
+---
+
+### 2.4 Adaptive Scaling (Bidirectional Protection)
+
+**Occupied Update** (when $I > I_{th}$):
+
+$$s_{occ} = \begin{cases}
+\frac{P}{P_{th}} \cdot r_{max} & \text{if } P < P_{th} \\
+1.0 & \text{otherwise}
+\end{cases}$$
+
+**Free Update** (when $I \leq I_{th}$):
+
+$$s_{free} = \begin{cases}
+r_{max} + (1 - r_{max})(1 - f_p) & \text{if } P > 1 - P_{th} \\
+1.0 & \text{otherwise}
+\end{cases}$$
+
+where $f_p = \frac{P - (1 - P_{th})}{P_{th}}$
+
+**Parameters:**
+
+| Parameter | Symbol | Default | Description |
+|-----------|--------|---------|-------------|
+| Adaptive threshold | $P_{th}$ | 0.5 | 보호 시작 확률 |
+| Maximum ratio | $r_{max}$ | 0.3 | 최대 억제 비율 |
+
+**Purpose**: 이미 ==free로 분류된 영역==에서 노이즈성 occupied 업데이트를 억제하고, ==occupied로 분류된 영역==에서 노이즈성 free 업데이트를 억제한다.
+
+---
+
+### 2.5 Update Formula
+
+**Occupied Update** (when $I > I_{th}$):
+
+$$\Delta L_{occ} = L_{occ} \times w(I) \times \alpha(n) \times s_{occ}$$
+
+**Free Update** (when $I \leq I_{th}$):
+
+$$\Delta L_{free} = L_{free} \times \alpha(n) \times s_{free}$$
+
+**Application:**
+
+$$L_{new} = \text{clamp}(L_{old} + \Delta L, L_{min}, L_{max})$$
+
+**Parameters:**
+
+| Parameter | Symbol | Default | Range | Description |
+|-----------|--------|---------|-------|-------------|
+| Occupied log-odds | $L_{occ}$ | 3.5 | [0.5, 5.0] | Occupied 업데이트 강도 |
+| Free log-odds | $L_{free}$ | -3.0 | [-5.0, -0.5] | Free 업데이트 강도 |
+| Saturation min | $L_{min}$ | -10.0 | [-10.0, 0.0] | 하한 ($P \approx 0.00005$) |
+| Saturation max | $L_{max}$ | 10.0 | [2.0, 10.0] | 상한 ($P \approx 0.99995$) |
+
+---
+
+## 3. Algorithm Pseudocode
 
 ```
-w(I) = sigmoid(sharpness × (normalized - 0.5))
+ALGORITHM: IWLO_Update
+INPUT:
+  - point (x, y, z): 복셀 좌표
+  - intensity I: 소나 반사 강도 [0, 255]
+  - L_current: 현재 log-odds 값
+  - n: 관측 횟수
+  - params: {I_th, I_max, γ, λ, α_min, P_th, r_max, L_occ, L_free, L_min, L_max}
+OUTPUT: L_new (새로운 log-odds 값)
 
-where:
-  normalized = (I - threshold) / (max_intensity - threshold)
-  sigmoid(x) = 1 / (1 + exp(-x))
-```
+1. DETERMINE update type:
+   IF I <= I_th THEN
+     is_occupied := FALSE
+     w := 0
+   ELSE
+     is_occupied := TRUE
+     normalized := (I - I_th) / (I_max - I_th)
+     w := sigmoid(γ × (normalized - 0.5))
+   ENDIF
 
-**Parameters**:
-- `threshold`: Intensity threshold (default: 35)
-- `max_intensity`: Maximum intensity value (default: 255)
-- `sharpness`: Sigmoid slope (default: 0.1)
+2. COMPUTE learning rate:
+   α := max(α_min, 1 / (1 + λ × n))
 
-**Characteristics**:
-- Below threshold: w = 0 (ignored)
-- Mid intensity: smooth transition
-- Maximum intensity: w → 1
+3. COMPUTE adaptive scale:
+   P_current := sigmoid(L_current)
 
-### 2.2 Learning Rate Decay
+   IF adaptive_enabled THEN
+     IF is_occupied AND P_current < P_th THEN
+       scale := (P_current / P_th) × r_max
+     ELSE IF NOT is_occupied AND P_current > (1 - P_th) THEN
+       f_p := (P_current - (1 - P_th)) / P_th
+       scale := r_max + (1 - r_max) × (1 - f_p)
+     ELSE
+       scale := 1.0
+     ENDIF
+   ELSE
+     scale := 1.0
+   ENDIF
 
-```
-α(n) = max(min_alpha, 1 / (1 + decay_rate × n))
-```
+4. COMPUTE delta:
+   IF is_occupied THEN
+     ΔL := L_occ × w × α × scale
+   ELSE
+     ΔL := L_free × α × scale
+   ENDIF
 
-**Parameters**:
-- `decay_rate`: Decay rate (default: 0.1)
-- `min_alpha`: Minimum learning rate (default: 0.3)
+5. APPLY update:
+   L_new := clamp(L_current + ΔL, L_min, L_max)
 
-**Characteristics**:
-- First observation (n=0): α = 1.0
-- 10 observations (n=10): α ≈ 0.5
-- After convergence: maintains min_alpha for change detection
-
-### 2.3 Adaptive Scaling
-
-```
-if current_prob < adaptive_threshold:
-    scale = (current_prob / adaptive_threshold) × adaptive_max_ratio
-else:
-    scale = 1.0
-```
-
-**Purpose**: Suppress noisy occupied updates on regions already classified as free.
-
-### 2.4 Final Update Formula
-
-**Occupied Update** (intensity > threshold):
-```
-ΔL = L_occ × w(I) × α(n) × scale
-```
-
-**Free Update** (intensity ≤ threshold):
-```
-ΔL = L_free × α(n)
-```
-
-**Application**:
-```
-new_log_odds = clip(old_log_odds + ΔL, L_min, L_max)
+6. RETURN L_new
 ```
 
 ---
 
-## 3. Parameter Description
+## 4. Parameter Tuning Guide
 
-| Parameter | Default | Range | Description |
-|-----------|---------|-------|-------------|
-| `L_occ` | 3.5 | [0.5, 5.0] | Maximum occupied log-odds increment |
-| `L_free` | -3.0 | [-5.0, -0.5] | Free space log-odds increment |
-| `L_min` | -10.0 | [-10.0, 0.0] | Saturation lower bound (P≈0.00005) |
-| `L_max` | 10.0 | [2.0, 10.0] | Saturation upper bound (P≈0.99995) |
-| `sharpness` | 0.1 | [0.1, 5.0] | Sigmoid slope |
-| `decay_rate` | 0.1 | [0.05, 0.5] | Learning rate decay |
-| `min_alpha` | 0.3 | [0.01, 0.5] | Minimum learning rate |
+### 4.1 Sharpness ($\gamma$)
 
-### Parameter Tuning Guide
+| Value | Behavior |
+|-------|----------|
+| High (4-5) | Intensity에 민감, binary classification에 가까움 |
+| Low (0.1-1) | Intensity에 둔감, smooth transition |
 
-**sharpness adjustment**:
-- High value (4-5): Sensitive to intensity, approaches binary classification
-- Low value (0.1-1): Insensitive to intensity, smooth transition
+### 4.2 Decay Rate ($\lambda$)
 
-**decay_rate adjustment**:
-- High value (0.3-0.5): Fast convergence, weakened change detection
-- Low value (0.05-0.1): Slow convergence, maintains change detection
+| Value | Behavior |
+|-------|----------|
+| High (0.3-0.5) | 빠른 수렴, 환경 변화 감지 약화 |
+| Low (0.05-0.1) | 느린 수렴, 환경 변화 감지 유지 |
 
-**min_alpha adjustment**:
-- High value (0.2-0.5): Fast response to environmental changes
-- Low value (0.01-0.1): Stable but slow change detection
+### 4.3 Minimum Alpha ($\alpha_{min}$)
+
+| Value | Behavior |
+|-------|----------|
+| High (0.2-0.5) | 환경 변화에 빠른 반응 |
+| Low (0.01-0.1) | 안정적이지만 느린 변화 감지 |
 
 ---
 
-## 4. Expected Behavior
+## 5. Related Documents
 
-### Scenario Comparison
+### API Reference
+- [probability_updater](../api/probability_updater.md) - In-Memory 모드 구현
+- [tile](../api/tile.md) - Out-of-Core 모드 구현
 
-| Scenario | Log-Odds | Weighted Avg | IWLO |
-|----------|----------|--------------|------|
-| Strong signal first observation | P=0.82 | P=0.95 | P=0.88 |
-| Weak signal accumulation | Noise accumulation | Slow convergence | Stable convergence |
-| Environmental change | Fast response | Slow response | Appropriate response |
-| Long-term stability | Saturation | Stable | Bounded stability |
-
-### Convergence Characteristics
-
-```
-Observation count vs Probability change:
-n=1:  Strong signal → P=0.7~0.8
-n=5:  Repeated observation → P=0.85~0.90
-n=10: Stabilization → P=0.90~0.95
-n=20: Final convergence → P=0.95~0.97 (L_max limit)
-```
+### Design Documents
+- [Octree Mapping](octree_mapping.md) - 공간 데이터 구조
+- [Out-of-Core Tile Mapping](outofcore_design.md) - 대규모 저장소
 
 ---
 
-## 5. Usage
-
-### Launch File
-```bash
-# Use IWLO method (default)
-ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py
-```
-
-### Parameter Override
-```bash
-ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py \
-    sharpness:=4.0 \
-    decay_rate:=0.2
-```
-
-### YAML Configuration
-```yaml
-# config/method_iwlo.yaml
-sonar_3d_mapper:
-  ros__parameters:
-    L_occ: 3.5
-    L_free: -3.0
-    L_min: -10.0
-    L_max: 10.0
-    sharpness: 0.1
-    decay_rate: 0.1
-    min_alpha: 0.3
-```
-
----
-
-## 6. Implementation Details
-
-### C++ Code (probability_updater.cpp)
-
-```cpp
-double ProbabilityUpdater::intensity_to_weight(double intensity) const {
-    if (intensity <= intensity_threshold_) return 0.0;
-    double normalized = (intensity - intensity_threshold_) /
-                        (intensity_max_ - intensity_threshold_);
-    double x = sharpness_ * (normalized - 0.5);
-    return 1.0 / (1.0 + std::exp(-x));
-}
-
-double ProbabilityUpdater::compute_alpha(int observation_count) const {
-    return std::max(min_alpha_, 1.0 / (1.0 + decay_rate_ * observation_count));
-}
-```
-
-### Update Logic (probability_updater.cpp:373-384)
-
-```cpp
-double delta_L;
-if (intensity > intensity_threshold_) {
-    // Occupied update: ΔL = L_occ × w(I) × α(n) × scale
-    delta_L = log_odds_occupied_ * w_intensity * alpha_n * adapt_scale;
-} else {
-    // Free space update: ΔL = L_free × α(n) × scale
-    delta_L = log_odds_free_ * alpha_n * adapt_scale;
-}
-
-// Apply update with saturation limits
-double new_log_odds = current_log_odds + delta_L;
-new_log_odds = std::max(L_min_, std::min(L_max_, new_log_odds));
-```
-
----
-
-## 7. References
+## 6. References
 
 1. **Moravec & Elfes (1985)**: Original log-odds Bayesian occupancy grid mapping
 2. **OctoMap (Hornung et al., 2013)**: Saturation limits to prevent dead-locking
@@ -222,9 +242,10 @@ new_log_odds = std::max(L_min_, std::min(L_max_, new_log_odds));
 
 ---
 
-## 8. Changelog
+## Changelog
 
 | Date | Version | Changes |
 |------|---------|---------|
 | 2024-12-04 | 1.0 | Initial design and implementation |
 | 2024-12-20 | 1.1 | Extended L_min/L_max bounds, adjusted sharpness default |
+| 2024-12-24 | 2.0 | Formal mathematical definitions, algorithm pseudocode, removed unverified predictions |

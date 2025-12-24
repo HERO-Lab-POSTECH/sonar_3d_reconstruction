@@ -81,78 +81,90 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="design/iwlo_design.html#mathematical-formulation">2. Mathematical Formulation</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#intensity-to-weight-transformation">2.1 Intensity-to-Weight Transformation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#learning-rate-decay">2.2 Learning Rate Decay</a></li>
-<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#adaptive-scaling">2.3 Adaptive Scaling</a></li>
-<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#final-update-formula">2.4 Final Update Formula</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#probability-log-odds-transformation">2.1 Probability-Log-Odds Transformation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#intensity-to-weight-transformation">2.2 Intensity-to-Weight Transformation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#learning-rate-decay">2.3 Learning Rate Decay</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#adaptive-scaling-bidirectional-protection">2.4 Adaptive Scaling (Bidirectional Protection)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#update-formula">2.5 Update Formula</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="design/iwlo_design.html#parameter-description">3. Parameter Description</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#parameter-tuning-guide">Parameter Tuning Guide</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design/iwlo_design.html#algorithm-pseudocode">3. Algorithm Pseudocode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design/iwlo_design.html#parameter-tuning-guide">4. Parameter Tuning Guide</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#sharpness-gamma">4.1 Sharpness ($\gamma$)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#decay-rate-lambda">4.2 Decay Rate ($\lambda$)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#minimum-alpha-alpha-min">4.3 Minimum Alpha ($\alpha_{min}$)</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="design/iwlo_design.html#expected-behavior">4. Expected Behavior</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#scenario-comparison">Scenario Comparison</a></li>
-<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#convergence-characteristics">Convergence Characteristics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design/iwlo_design.html#related-documents">5. Related Documents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#api-reference">API Reference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#design-documents">Design Documents</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="design/iwlo_design.html#usage">5. Usage</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#launch-file">Launch File</a></li>
-<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#parameter-override">Parameter Override</a></li>
-<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#yaml-configuration">YAML Configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design/iwlo_design.html#references">6. References</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design/iwlo_design.html#changelog">Changelog</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="design/iwlo_design.html#implementation-details">6. Implementation Details</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#c-code-probability-updater-cpp">C++ Code (probability_updater.cpp)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="design/iwlo_design.html#update-logic-probability-updater-cpp-373-384">Update Logic (probability_updater.cpp:373-384)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="design/octree_mapping.html">Octree Mapping Design</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="design/octree_mapping.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design/octree_mapping.html#data-structure">1. Data Structure</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="design/octree_mapping.html#octree-structure">1.1 Octree Structure</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/octree_mapping.html#voxel-key">1.2 Voxel Key</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/octree_mapping.html#dual-storage-strategy">1.3 Dual Storage Strategy</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="design/iwlo_design.html#references">7. References</a></li>
-<li class="toctree-l2"><a class="reference internal" href="design/iwlo_design.html#changelog">8. Changelog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design/octree_mapping.html#memory-efficiency">2. Memory Efficiency</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="design/octree_mapping.html#sparse-representation">2.1 Sparse Representation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/octree_mapping.html#pruning-algorithm">2.2 Pruning Algorithm</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="design/voxelmap_fusion.html">Voxelmap Fusion vs Sonar 3D Reconstruction Comparison</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="design/voxelmap_fusion.html#overview">1. Overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="design/voxelmap_fusion.html#core-algorithm-comparison">2. Core Algorithm Comparison</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="design/voxelmap_fusion.html#probability-update-methods">2.1 Probability Update Methods</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="design/voxelmap_fusion.html#voxelmap-fusion-weighted-average">voxelmap_fusion: Weighted Average</a></li>
-<li class="toctree-l4"><a class="reference internal" href="design/voxelmap_fusion.html#sonar-3d-reconstruction-log-odds-bayesian-iwlo">sonar_3d_reconstruction: Log-Odds Bayesian (IWLO)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design/octree_mapping.html#operations">3. Operations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="design/octree_mapping.html#point-update">3.1 Point Update</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/octree_mapping.html#query-occupied-voxels">3.2 Query Occupied Voxels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/octree_mapping.html#ray-casting">3.3 Ray Casting</a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="design/voxelmap_fusion.html#occupancy-value-assignment">2.2 Occupancy Value Assignment</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="design/voxelmap_fusion.html#voxelmap-fusion-binary">voxelmap_fusion: Binary</a></li>
-<li class="toctree-l4"><a class="reference internal" href="design/voxelmap_fusion.html#sonar-3d-reconstruction-intensity-based-iwlo">sonar_3d_reconstruction: Intensity-Based (IWLO)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design/octree_mapping.html#implementation-classes">4. Implementation Classes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design/octree_mapping.html#related-documents">5. Related Documents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="design/octree_mapping.html#design-documents">Design Documents</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/octree_mapping.html#api-reference">API Reference</a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="design/voxelmap_fusion.html#data-structures">2.3 Data Structures</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="design/voxelmap_fusion.html#voxelmap-fusion-dense-voxel-grid">voxelmap_fusion: Dense Voxel Grid</a></li>
-<li class="toctree-l4"><a class="reference internal" href="design/voxelmap_fusion.html#sonar-3d-reconstruction-sparse-octree">sonar_3d_reconstruction: Sparse Octree</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design/octree_mapping.html#references">6. References</a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="design/voxelmap_fusion.html#coordinate-transformation">2.4 Coordinate Transformation</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="design/voxelmap_fusion.html#voxelmap-fusion-spherical-segment">voxelmap_fusion: Spherical Segment</a></li>
-<li class="toctree-l4"><a class="reference internal" href="design/voxelmap_fusion.html#sonar-3d-reconstruction-ray-based">sonar_3d_reconstruction: Ray-based</a></li>
+<li class="toctree-l1"><a class="reference internal" href="design/outofcore_design.html">Out-of-Core Tile Mapping Design</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="design/outofcore_design.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design/outofcore_design.html#architecture">1. Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design/outofcore_design.html#tile-system">2. Tile System</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="design/outofcore_design.html#tile-definition">2.1 Tile Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/outofcore_design.html#tile-contents">2.2 Tile Contents</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="design/outofcore_design.html#storage-format">3. Storage Format</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="design/outofcore_design.html#directory-structure">3.1 Directory Structure</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/outofcore_design.html#iwlo-metadata-binary-format">3.2 IWLO Metadata Binary Format</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/outofcore_design.html#metadata-json">3.3 Metadata JSON</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="design/voxelmap_fusion.html#performance-comparison">3. Performance Comparison</a></li>
-<li class="toctree-l2"><a class="reference internal" href="design/voxelmap_fusion.html#advanced-features-of-voxelmap-fusion">4. Advanced Features of voxelmap_fusion</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="design/voxelmap_fusion.html#constraint-tracking-system">4.1 Constraint Tracking System</a></li>
-<li class="toctree-l3"><a class="reference internal" href="design/voxelmap_fusion.html#state-change-detection">4.2 State Change Detection</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design/outofcore_design.html#lru-cache">4. LRU Cache</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="design/outofcore_design.html#cache-structure">4.1 Cache Structure</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/outofcore_design.html#eviction-policy">4.2 Eviction Policy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/outofcore_design.html#eviction-callback">4.3 Eviction Callback</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="design/voxelmap_fusion.html#mathematical-formula-comparison">5. Mathematical Formula Comparison</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="design/voxelmap_fusion.html#probability-update-formulas">5.1 Probability Update Formulas</a></li>
-<li class="toctree-l3"><a class="reference internal" href="design/voxelmap_fusion.html#convergence-characteristics-comparison">5.2 Convergence Characteristics Comparison</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design/outofcore_design.html#operations">5. Operations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="design/outofcore_design.html#point-update-flow">5.1 Point Update Flow</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/outofcore_design.html#query-flow">5.2 Query Flow</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/outofcore_design.html#flush-operation">5.3 Flush Operation</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="design/voxelmap_fusion.html#conclusion">6. Conclusion</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="design/voxelmap_fusion.html#voxelmap-fusion-advantages-consider-adopting">voxelmap_fusion Advantages (Consider Adopting)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="design/voxelmap_fusion.html#sonar-3d-reconstruction-advantages-maintain">sonar_3d_reconstruction Advantages (Maintain)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design/outofcore_design.html#implementation-classes">6. Implementation Classes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design/outofcore_design.html#mode-comparison">7. Mode Comparison</a></li>
+<li class="toctree-l2"><a class="reference internal" href="design/outofcore_design.html#related-documents">8. Related Documents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="design/outofcore_design.html#design-documents">Design Documents</a></li>
+<li class="toctree-l3"><a class="reference internal" href="design/outofcore_design.html#api-reference">API Reference</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="design/voxelmap_fusion.html#references">References</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="design/refactoring_plan.html">C++ Backend Refactoring Plan</a><ul>

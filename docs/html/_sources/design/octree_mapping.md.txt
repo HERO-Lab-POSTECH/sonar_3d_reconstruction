@@ -1,0 +1,215 @@
+# Octree Mapping Design
+
+## Overview
+
+OctoMap 기반 3D 공간 데이터 구조로, ==효율적인 메모리 사용==과 ==확률적 복셀 저장==을 제공한다.
+
+**핵심 특징**:
+- Sparse representation: 관측된 복셀만 저장
+- Hierarchical structure: 재귀적 8분할로 다양한 해상도 지원
+- Probabilistic storage: Log-odds 기반 점유 확률 저장
+
+---
+
+## 1. Data Structure
+
+### 1.1 Octree Structure
+
+**Definition:** 3D 공간을 ==재귀적으로 8분할==하는 트리 구조
+
+```
+         Root (전체 공간)
+        /   |   |   \
+    Octant 0  1  2  ...  7
+      /  \
+   Child  Child
+     .
+     .
+   Leaf (복셀)
+```
+
+**Octant Indexing:**
+
+| Index | X | Y | Z |
+|-------|---|---|---|
+| 0 | - | - | - |
+| 1 | + | - | - |
+| 2 | - | + | - |
+| 3 | + | + | - |
+| 4 | - | - | + |
+| 5 | + | - | + |
+| 6 | - | + | + |
+| 7 | + | + | + |
+
+**Properties:**
+- Resolution ($r$): 최소 복셀 크기 (default: 0.05m)
+- Max depth: $\log_2(\text{map\_size} / r)$
+
+---
+
+### 1.2 Voxel Key
+
+**Definition:** 세계 좌표를 복셀 인덱스로 변환
+
+$$\text{key} = (i_x, i_y, i_z)$$
+
+where:
+
+$$i_x = \lfloor x / r \rfloor$$
+$$i_y = \lfloor y / r \rfloor$$
+$$i_z = \lfloor z / r \rfloor$$
+
+**Inverse (Key to World Center):**
+
+$$x = (i_x + 0.5) \times r$$
+$$y = (i_y + 0.5) \times r$$
+$$z = (i_z + 0.5) \times r$$
+
+---
+
+### 1.3 Dual Storage Strategy
+
+시스템은 ==두 가지 저장소==를 동시에 유지한다:
+
+| Storage | Type | Purpose | Access |
+|---------|------|---------|--------|
+| OcTree | `octomap::OcTree` | 공간 쿼리, ray casting | $O(\log N)$ |
+| Hash map | `unordered_map<key, double>` | 정확한 log-odds 값 | $O(1)$ |
+
+**Rationale:**
+- OctoMap은 내부적으로 log-odds를 float로 변환하고 clamping 적용
+- Hash map은 IWLO에서 계산한 ==정확한 log-odds 값==을 보존
+- 시각화 시 hash map에서 threshold 필터링 후 반환
+
+---
+
+## 2. Memory Efficiency
+
+### 2.1 Sparse Representation
+
+**Dense Grid vs Octree:**
+
+| Map Size | Dense Grid | Octree (10% occupied) | Savings |
+|----------|------------|----------------------|---------|
+| 10m³ @ 0.05m | 32 GB | 3.2 GB | 10x |
+| 100m³ @ 0.05m | 32 TB | 320 GB | 100x |
+
+**Property:** 관측되지 않은 영역은 ==메모리를 사용하지 않음==
+
+---
+
+### 2.2 Pruning Algorithm
+
+**Definition:** 동일한 확률을 가진 자식 노드들을 부모 노드로 병합
+
+```
+ALGORITHM: Prune_Octree
+INPUT: octree root node
+
+1. FOR each internal node (bottom-up):
+     IF all 8 children exist AND
+        all children are leaves AND
+        all children have same probability THEN
+       REPLACE 8 children with single node
+       deleted_count += 7
+     ENDIF
+
+2. RETURN deleted_count
+```
+
+**Memory Reduction:** Pruning 후 ==노드 수 감소== (homogeneous 영역에서 효과적)
+
+---
+
+## 3. Operations
+
+### 3.1 Point Update
+
+```
+ALGORITHM: Update_Point
+INPUT: point (x, y, z), log_odds value
+
+1. COMPUTE key:
+   ix := floor(x / resolution)
+   iy := floor(y / resolution)
+   iz := floor(z / resolution)
+   key := (ix, iy, iz)
+
+2. UPDATE hash map:
+   hash_map[key] := log_odds
+
+3. UPDATE OcTree:
+   coord := octree.keyToCoord(key)
+   node := octree.updateNode(coord, occupied=true)
+   node.setLogOdds(log_odds)
+```
+
+---
+
+### 3.2 Query Occupied Voxels
+
+```
+ALGORITHM: Get_Occupied_Voxels
+INPUT: min_probability threshold
+OUTPUT: list of (x, y, z, probability)
+
+1. COMPUTE log_odds threshold:
+   L_th := log(min_probability / (1 - min_probability))
+
+2. INITIALIZE results := []
+
+3. FOR each (key, log_odds) in hash_map:
+     IF log_odds >= L_th THEN
+       probability := 1 / (1 + exp(-log_odds))
+       (x, y, z) := key_to_world(key)
+       results.append((x, y, z, probability))
+     ENDIF
+
+4. RETURN results
+```
+
+---
+
+### 3.3 Ray Casting
+
+```
+ALGORITHM: Insert_Ray
+INPUT: origin (x0, y0, z0), endpoint (x1, y1, z1)
+
+1. TRACE ray from origin to endpoint:
+   FOR each voxel along ray (excluding endpoint):
+     octree.updateNode(voxel, occupied=false)
+
+2. UPDATE endpoint as occupied:
+   octree.updateNode(endpoint, occupied=true)
+```
+
+**Note:** 현재 시스템은 ray casting을 사용하지 않고 ==직접 점 업데이트==만 수행함
+
+---
+
+## 4. Implementation Classes
+
+| Class | Role | Location |
+|-------|------|----------|
+| `OctreeMapper` | OctoMap wrapper | [API Reference](../api/octree_mapper.md) |
+| `ProbabilityUpdater` | IWLO + OctreeMapper 조합 | [API Reference](../api/probability_updater.md) |
+
+---
+
+## 5. Related Documents
+
+### Design Documents
+- [IWLO Probability Update](iwlo_design.md) - 확률 업데이트 알고리즘
+- [Out-of-Core Tile Mapping](outofcore_design.md) - 대규모 저장소
+
+### API Reference
+- [octree_mapper](../api/octree_mapper.md) - Low-level OctoMap wrapper
+- [probability_updater](../api/probability_updater.md) - High-level IWLO updater
+
+---
+
+## 6. References
+
+1. **Hornung et al. (2013)**: OctoMap: An Efficient Probabilistic 3D Mapping Framework Based on Octrees
+2. **Wurm et al. (2010)**: OctoMap: A probabilistic, flexible, and compact 3D map representation for robotic systems

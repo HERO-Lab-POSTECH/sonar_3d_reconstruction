@@ -22,7 +22,8 @@ Features
    :caption: Design Documents
 
    design/iwlo_design
-   design/voxelmap_fusion
+   design/octree_mapping
+   design/outofcore_design
    design/refactoring_plan
    design/parameter_centralization
    troubleshooting

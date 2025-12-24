@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Intensity-Weighted Log-Odds (IWLO) Probability Update &mdash; Sonar 3D Reconstruction 1.0.0 documentation</title>
+  <title>Out-of-Core Tile Mapping Design &mdash; Sonar 3D Reconstruction 1.0.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
 
@@ -19,8 +19,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Octree Mapping Design" href="octree_mapping.html" />
-    <link rel="prev" title="Sonar 3D Reconstruction" href="../readme.html" /> 
+    <link rel="next" title="C++ Backend Refactoring Plan" href="refactoring_plan.html" />
+    <link rel="prev" title="Octree Mapping Design" href="octree_mapping.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -73,35 +73,35 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Design Documents</span></p>
 <ul class="current">
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Intensity-Weighted Log-Odds (IWLO) Probability Update</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#background">1. Background</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#limitations-of-existing-methods">Limitations of Existing Methods</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#iwlo-design-goals">IWLO Design Goals</a></li>
+<li class="toctree-l1"><a class="reference internal" href="iwlo_design.html">Intensity-Weighted Log-Odds (IWLO) Probability Update</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="iwlo_design.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="iwlo_design.html#background">1. Background</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="iwlo_design.html#limitations-of-existing-methods">Limitations of Existing Methods</a></li>
+<li class="toctree-l3"><a class="reference internal" href="iwlo_design.html#iwlo-design-goals">IWLO Design Goals</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#mathematical-formulation">2. Mathematical Formulation</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#probability-log-odds-transformation">2.1 Probability-Log-Odds Transformation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#intensity-to-weight-transformation">2.2 Intensity-to-Weight Transformation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#learning-rate-decay">2.3 Learning Rate Decay</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#adaptive-scaling-bidirectional-protection">2.4 Adaptive Scaling (Bidirectional Protection)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#update-formula">2.5 Update Formula</a></li>
+<li class="toctree-l2"><a class="reference internal" href="iwlo_design.html#mathematical-formulation">2. Mathematical Formulation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="iwlo_design.html#probability-log-odds-transformation">2.1 Probability-Log-Odds Transformation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="iwlo_design.html#intensity-to-weight-transformation">2.2 Intensity-to-Weight Transformation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="iwlo_design.html#learning-rate-decay">2.3 Learning Rate Decay</a></li>
+<li class="toctree-l3"><a class="reference internal" href="iwlo_design.html#adaptive-scaling-bidirectional-protection">2.4 Adaptive Scaling (Bidirectional Protection)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="iwlo_design.html#update-formula">2.5 Update Formula</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#algorithm-pseudocode">3. Algorithm Pseudocode</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#parameter-tuning-guide">4. Parameter Tuning Guide</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#sharpness-gamma">4.1 Sharpness ($\gamma$)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#decay-rate-lambda">4.2 Decay Rate ($\lambda$)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#minimum-alpha-alpha-min">4.3 Minimum Alpha ($\alpha_{min}$)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="iwlo_design.html#algorithm-pseudocode">3. Algorithm Pseudocode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="iwlo_design.html#parameter-tuning-guide">4. Parameter Tuning Guide</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="iwlo_design.html#sharpness-gamma">4.1 Sharpness ($\gamma$)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="iwlo_design.html#decay-rate-lambda">4.2 Decay Rate ($\lambda$)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="iwlo_design.html#minimum-alpha-alpha-min">4.3 Minimum Alpha ($\alpha_{min}$)</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#related-documents">5. Related Documents</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#api-reference">API Reference</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#design-documents">Design Documents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="iwlo_design.html#related-documents">5. Related Documents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="iwlo_design.html#api-reference">API Reference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="iwlo_design.html#design-documents">Design Documents</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#references">6. References</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#changelog">Changelog</a></li>
+<li class="toctree-l2"><a class="reference internal" href="iwlo_design.html#references">6. References</a></li>
+<li class="toctree-l2"><a class="reference internal" href="iwlo_design.html#changelog">Changelog</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="octree_mapping.html">Octree Mapping Design</a><ul>
@@ -132,37 +132,37 @@
 <li class="toctree-l2"><a class="reference internal" href="octree_mapping.html#references">6. References</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="outofcore_design.html">Out-of-Core Tile Mapping Design</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="outofcore_design.html#overview">Overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="outofcore_design.html#architecture">1. Architecture</a></li>
-<li class="toctree-l2"><a class="reference internal" href="outofcore_design.html#tile-system">2. Tile System</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="outofcore_design.html#tile-definition">2.1 Tile Definition</a></li>
-<li class="toctree-l3"><a class="reference internal" href="outofcore_design.html#tile-contents">2.2 Tile Contents</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Out-of-Core Tile Mapping Design</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#architecture">1. Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#tile-system">2. Tile System</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#tile-definition">2.1 Tile Definition</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#tile-contents">2.2 Tile Contents</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="outofcore_design.html#storage-format">3. Storage Format</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="outofcore_design.html#directory-structure">3.1 Directory Structure</a></li>
-<li class="toctree-l3"><a class="reference internal" href="outofcore_design.html#iwlo-metadata-binary-format">3.2 IWLO Metadata Binary Format</a></li>
-<li class="toctree-l3"><a class="reference internal" href="outofcore_design.html#metadata-json">3.3 Metadata JSON</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#storage-format">3. Storage Format</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#directory-structure">3.1 Directory Structure</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#iwlo-metadata-binary-format">3.2 IWLO Metadata Binary Format</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#metadata-json">3.3 Metadata JSON</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="outofcore_design.html#lru-cache">4. LRU Cache</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="outofcore_design.html#cache-structure">4.1 Cache Structure</a></li>
-<li class="toctree-l3"><a class="reference internal" href="outofcore_design.html#eviction-policy">4.2 Eviction Policy</a></li>
-<li class="toctree-l3"><a class="reference internal" href="outofcore_design.html#eviction-callback">4.3 Eviction Callback</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#lru-cache">4. LRU Cache</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#cache-structure">4.1 Cache Structure</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#eviction-policy">4.2 Eviction Policy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#eviction-callback">4.3 Eviction Callback</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="outofcore_design.html#operations">5. Operations</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="outofcore_design.html#point-update-flow">5.1 Point Update Flow</a></li>
-<li class="toctree-l3"><a class="reference internal" href="outofcore_design.html#query-flow">5.2 Query Flow</a></li>
-<li class="toctree-l3"><a class="reference internal" href="outofcore_design.html#flush-operation">5.3 Flush Operation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#operations">5. Operations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#point-update-flow">5.1 Point Update Flow</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#query-flow">5.2 Query Flow</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#flush-operation">5.3 Flush Operation</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="outofcore_design.html#implementation-classes">6. Implementation Classes</a></li>
-<li class="toctree-l2"><a class="reference internal" href="outofcore_design.html#mode-comparison">7. Mode Comparison</a></li>
-<li class="toctree-l2"><a class="reference internal" href="outofcore_design.html#related-documents">8. Related Documents</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="outofcore_design.html#design-documents">Design Documents</a></li>
-<li class="toctree-l3"><a class="reference internal" href="outofcore_design.html#api-reference">API Reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#implementation-classes">6. Implementation Classes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#mode-comparison">7. Mode Comparison</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#related-documents">8. Related Documents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#design-documents">Design Documents</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#api-reference">API Reference</a></li>
 </ul>
 </li>
 </ul>
@@ -580,9 +580,9 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Intensity-Weighted Log-Odds (IWLO) Probability Update</li>
+      <li class="breadcrumb-item active">Out-of-Core Tile Mapping Design</li>
       <li class="wy-breadcrumbs-aside">
-            <a href="../_sources/design/iwlo_design.md.txt" rel="nofollow"> View page source</a>
+            <a href="../_sources/design/outofcore_design.md.txt" rel="nofollow"> View page source</a>
       </li>
   </ul>
   <hr/>
@@ -590,393 +590,418 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="intensity-weighted-log-odds-iwlo-probability-update">
-<h1>Intensity-Weighted Log-Odds (IWLO) Probability Update<a class="headerlink" href="#intensity-weighted-log-odds-iwlo-probability-update" title="Link to this heading"></a></h1>
+  <section id="out-of-core-tile-mapping-design">
+<h1>Out-of-Core Tile Mapping Design<a class="headerlink" href="#out-of-core-tile-mapping-design" title="Link to this heading"></a></h1>
 <section id="overview">
 <h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
-<p>IWLO는 ==Log-Odds Bayesian==과 ==Weighted Average== 방식의 장점을 결합한 확률 업데이트 방법이다.</p>
-<p><strong>Core Idea</strong>: Intensity 정보를 sigmoid 함수로 변환하여 log-odds 업데이트 강도를 조절하고, 관측 횟수에 따라 learning rate를 감쇠시켜 자연스러운 수렴을 달성한다.</p>
-</section>
-<hr class="docutils" />
-<section id="background">
-<h2>1. Background<a class="headerlink" href="#background" title="Link to this heading"></a></h2>
-<section id="limitations-of-existing-methods">
-<h3>Limitations of Existing Methods<a class="headerlink" href="#limitations-of-existing-methods" title="Link to this heading"></a></h3>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Method</p></th>
-<th class="head"><p>Advantages</p></th>
-<th class="head"><p>Limitations</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><strong>Log-Odds</strong></p></td>
-<td><p>Mathematical rigor, fast change detection</p></td>
-<td><p>Ignores intensity, saturation risk</p></td>
-</tr>
-<tr class="row-odd"><td><p><strong>Weighted Average</strong></p></td>
-<td><p>Uses intensity, natural convergence</p></td>
-<td><p>Weak Bayesian justification, slow change detection</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="iwlo-design-goals">
-<h3>IWLO Design Goals<a class="headerlink" href="#iwlo-design-goals" title="Link to this heading"></a></h3>
-<ol class="arabic simple">
-<li><p>Intensity 정보를 지속적으로 활용</p></li>
-<li><p>Log-odds 기반 Bayesian 업데이트 유지</p></li>
-<li><p>관측 횟수에 따른 신뢰도 반영</p></li>
-<li><p>환경 변화에 대한 적절한 반응성 유지</p></li>
-<li><p>Saturation 방지</p></li>
-</ol>
-</section>
-</section>
-<hr class="docutils" />
-<section id="mathematical-formulation">
-<h2>2. Mathematical Formulation<a class="headerlink" href="#mathematical-formulation" title="Link to this heading"></a></h2>
-<section id="probability-log-odds-transformation">
-<h3>2.1 Probability-Log-Odds Transformation<a class="headerlink" href="#probability-log-odds-transformation" title="Link to this heading"></a></h3>
-<p><strong>Definition:</strong></p>
-<p>$$L = \log\left(\frac{P}{1-P}\right)$$</p>
-<p>$$P = \frac{1}{1 + e^{-L}}$$</p>
-<p><strong>Property</strong>: Log-odds 공간에서 업데이트는 ==덧셈 연산==으로 이루어진다.</p>
-</section>
-<hr class="docutils" />
-<section id="intensity-to-weight-transformation">
-<h3>2.2 Intensity-to-Weight Transformation<a class="headerlink" href="#intensity-to-weight-transformation" title="Link to this heading"></a></h3>
-<p><strong>Definition:</strong></p>
-<p>$$w(I) = \begin{cases}
-0 &amp; \text{if } I \leq I_{th} \
-\sigma\left(\gamma \cdot \left(\frac{I - I_{th}}{I_{max} - I_{th}} - 0.5\right)\right) &amp; \text{otherwise}
-\end{cases}$$</p>
-<p>where $\sigma(x) = \frac{1}{1 + e^{-x}}$ (sigmoid function)</p>
-<p><strong>Parameters:</strong></p>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Parameter</p></th>
-<th class="head"><p>Symbol</p></th>
-<th class="head"><p>Default</p></th>
-<th class="head"><p>Range</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>Intensity threshold</p></td>
-<td><p>$I_{th}$</p></td>
-<td><p>35</p></td>
-<td><p>[0, 100]</p></td>
-<td><p>최소 유효 intensity</p></td>
-</tr>
-<tr class="row-odd"><td><p>Maximum intensity</p></td>
-<td><p>$I_{max}$</p></td>
-<td><p>255</p></td>
-<td><p>[100, 255]</p></td>
-<td><p>정규화 기준 최대값</p></td>
-</tr>
-<tr class="row-even"><td><p>Sharpness</p></td>
-<td><p>$\gamma$</p></td>
-<td><p>0.1</p></td>
-<td><p>[0.1, 5.0]</p></td>
-<td><p>Sigmoid 기울기</p></td>
-</tr>
-</tbody>
-</table>
-<p><strong>Characteristics:</strong></p>
+<p>대규모 맵핑을 위한 ==디스크 기반 타일 저장소==로, ==LRU 캐시==를 통해 메모리 제한 환경에서 무제한 맵 크기를 지원한다.</p>
+<p><strong>핵심 특징</strong>:</p>
 <ul class="simple">
-<li><p>$I \leq I_{th}$: $w = 0$ (무시)</p></li>
-<li><p>$I = I_{th} + 0.5(I_{max} - I_{th})$: $w = 0.5$ (중간)</p></li>
-<li><p>$I \to I_{max}$: $w \to 1$ (최대)</p></li>
+<li><p>Tile-based partitioning: 공간을 고정 크기 타일로 분할</p></li>
+<li><p>LRU cache: 활성 타일만 메모리에 유지</p></li>
+<li><p>Transparent I/O: 캐시 eviction 시 자동 저장</p></li>
 </ul>
 </section>
 <hr class="docutils" />
-<section id="learning-rate-decay">
-<h3>2.3 Learning Rate Decay<a class="headerlink" href="#learning-rate-decay" title="Link to this heading"></a></h3>
-<p><strong>Definition:</strong></p>
-<p>$$\alpha(n) = \max\left(\alpha_{min}, \frac{1}{1 + \lambda \cdot n}\right)$$</p>
-<p><strong>Parameters:</strong></p>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Parameter</p></th>
-<th class="head"><p>Symbol</p></th>
-<th class="head"><p>Default</p></th>
-<th class="head"><p>Range</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>Decay rate</p></td>
-<td><p>$\lambda$</p></td>
-<td><p>0.1</p></td>
-<td><p>[0.05, 0.5]</p></td>
-<td><p>감쇠 속도</p></td>
-</tr>
-<tr class="row-odd"><td><p>Minimum alpha</p></td>
-<td><p>$\alpha_{min}$</p></td>
-<td><p>0.3</p></td>
-<td><p>[0.01, 0.5]</p></td>
-<td><p>최소 learning rate</p></td>
-</tr>
-</tbody>
-</table>
-<p><strong>Characteristics:</strong></p>
-<ul class="simple">
-<li><p>$n=0$: $\alpha = 1.0$ (첫 관측)</p></li>
-<li><p>$n \to \infty$: $\alpha \to \alpha_{min}$ (환경 변화 감지 유지)</p></li>
-</ul>
-</section>
-<hr class="docutils" />
-<section id="adaptive-scaling-bidirectional-protection">
-<h3>2.4 Adaptive Scaling (Bidirectional Protection)<a class="headerlink" href="#adaptive-scaling-bidirectional-protection" title="Link to this heading"></a></h3>
-<p><strong>Occupied Update</strong> (when $I &gt; I_{th}$):</p>
-<p>$$s_{occ} = \begin{cases}
-\frac{P}{P_{th}} \cdot r_{max} &amp; \text{if } P &lt; P_{th} \
-1.0 &amp; \text{otherwise}
-\end{cases}$$</p>
-<p><strong>Free Update</strong> (when $I \leq I_{th}$):</p>
-<p>$$s_{free} = \begin{cases}
-r_{max} + (1 - r_{max})(1 - f_p) &amp; \text{if } P &gt; 1 - P_{th} \
-1.0 &amp; \text{otherwise}
-\end{cases}$$</p>
-<p>where $f_p = \frac{P - (1 - P_{th})}{P_{th}}$</p>
-<p><strong>Parameters:</strong></p>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Parameter</p></th>
-<th class="head"><p>Symbol</p></th>
-<th class="head"><p>Default</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>Adaptive threshold</p></td>
-<td><p>$P_{th}$</p></td>
-<td><p>0.5</p></td>
-<td><p>보호 시작 확률</p></td>
-</tr>
-<tr class="row-odd"><td><p>Maximum ratio</p></td>
-<td><p>$r_{max}$</p></td>
-<td><p>0.3</p></td>
-<td><p>최대 억제 비율</p></td>
-</tr>
-</tbody>
-</table>
-<p><strong>Purpose</strong>: 이미 ==free로 분류된 영역==에서 노이즈성 occupied 업데이트를 억제하고, ==occupied로 분류된 영역==에서 노이즈성 free 업데이트를 억제한다.</p>
-</section>
-<hr class="docutils" />
-<section id="update-formula">
-<h3>2.5 Update Formula<a class="headerlink" href="#update-formula" title="Link to this heading"></a></h3>
-<p><strong>Occupied Update</strong> (when $I &gt; I_{th}$):</p>
-<p>$$\Delta L_{occ} = L_{occ} \times w(I) \times \alpha(n) \times s_{occ}$$</p>
-<p><strong>Free Update</strong> (when $I \leq I_{th}$):</p>
-<p>$$\Delta L_{free} = L_{free} \times \alpha(n) \times s_{free}$$</p>
-<p><strong>Application:</strong></p>
-<p>$$L_{new} = \text{clamp}(L_{old} + \Delta L, L_{min}, L_{max})$$</p>
-<p><strong>Parameters:</strong></p>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Parameter</p></th>
-<th class="head"><p>Symbol</p></th>
-<th class="head"><p>Default</p></th>
-<th class="head"><p>Range</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>Occupied log-odds</p></td>
-<td><p>$L_{occ}$</p></td>
-<td><p>3.5</p></td>
-<td><p>[0.5, 5.0]</p></td>
-<td><p>Occupied 업데이트 강도</p></td>
-</tr>
-<tr class="row-odd"><td><p>Free log-odds</p></td>
-<td><p>$L_{free}$</p></td>
-<td><p>-3.0</p></td>
-<td><p>[-5.0, -0.5]</p></td>
-<td><p>Free 업데이트 강도</p></td>
-</tr>
-<tr class="row-even"><td><p>Saturation min</p></td>
-<td><p>$L_{min}$</p></td>
-<td><p>-10.0</p></td>
-<td><p>[-10.0, 0.0]</p></td>
-<td><p>하한 ($P \approx 0.00005$)</p></td>
-</tr>
-<tr class="row-odd"><td><p>Saturation max</p></td>
-<td><p>$L_{max}$</p></td>
-<td><p>10.0</p></td>
-<td><p>[2.0, 10.0]</p></td>
-<td><p>상한 ($P \approx 0.99995$)</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-</section>
-<hr class="docutils" />
-<section id="algorithm-pseudocode">
-<h2>3. Algorithm Pseudocode<a class="headerlink" href="#algorithm-pseudocode" title="Link to this heading"></a></h2>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>ALGORITHM: IWLO_Update
-INPUT:
-  - point (x, y, z): 복셀 좌표
-  - intensity I: 소나 반사 강도 [0, 255]
-  - L_current: 현재 log-odds 값
-  - n: 관측 횟수
-  - params: {I_th, I_max, γ, λ, α_min, P_th, r_max, L_occ, L_free, L_min, L_max}
-OUTPUT: L_new (새로운 log-odds 값)
-
-1. DETERMINE update type:
-   IF I &lt;= I_th THEN
-     is_occupied := FALSE
-     w := 0
-   ELSE
-     is_occupied := TRUE
-     normalized := (I - I_th) / (I_max - I_th)
-     w := sigmoid(γ × (normalized - 0.5))
-   ENDIF
-
-2. COMPUTE learning rate:
-   α := max(α_min, 1 / (1 + λ × n))
-
-3. COMPUTE adaptive scale:
-   P_current := sigmoid(L_current)
-
-   IF adaptive_enabled THEN
-     IF is_occupied AND P_current &lt; P_th THEN
-       scale := (P_current / P_th) × r_max
-     ELSE IF NOT is_occupied AND P_current &gt; (1 - P_th) THEN
-       f_p := (P_current - (1 - P_th)) / P_th
-       scale := r_max + (1 - r_max) × (1 - f_p)
-     ELSE
-       scale := 1.0
-     ENDIF
-   ELSE
-     scale := 1.0
-   ENDIF
-
-4. COMPUTE delta:
-   IF is_occupied THEN
-     ΔL := L_occ × w × α × scale
-   ELSE
-     ΔL := L_free × α × scale
-   ENDIF
-
-5. APPLY update:
-   L_new := clamp(L_current + ΔL, L_min, L_max)
-
-6. RETURN L_new
+<section id="architecture">
+<h2>1. Architecture<a class="headerlink" href="#architecture" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>┌─────────────────────────────────────────────────────────────────────┐
+│  OutofcoreTileMapper                                                │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │  LRU Cache (size: cache_size)                                │   │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐         ┌─────────┐    │   │
+│  │  │ Tile 0  │ │ Tile 1  │ │ Tile 2  │   ...   │ Tile N  │    │   │
+│  │  └─────────┘ └─────────┘ └─────────┘         └─────────┘    │   │
+│  │       ↑ eviction callback: save to disk                     │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│                                                                     │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │  TileManager                                                 │   │
+│  │  - world_to_tile_index(): coordinate → tile index           │   │
+│  │  - get_tile_directory(): tile index → file path             │   │
+│  │  - list_all_tiles(): enumerate disk tiles                   │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│                                                                     │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │  IWLOParams (shared with all tiles)                         │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────┘
+           │
+           ▼ Disk Storage
+┌─────────────────────────────────────────────────────────────────────┐
+│  /map_tiles/                                                        │
+│  ├── metadata.json                                                  │
+│  ├── tile_0_0_0/                                                    │
+│  │   ├── octree.bt                                                  │
+│  │   └── iwlo_meta.bin                                              │
+│  └── ...                                                            │
+└─────────────────────────────────────────────────────────────────────┘
 </pre></div>
 </div>
 </section>
 <hr class="docutils" />
-<section id="parameter-tuning-guide">
-<h2>4. Parameter Tuning Guide<a class="headerlink" href="#parameter-tuning-guide" title="Link to this heading"></a></h2>
-<section id="sharpness-gamma">
-<h3>4.1 Sharpness ($\gamma$)<a class="headerlink" href="#sharpness-gamma" title="Link to this heading"></a></h3>
+<section id="tile-system">
+<h2>2. Tile System<a class="headerlink" href="#tile-system" title="Link to this heading"></a></h2>
+<section id="tile-definition">
+<h3>2.1 Tile Definition<a class="headerlink" href="#tile-definition" title="Link to this heading"></a></h3>
+<p><strong>Tile:</strong> 고정 크기 3D 영역 (default: $10m \times 10m \times 10m$)</p>
+<p><strong>Tile Index:</strong></p>
+<p>$$\text{TileIndex} = (i_x, i_y, i_z)$$</p>
+<p>where:</p>
+<p>$$i_x = \lfloor x / T \rfloor$$
+$$i_y = \lfloor y / T \rfloor$$
+$$i_z = \lfloor z / T \rfloor$$</p>
+<p>$T$ = tile_size (default: 10.0m)</p>
+<p><strong>Example</strong> ($T = 10.0$):</p>
 <table class="docutils align-default">
 <thead>
-<tr class="row-odd"><th class="head"><p>Value</p></th>
-<th class="head"><p>Behavior</p></th>
+<tr class="row-odd"><th class="head"><p>World Coordinate</p></th>
+<th class="head"><p>Tile Index</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>High (4-5)</p></td>
-<td><p>Intensity에 민감, binary classification에 가까움</p></td>
+<tr class="row-even"><td><p>(5.0, 15.0, -3.0)</p></td>
+<td><p>(0, 1, -1)</p></td>
 </tr>
-<tr class="row-odd"><td><p>Low (0.1-1)</p></td>
-<td><p>Intensity에 둔감, smooth transition</p></td>
+<tr class="row-odd"><td><p>(-5.0, 0.0, 25.0)</p></td>
+<td><p>(-1, 0, 2)</p></td>
 </tr>
 </tbody>
 </table>
 </section>
-<section id="decay-rate-lambda">
-<h3>4.2 Decay Rate ($\lambda$)<a class="headerlink" href="#decay-rate-lambda" title="Link to this heading"></a></h3>
+<hr class="docutils" />
+<section id="tile-contents">
+<h3>2.2 Tile Contents<a class="headerlink" href="#tile-contents" title="Link to this heading"></a></h3>
+<p>각 타일은 다음을 포함한다:</p>
 <table class="docutils align-default">
 <thead>
-<tr class="row-odd"><th class="head"><p>Value</p></th>
-<th class="head"><p>Behavior</p></th>
+<tr class="row-odd"><th class="head"><p>Component</p></th>
+<th class="head"><p>Description</p></th>
+<th class="head"><p>File</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>High (0.3-0.5)</p></td>
-<td><p>빠른 수렴, 환경 변화 감지 약화</p></td>
+<tr class="row-even"><td><p>OcTree</p></td>
+<td><p>공간 구조 (pruned)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">octree.bt</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p>Low (0.05-0.1)</p></td>
-<td><p>느린 수렴, 환경 변화 감지 유지</p></td>
+<tr class="row-odd"><td><p>IWLO Metadata</p></td>
+<td><p>Per-voxel log_odds + observation count</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">iwlo_meta.bin</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Dual Storage in Tile:</strong></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>┌─────────────────────────────────────────────────────────────┐
+│  Tile                                                       │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  iwlo_meta_: unordered_map&lt;OcTreeKey, IWLOMeta&gt;     │   │
+│  │  - Primary storage for IWLO algorithm                │   │
+│  │  - Preserves exact log-odds and observation count    │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                      │                                      │
+│                      ▼ sync_to_octree()                     │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  octree_: OcTree                                     │   │
+│  │  - For visualization and spatial queries             │   │
+│  │  - Prunable for efficient storage                    │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="storage-format">
+<h2>3. Storage Format<a class="headerlink" href="#storage-format" title="Link to this heading"></a></h2>
+<section id="directory-structure">
+<h3>3.1 Directory Structure<a class="headerlink" href="#directory-structure" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>/map_tiles/                    ← base_path
+├── metadata.json              ← Global metadata
+├── tile_0_0_0/
+│   ├── octree.bt              ← OctoMap binary
+│   └── iwlo_meta.bin          ← IWLO metadata
+├── tile_1_0_0/
+│   ├── octree.bt
+│   └── iwlo_meta.bin
+├── tile_0_1_-1/
+│   ├── octree.bt
+│   └── iwlo_meta.bin
+└── ...
+</pre></div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="iwlo-metadata-binary-format">
+<h3>3.2 IWLO Metadata Binary Format<a class="headerlink" href="#iwlo-metadata-binary-format" title="Link to this heading"></a></h3>
+<p><strong>File:</strong> <code class="docutils literal notranslate"><span class="pre">iwlo_meta.bin</span></code></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Header (16 bytes):
+┌──────────────────────────────────────────┐
+│  magic: uint32 (0x49574C4F = &quot;IWLO&quot;)     │  4 bytes
+│  version: uint32 (1)                      │  4 bytes
+│  count: uint64 (number of entries)        │  8 bytes
+└──────────────────────────────────────────┘
+
+Entries (18 bytes each):
+┌──────────────────────────────────────────┐
+│  key[0]: uint16                           │  2 bytes
+│  key[1]: uint16                           │  2 bytes
+│  key[2]: uint16                           │  2 bytes
+│  log_odds: double                         │  8 bytes
+│  observation_count: int32                 │  4 bytes
+└──────────────────────────────────────────┘
+</pre></div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="metadata-json">
+<h3>3.3 Metadata JSON<a class="headerlink" href="#metadata-json" title="Link to this heading"></a></h3>
+<p><strong>File:</strong> <code class="docutils literal notranslate"><span class="pre">metadata.json</span></code></p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;1.0&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;resolution&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.05</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;tile_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">10.0</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;bounds&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">&quot;min&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">-1</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">],</span>
+<span class="w">    </span><span class="nt">&quot;max&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">]</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="lru-cache">
+<h2>4. LRU Cache<a class="headerlink" href="#lru-cache" title="Link to this heading"></a></h2>
+<section id="cache-structure">
+<h3>4.1 Cache Structure<a class="headerlink" href="#cache-structure" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameter</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>cache_size</p></td>
+<td><p>16</p></td>
+<td><p>메모리에 유지할 최대 타일 수</p></td>
+</tr>
+<tr class="row-odd"><td><p>tile_size</p></td>
+<td><p>10.0</p></td>
+<td><p>타일 크기 (meters)</p></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Memory Estimation:</strong></p>
+<ul class="simple">
+<li><p>각 타일: ~10-50 MB (복셀 밀도에 따라)</p></li>
+<li><p>16 타일 캐시: ~160-800 MB RAM</p></li>
+</ul>
+</section>
+<hr class="docutils" />
+<section id="eviction-policy">
+<h3>4.2 Eviction Policy<a class="headerlink" href="#eviction-policy" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ALGORITHM</span><span class="p">:</span> <span class="n">LRU_Eviction</span>
+<span class="n">INPUT</span><span class="p">:</span> <span class="n">new_tile</span> <span class="n">to</span> <span class="n">cache</span><span class="p">,</span> <span class="n">cache_size</span> <span class="n">limit</span>
+
+<span class="mf">1.</span> <span class="n">IF</span> <span class="n">cache</span><span class="o">.</span><span class="n">size</span><span class="p">()</span> <span class="o">&gt;=</span> <span class="n">cache_size</span> <span class="n">THEN</span>
+     <span class="n">lru_tile</span> <span class="o">:=</span> <span class="n">get_least_recently_used_tile</span><span class="p">()</span>
+
+     <span class="n">IF</span> <span class="n">lru_tile</span><span class="o">.</span><span class="n">is_dirty</span><span class="p">()</span> <span class="n">THEN</span>
+       <span class="n">tile_dir</span> <span class="o">:=</span> <span class="n">tile_manager</span><span class="o">.</span><span class="n">get_tile_directory</span><span class="p">(</span><span class="n">lru_tile</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+       <span class="n">lru_tile</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">tile_dir</span><span class="p">)</span>
+       <span class="n">recently_saved_tiles</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">lru_tile</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+     <span class="n">ENDIF</span>
+
+     <span class="n">cache</span><span class="o">.</span><span class="n">evict</span><span class="p">(</span><span class="n">lru_tile</span><span class="p">)</span>
+   <span class="n">ENDIF</span>
+
+<span class="mf">2.</span> <span class="n">cache</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">new_tile</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>Dirty Flag:</strong> 타일이 마지막 저장 이후 수정되었는지 추적</p>
+</section>
+<hr class="docutils" />
+<section id="eviction-callback">
+<h3>4.3 Eviction Callback<a class="headerlink" href="#eviction-callback" title="Link to this heading"></a></h3>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="c1">// Constructor에서 LRU 캐시 초기화</span>
+<span class="n">tile_cache_</span><span class="p">(</span><span class="n">cache_size</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="k">this</span><span class="p">](</span><span class="k">const</span><span class="w"> </span><span class="n">TileIndex</span><span class="o">&amp;</span><span class="w"> </span><span class="n">idx</span><span class="p">,</span>
+<span class="w">                                </span><span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">Tile</span><span class="o">&gt;&amp;</span><span class="w"> </span><span class="n">tile</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">this</span><span class="o">-&gt;</span><span class="n">on_tile_eviction</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span><span class="w"> </span><span class="n">tile</span><span class="p">);</span>
+<span class="p">})</span>
+
+<span class="c1">// Eviction handler</span>
+<span class="kt">void</span><span class="w"> </span><span class="n">on_tile_eviction</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">TileIndex</span><span class="o">&amp;</span><span class="w"> </span><span class="n">idx</span><span class="p">,</span>
+<span class="w">                      </span><span class="n">std</span><span class="o">::</span><span class="n">unique_ptr</span><span class="o">&lt;</span><span class="n">Tile</span><span class="o">&gt;&amp;</span><span class="w"> </span><span class="n">tile</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">tile</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">tile</span><span class="o">-&gt;</span><span class="n">is_dirty</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="w"> </span><span class="n">tile_dir</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">tile_manager_</span><span class="p">.</span><span class="n">get_tile_directory</span><span class="p">(</span><span class="n">idx</span><span class="p">);</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">tile</span><span class="o">-&gt;</span><span class="n">save</span><span class="p">(</span><span class="n">tile_dir</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">recently_saved_tiles_</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">idx</span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="operations">
+<h2>5. Operations<a class="headerlink" href="#operations" title="Link to this heading"></a></h2>
+<section id="point-update-flow">
+<h3>5.1 Point Update Flow<a class="headerlink" href="#point-update-flow" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ALGORITHM</span><span class="p">:</span> <span class="n">Batch_Update_IWLO</span>
+<span class="n">INPUT</span><span class="p">:</span> <span class="n">points</span><span class="p">[]</span> <span class="p">(</span><span class="n">Nx3</span><span class="p">),</span> <span class="n">intensities</span><span class="p">[]</span> <span class="p">(</span><span class="n">N</span><span class="p">),</span> <span class="n">is_occupied</span><span class="p">[]</span> <span class="p">(</span><span class="n">N</span><span class="p">)</span>
+
+<span class="mf">1.</span> <span class="n">GROUP</span> <span class="n">points</span> <span class="n">by</span> <span class="n">tile</span><span class="p">:</span>
+   <span class="n">tile_groups</span> <span class="o">:=</span> <span class="p">{}</span>
+   <span class="n">FOR</span> <span class="n">i</span> <span class="o">:=</span> <span class="mi">0</span> <span class="n">to</span> <span class="n">N</span><span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+     <span class="n">idx</span> <span class="o">:=</span> <span class="n">tile_manager</span><span class="o">.</span><span class="n">world_to_tile_index</span><span class="p">(</span><span class="n">points</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+     <span class="n">tile_groups</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+   <span class="n">ENDFOR</span>
+
+<span class="mf">2.</span> <span class="n">UPDATE</span> <span class="n">each</span> <span class="n">tile</span><span class="p">:</span>
+   <span class="n">FOR</span> <span class="n">each</span> <span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">point_indices</span><span class="p">)</span> <span class="ow">in</span> <span class="n">tile_groups</span><span class="p">:</span>
+     <span class="n">tile</span> <span class="o">:=</span> <span class="n">get_or_load_tile</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+
+     <span class="o">//</span> <span class="n">Extract</span> <span class="n">subset</span>
+     <span class="n">tile_points</span> <span class="o">:=</span> <span class="n">points</span><span class="p">[</span><span class="n">point_indices</span><span class="p">]</span>
+     <span class="n">tile_intensities</span> <span class="o">:=</span> <span class="n">intensities</span><span class="p">[</span><span class="n">point_indices</span><span class="p">]</span>
+     <span class="n">tile_is_occupied</span> <span class="o">:=</span> <span class="n">is_occupied</span><span class="p">[</span><span class="n">point_indices</span><span class="p">]</span>
+
+     <span class="o">//</span> <span class="n">Apply</span> <span class="n">IWLO</span> <span class="n">update</span>
+     <span class="n">tile</span><span class="o">.</span><span class="n">batch_update</span><span class="p">(</span><span class="n">tile_points</span><span class="p">,</span> <span class="n">tile_intensities</span><span class="p">,</span>
+                       <span class="n">tile_is_occupied</span><span class="p">,</span> <span class="n">iwlo_params</span><span class="p">)</span>
+
+     <span class="o">//</span> <span class="n">Update</span> <span class="n">bounds</span>
+     <span class="n">tile_manager</span><span class="o">.</span><span class="n">update_bounds</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+   <span class="n">ENDFOR</span>
+</pre></div>
+</div>
+</section>
+<hr class="docutils" />
+<section id="query-flow">
+<h3>5.2 Query Flow<a class="headerlink" href="#query-flow" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ALGORITHM</span><span class="p">:</span> <span class="n">Get_All_Occupied_Voxels</span>
+<span class="n">INPUT</span><span class="p">:</span> <span class="n">min_probability</span> <span class="n">threshold</span>
+<span class="n">OUTPUT</span><span class="p">:</span> <span class="nb">list</span> <span class="n">of</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">probability</span><span class="p">)</span>
+
+<span class="mf">1.</span> <span class="n">ENUMERATE</span> <span class="nb">all</span> <span class="n">tiles</span><span class="p">:</span>
+   <span class="n">tile_indices</span> <span class="o">:=</span> <span class="n">tile_manager</span><span class="o">.</span><span class="n">list_all_tiles</span><span class="p">()</span>
+
+<span class="mf">2.</span> <span class="n">COLLECT</span> <span class="n">voxels</span><span class="p">:</span>
+   <span class="n">results</span> <span class="o">:=</span> <span class="p">[]</span>
+   <span class="n">FOR</span> <span class="n">each</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">tile_indices</span><span class="p">:</span>
+     <span class="n">tile</span> <span class="o">:=</span> <span class="n">get_or_load_tile</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+     <span class="n">voxels</span> <span class="o">:=</span> <span class="n">tile</span><span class="o">.</span><span class="n">get_occupied_voxels</span><span class="p">(</span><span class="n">min_probability</span><span class="p">)</span>
+     <span class="n">results</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">voxels</span><span class="p">)</span>
+   <span class="n">ENDFOR</span>
+
+<span class="mf">3.</span> <span class="n">RETURN</span> <span class="n">results</span>
+</pre></div>
+</div>
+<p><strong>Note:</strong> <code class="docutils literal notranslate"><span class="pre">get_occupied_voxels()</span></code>는 캐시된 타일만, <code class="docutils literal notranslate"><span class="pre">get_all_occupied_voxels()</span></code>는 디스크의 모든 타일을 조회</p>
+</section>
+<hr class="docutils" />
+<section id="flush-operation">
+<h3>5.3 Flush Operation<a class="headerlink" href="#flush-operation" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ALGORITHM</span><span class="p">:</span> <span class="n">Flush_All</span>
+<span class="n">PURPOSE</span><span class="p">:</span> <span class="n">모든</span> <span class="n">dirty</span> <span class="n">타일을</span> <span class="n">디스크에</span> <span class="n">저장</span>
+
+<span class="mf">1.</span> <span class="n">FOR</span> <span class="n">each</span> <span class="n">tile</span> <span class="ow">in</span> <span class="n">cache</span><span class="p">:</span>
+     <span class="n">IF</span> <span class="n">tile</span><span class="o">.</span><span class="n">is_dirty</span><span class="p">()</span> <span class="n">THEN</span>
+       <span class="n">tile_dir</span> <span class="o">:=</span> <span class="n">tile_manager</span><span class="o">.</span><span class="n">get_tile_directory</span><span class="p">(</span><span class="n">tile</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+       <span class="n">tile</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">tile_dir</span><span class="p">)</span>
+       <span class="n">tile</span><span class="o">.</span><span class="n">mark_clean</span><span class="p">()</span>
+     <span class="n">ENDIF</span>
+   <span class="n">ENDFOR</span>
+</pre></div>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="implementation-classes">
+<h2>6. Implementation Classes<a class="headerlink" href="#implementation-classes" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Class</p></th>
+<th class="head"><p>Role</p></th>
+<th class="head"><p>Location</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">OutofcoreTileMapper</span></code></p></td>
+<td><p>전체 조율</p></td>
+<td><p><a class="reference internal" href="../api/outofcore_tile_mapper.html"><span class="std std-doc">API Reference</span></a></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Tile</span></code></p></td>
+<td><p>개별 타일 저장소</p></td>
+<td><p><a class="reference internal" href="../api/tile.html"><span class="std std-doc">API Reference</span></a></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">TileManager</span></code></p></td>
+<td><p>파일 시스템 작업</p></td>
+<td><p><a class="reference internal" href="../api/tile_manager.html"><span class="std std-doc">API Reference</span></a></p></td>
 </tr>
 </tbody>
 </table>
 </section>
-<section id="minimum-alpha-alpha-min">
-<h3>4.3 Minimum Alpha ($\alpha_{min}$)<a class="headerlink" href="#minimum-alpha-alpha-min" title="Link to this heading"></a></h3>
+<hr class="docutils" />
+<section id="mode-comparison">
+<h2>7. Mode Comparison<a class="headerlink" href="#mode-comparison" title="Link to this heading"></a></h2>
 <table class="docutils align-default">
 <thead>
-<tr class="row-odd"><th class="head"><p>Value</p></th>
-<th class="head"><p>Behavior</p></th>
+<tr class="row-odd"><th class="head"><p>Aspect</p></th>
+<th class="head"><p>ProbabilityUpdater</p></th>
+<th class="head"><p>OutofcoreTileMapper</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>High (0.2-0.5)</p></td>
-<td><p>환경 변화에 빠른 반응</p></td>
+<tr class="row-even"><td><p>Storage</p></td>
+<td><p>RAM only</p></td>
+<td><p>Disk + RAM cache</p></td>
 </tr>
-<tr class="row-odd"><td><p>Low (0.01-0.1)</p></td>
-<td><p>안정적이지만 느린 변화 감지</p></td>
+<tr class="row-odd"><td><p>Map Size</p></td>
+<td><p>Limited by RAM</p></td>
+<td><p>==Unlimited==</p></td>
+</tr>
+<tr class="row-even"><td><p>Speed</p></td>
+<td><p>Faster</p></td>
+<td><p>Slower (I/O overhead)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Use Case</p></td>
+<td><p>Small maps (&lt;100m)</p></td>
+<td><p>Large maps (&gt;100m)</p></td>
+</tr>
+<tr class="row-even"><td><p>API</p></td>
+<td><p>Original</p></td>
+<td><p>Compatible</p></td>
 </tr>
 </tbody>
 </table>
-</section>
+<p><strong>Selection Guide:</strong></p>
+<ul class="simple">
+<li><p>RAM 용량 충분: <code class="docutils literal notranslate"><span class="pre">ProbabilityUpdater</span></code> (In-Memory)</p></li>
+<li><p>대규모 맵 또는 제한된 RAM: <code class="docutils literal notranslate"><span class="pre">OutofcoreTileMapper</span></code> (Out-of-Core)</p></li>
+</ul>
 </section>
 <hr class="docutils" />
 <section id="related-documents">
-<h2>5. Related Documents<a class="headerlink" href="#related-documents" title="Link to this heading"></a></h2>
-<section id="api-reference">
-<h3>API Reference<a class="headerlink" href="#api-reference" title="Link to this heading"></a></h3>
-<ul class="simple">
-<li><p><a class="reference internal" href="../api/probability_updater.html"><span class="std std-doc">probability_updater</span></a> - In-Memory 모드 구현</p></li>
-<li><p><a class="reference internal" href="../api/tile.html"><span class="std std-doc">tile</span></a> - Out-of-Core 모드 구현</p></li>
-</ul>
-</section>
+<h2>8. Related Documents<a class="headerlink" href="#related-documents" title="Link to this heading"></a></h2>
 <section id="design-documents">
 <h3>Design Documents<a class="headerlink" href="#design-documents" title="Link to this heading"></a></h3>
 <ul class="simple">
+<li><p><a class="reference internal" href="iwlo_design.html"><span class="std std-doc">IWLO Probability Update</span></a> - 확률 업데이트 알고리즘</p></li>
 <li><p><a class="reference internal" href="octree_mapping.html"><span class="std std-doc">Octree Mapping</span></a> - 공간 데이터 구조</p></li>
-<li><p><a class="reference internal" href="outofcore_design.html"><span class="std std-doc">Out-of-Core Tile Mapping</span></a> - 대규모 저장소</p></li>
 </ul>
 </section>
+<section id="api-reference">
+<h3>API Reference<a class="headerlink" href="#api-reference" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><a class="reference internal" href="../api/outofcore_tile_mapper.html"><span class="std std-doc">outofcore_tile_mapper</span></a> - High-level coordinator</p></li>
+<li><p><a class="reference internal" href="../api/tile.html"><span class="std std-doc">tile</span></a> - Individual tile storage</p></li>
+<li><p><a class="reference internal" href="../api/tile_manager.html"><span class="std std-doc">tile_manager</span></a> - File system operations</p></li>
+</ul>
 </section>
-<hr class="docutils" />
-<section id="references">
-<h2>6. References<a class="headerlink" href="#references" title="Link to this heading"></a></h2>
-<ol class="arabic simple">
-<li><p><strong>Moravec &amp; Elfes (1985)</strong>: Original log-odds Bayesian occupancy grid mapping</p></li>
-<li><p><strong>OctoMap (Hornung et al., 2013)</strong>: Saturation limits to prevent dead-locking</p></li>
-<li><p><strong>VoxelMap (Yuan et al., 2022)</strong>: Weighted average based real-time mapping</p></li>
-<li><p><strong>CMU Sonar (Teixeira et al., 2016)</strong>: Underwater sonar-specific sensor model</p></li>
-</ol>
-</section>
-<hr class="docutils" />
-<section id="changelog">
-<h2>Changelog<a class="headerlink" href="#changelog" title="Link to this heading"></a></h2>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Date</p></th>
-<th class="head"><p>Version</p></th>
-<th class="head"><p>Changes</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>2024-12-04</p></td>
-<td><p>1.0</p></td>
-<td><p>Initial design and implementation</p></td>
-</tr>
-<tr class="row-odd"><td><p>2024-12-20</p></td>
-<td><p>1.1</p></td>
-<td><p>Extended L_min/L_max bounds, adjusted sharpness default</p></td>
-</tr>
-<tr class="row-even"><td><p>2024-12-24</p></td>
-<td><p>2.0</p></td>
-<td><p>Formal mathematical definitions, algorithm pseudocode, removed unverified predictions</p></td>
-</tr>
-</tbody>
-</table>
 </section>
 </section>
 
@@ -984,8 +1009,8 @@ OUTPUT: L_new (새로운 log-odds 값)
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../readme.html" class="btn btn-neutral float-left" title="Sonar 3D Reconstruction" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="octree_mapping.html" class="btn btn-neutral float-right" title="Octree Mapping Design" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="octree_mapping.html" class="btn btn-neutral float-left" title="Octree Mapping Design" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="refactoring_plan.html" class="btn btn-neutral float-right" title="C++ Backend Refactoring Plan" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
