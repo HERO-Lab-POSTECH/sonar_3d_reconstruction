@@ -1,4 +1,5 @@
 #include "probability_updater.h"
+#include "iwlo_updater.h"
 #include <cmath>
 #include <algorithm>
 #include <stdexcept>
@@ -291,22 +292,17 @@ void ProbabilityUpdater::set_iwlo_params(double sharpness, double decay_rate, do
 
 double ProbabilityUpdater::intensity_to_weight(double intensity) const
 {
-    if (intensity <= intensity_threshold_) {
-        return 0.0;
-    }
-
-    // Normalize: [threshold, max] -> [0, 1]
-    double normalized = (intensity - intensity_threshold_) / (intensity_max_ - intensity_threshold_);
-    normalized = std::max(0.0, std::min(1.0, normalized));
-
-    // Sigmoid transformation centered at 0.5
-    double x = sharpness_ * (normalized - 0.5);
-    return 1.0 / (1.0 + std::exp(-x));
+    // Delegate to IWLOUpdater (shared implementation)
+    return IWLOUpdater::intensity_to_weight(intensity,
+                                            intensity_threshold_,
+                                            intensity_max_,
+                                            sharpness_);
 }
 
 double ProbabilityUpdater::compute_alpha(int observation_count) const
 {
-    return std::max(min_alpha_, 1.0 / (1.0 + decay_rate_ * observation_count));
+    // Delegate to IWLOUpdater (shared implementation)
+    return IWLOUpdater::compute_alpha(observation_count, decay_rate_, min_alpha_);
 }
 
 void ProbabilityUpdater::batch_update_iwlo(

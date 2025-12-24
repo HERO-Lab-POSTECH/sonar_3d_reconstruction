@@ -2,6 +2,25 @@
 
 ## [2025-12-24]
 
+### Added
+- **IWLOUpdater 클래스 신규 생성** (Phase 1 리팩토링)
+  - `cpp/iwlo_updater.h`, `cpp/iwlo_updater.cpp` 신규 생성
+  - IWLO 알고리즘을 stateless static methods로 분리
+  - `intensity_to_weight()`, `compute_alpha()`, `log_odds_to_probability()` 등 공유 함수 제공
+  - `compute_delta_log_odds()`: 전체 IWLO 업데이트 공식 캡슐화
+
+### Changed
+- **ProbabilityUpdater 리팩토링**
+  - `probability_updater.cpp`: 중복 IWLO 로직 → `IWLOUpdater` 호출로 대체
+  - `intensity_to_weight()`, `compute_alpha()` 함수 단순화 (13줄 → 3줄)
+
+- **Tile 클래스 리팩토링**
+  - `tile.cpp`: 중복 IWLO 로직 → `IWLOUpdater` 호출로 대체
+  - `log_odds_to_probability()`, `intensity_to_weight()`, `compute_alpha()` 함수 단순화
+
+- **CMakeLists.txt 업데이트**
+  - `iwlo_updater.cpp` 빌드 대상에 추가
+
 ### Removed
 - **미사용 coordinate_transform 코드 제거**
   - `coordinate_transform.cpp`, `coordinate_transform.h` 삭제

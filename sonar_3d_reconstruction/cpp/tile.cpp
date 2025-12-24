@@ -1,4 +1,5 @@
 #include "tile.h"
+#include "iwlo_updater.h"
 #include <cmath>
 #include <fstream>
 #include <iostream>
@@ -63,28 +64,20 @@ Tile::~Tile()
 
 double Tile::log_odds_to_probability(double log_odds)
 {
-    return 1.0 / (1.0 + std::exp(-log_odds));
+    // Delegate to IWLOUpdater (shared implementation)
+    return IWLOUpdater::log_odds_to_probability(log_odds);
 }
 
 double Tile::intensity_to_weight(double intensity, const IWLOParams& params)
 {
-    if (intensity <= params.intensity_threshold) {
-        return 0.0;
-    }
-
-    // Normalize: [threshold, max] -> [0, 1]
-    double normalized = (intensity - params.intensity_threshold) /
-                        (params.intensity_max - params.intensity_threshold);
-    normalized = std::max(0.0, std::min(1.0, normalized));
-
-    // Sigmoid transformation centered at 0.5
-    double x = params.sharpness * (normalized - 0.5);
-    return 1.0 / (1.0 + std::exp(-x));
+    // Delegate to IWLOUpdater (shared implementation)
+    return IWLOUpdater::intensity_to_weight(intensity, params);
 }
 
 double Tile::compute_alpha(int observation_count, const IWLOParams& params)
 {
-    return std::max(params.min_alpha, 1.0 / (1.0 + params.decay_rate * observation_count));
+    // Delegate to IWLOUpdater (shared implementation)
+    return IWLOUpdater::compute_alpha(observation_count, params);
 }
 
 void Tile::update_voxel(const octomap::point3d& point,

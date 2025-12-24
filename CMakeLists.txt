@@ -28,6 +28,7 @@ find_package(octomap REQUIRED)
 add_library(sonar_3d_reconstruction_cpp MODULE
   sonar_3d_reconstruction/cpp/python_bindings.cpp
   sonar_3d_reconstruction/cpp/octree_mapper.cpp
+  sonar_3d_reconstruction/cpp/iwlo_updater.cpp
   sonar_3d_reconstruction/cpp/probability_updater.cpp
   sonar_3d_reconstruction/cpp/tile.cpp
   sonar_3d_reconstruction/cpp/tile_manager.cpp
