@@ -73,8 +73,6 @@ class MapVisualizerNode(Node):
 
         # Extract parameters
         self.map_path = params['outofcore.map_path']
-        self.resolution = params['octree.voxel_resolution']
-        self.tile_size = params['outofcore.tile_size']
         self.frame_id = params['frames.map']
         self.occupied_threshold = params['mapping.occupied_threshold']
         self.publish_rate = params['publish_rate']
@@ -82,6 +80,12 @@ class MapVisualizerNode(Node):
         self.auto_refresh = params['auto_refresh']
         self.refresh_interval = params['refresh_interval']
         self.last_refresh_time = 0.0
+
+        # Read resolution and tile_size from metadata.json (fallback to params if not found)
+        self.resolution, self.tile_size = self._load_metadata(
+            fallback_resolution=params['octree.voxel_resolution'],
+            fallback_tile_size=params['outofcore.tile_size']
+        )
 
         # Register parameter callback for dynamic updates
         self.add_on_set_parameters_callback(
@@ -142,9 +146,32 @@ class MapVisualizerNode(Node):
         self.timer = self.create_timer(1.0 / self.publish_rate, self.publish_callback)
 
         # Single-line initialization summary
-        self.get_logger().info(
-            f'Visualizer: {self.VIS_MODE_NAMES[self.visualization_mode]} mode, {self.publish_rate}Hz'
-        )
+        if self.resolution is not None:
+            self.get_logger().info(
+                f'Visualizer: {self.VIS_MODE_NAMES[self.visualization_mode]} mode, {self.publish_rate}Hz, '
+                f'res={self.resolution}m, tile={self.tile_size}m'
+            )
+        else:
+            self.get_logger().warn(f'Waiting for map at {self.map_path}')
+
+    def _load_metadata(self, fallback_resolution=0.1, fallback_tile_size=10.0):
+        """Load resolution and tile_size from metadata.json, fallback to params if not found"""
+        import json
+        metadata_path = os.path.join(self.map_path, 'metadata.json')
+
+        if not os.path.exists(metadata_path):
+            self.get_logger().info(f'metadata.json not found, using params: res={fallback_resolution}, tile={fallback_tile_size}')
+            return fallback_resolution, fallback_tile_size
+
+        try:
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+            resolution = metadata.get('resolution', fallback_resolution)
+            tile_size = metadata.get('tile_size', fallback_tile_size)
+            return resolution, tile_size
+        except Exception as e:
+            self.get_logger().error(f'Failed to load metadata: {e}')
+            return fallback_resolution, fallback_tile_size
 
     # Parameter update handlers (called by ParameterManager)
     def update_occupied_threshold(self, value):

@@ -86,19 +86,22 @@ def generate_timestamped_map_path(context, *args, **kwargs):
 
     # Map Visualizer node (if enabled)
     if launch_visualizer.lower() == 'true':
-        # Visualizer uses map_visualizer.yaml + common.yaml values
-        # Only override map_path (already resolved with YAML priority)
+        # common_config 네임스페이스가 달라서 직접 전달 필요
+        # tile_size, voxel_resolution은 metadata.json에서 자동으로 읽음
+        visualizer_overrides = {
+            'use_sim_time': use_sim_time == 'true',
+            'outofcore.map_path': map_path,
+            # common.yaml 값 전달 (frames, mapping)
+            'frames.map': yaml_params.get('frames', {}).get('map', 'camera_init'),
+            'mapping.occupied_threshold': yaml_params.get('mapping', {}).get('occupied_threshold', 0.7),
+        }
         nodes.append(Node(
             package='sonar_3d_reconstruction',
             executable='map_visualizer_node.py',
             name='map_visualizer',
             parameters=[
-                common_config,  # Load common.yaml first for shared params
-                map_visualizer_config,  # Then visualizer-specific params
-                {
-                    'use_sim_time': use_sim_time == 'true',
-                    'outofcore.map_path': map_path,  # Already resolved with YAML priority
-                }
+                map_visualizer_config,  # Visualizer-specific params only
+                visualizer_overrides    # Override with common.yaml values
             ],
             output='screen'
         ))
