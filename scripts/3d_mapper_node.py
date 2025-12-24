@@ -288,9 +288,24 @@ class SonarMapperNode(Node):
             elif name == 'visualization.show_opencv_visualization':
                 self.show_opencv_visualization = bool(value)
             elif name == 'visualization.pointcloud_publish_rate':
-                self.pointcloud_publish_rate = float(value)
+                new_rate = float(value)
+                if new_rate != self.pointcloud_publish_rate and not self.use_outofcore:
+                    self.pointcloud_publish_rate = new_rate
+                    # Recreate timer with new rate
+                    if self.timer is not None:
+                        self.timer.cancel()
+                    publish_interval = 1.0 / self.pointcloud_publish_rate
+                    self.timer = self.create_timer(publish_interval, self.publish_pointcloud)
+                    self.get_logger().info(f'Publish rate changed to {new_rate}Hz')
             elif name == 'visualization.tile_save_interval':
-                self.tile_save_interval = float(value)
+                new_interval = float(value)
+                if new_interval != self.tile_save_interval and self.use_outofcore:
+                    self.tile_save_interval = new_interval
+                    # Recreate flush timer with new interval
+                    if hasattr(self, 'flush_timer') and self.flush_timer is not None:
+                        self.flush_timer.cancel()
+                    self.flush_timer = self.create_timer(self.tile_save_interval, self.periodic_flush_and_notify)
+                    self.get_logger().info(f'Tile save interval changed to {new_interval}s')
 
             # === Mounting Orientation (requires TF update) ===
             elif name == 'mounting.orientation.roll':
