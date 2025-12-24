@@ -132,14 +132,12 @@ int ProbabilityUpdater::get_observation_count(const std::string& key) const
 
 double ProbabilityUpdater::log_odds_to_probability(double log_odds) const
 {
-    return 1.0 / (1.0 + std::exp(-log_odds));
+    return IWLOUpdater::log_odds_to_probability(log_odds);
 }
 
 double ProbabilityUpdater::probability_to_log_odds(double probability) const
 {
-    // Clamp probability to avoid infinite log-odds
-    probability = std::max(1e-6, std::min(1.0 - 1e-6, probability));
-    return std::log(probability / (1.0 - probability));
+    return IWLOUpdater::probability_to_log_odds(probability);
 }
 
 double ProbabilityUpdater::apply_adaptive_scaling(double current_prob, double log_odds_update, bool is_occupied) const
