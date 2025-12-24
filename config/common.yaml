@@ -48,7 +48,7 @@ sonar_3d_mapper:
     #===== Out-of-Core Storage (Read-only) =====
     outofcore:
       use: true                              # true = disk-based, false = RAM-based
-      map_path: "/workspace/map_tiles"       # Tile storage directory
+      map_path: "/workspace/data/5_khnp/20251219_seafloor_mapping/raw_oculus_m3000d_test_v1/map_tiles"       # Tile storage directory
       tile_size: 0.4                         # Tile size in meters
       cache_size: 16                         # Max tiles in memory
 
@@ -88,6 +88,13 @@ sonar_3d_mapper:
       prefix: "test"
       # Output path is auto-generated: {record_base_path}/YYYYMMDD_HHMMSS/
 
+    #===== World Init Broadcaster =====
+    world_init:
+      imu_topic: "/sensor/ins/livox_mid360/imu"
+      init_samples: 50
+      parent_frame: "world_init"
+      child_frame: "camera_init"
+
     #===== Launch Options =====
     use_sim_time: true
     launch_fast_lio: true
@@ -96,5 +103,5 @@ sonar_3d_mapper:
 
     #===== Bag Playback =====
     play_bag: true
-    bag_file: "/workspace/data/5_hyeongsan_gang/20241205_slam_test/slam_test_v3_raw"
+    bag_file: "/workspace/data/5_khnp/20251219_seafloor_mapping/raw_oculus_m3000d_test_v1"
     bag_playback_rate: 1.0

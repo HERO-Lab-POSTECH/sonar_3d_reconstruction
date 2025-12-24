@@ -329,18 +329,18 @@ VISUALIZER_PARAMS: List[ParameterDef] = [
                  read_only=True),
 ]
 
-# World init broadcaster parameters
+# World init broadcaster parameters (namespaced under world_init.*)
 WORLD_INIT_PARAMS: List[ParameterDef] = [
-    ParameterDef('imu_topic', '/sensor/ins/livox_mid360/imu',
+    ParameterDef('world_init.imu_topic', '/sensor/ins/livox_mid360/imu',
                  'IMU topic for gravity alignment',
                  read_only=True),
-    ParameterDef('init_samples', 50,
+    ParameterDef('world_init.init_samples', 50,
                  'Number of IMU samples for initial alignment',
                  read_only=True),
-    ParameterDef('parent_frame', 'world_init',
+    ParameterDef('world_init.parent_frame', 'world_init',
                  'Parent frame ID (horizontal plane)',
                  read_only=True),
-    ParameterDef('child_frame', 'camera_init',
+    ParameterDef('world_init.child_frame', 'camera_init',
                  'Child frame ID (initial pose)',
                  read_only=True),
 ]

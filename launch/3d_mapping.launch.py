@@ -35,13 +35,19 @@ def generate_timestamped_map_path(context, *args, **kwargs):
     map_visualizer_config = os.path.join(pkg_dir, 'config', 'map_visualizer.yaml')
 
     use_sim_time = context.launch_configurations.get('use_sim_time', 'true')
-    sonar_pitch = context.launch_configurations.get('sonar_pitch', '90.0')
+    sonar_pitch = context.launch_configurations.get('sonar_pitch', '')
     launch_visualizer = context.launch_configurations.get('launch_visualizer', 'false')
     map_path_arg = context.launch_configurations.get('map_path', '')
 
-    # Generate timestamped path if not specified
+    # Load common.yaml to get default values
+    with open(common_config, 'r') as f:
+        yaml_params = yaml.safe_load(f)['sonar_3d_mapper']['ros__parameters']
+
+    # Priority: launch arg > YAML > timestamped fallback
     if map_path_arg:
         map_path = map_path_arg
+    elif yaml_params.get('outofcore', {}).get('map_path'):
+        map_path = yaml_params['outofcore']['map_path']
     else:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         map_path = f'/workspace/data/map_tiles/{timestamp}'
@@ -53,6 +59,15 @@ def generate_timestamped_map_path(context, *args, **kwargs):
     nodes = []
 
     # 3D Mapper node
+    # Build parameter overrides (only if explicitly set via launch args)
+    mapper_overrides = {
+        'use_sim_time': use_sim_time == 'true',
+        'outofcore.map_path': map_path,  # Already resolved with YAML priority
+    }
+    # Only override sonar_pitch if explicitly provided via launch arg
+    if sonar_pitch:
+        mapper_overrides['mounting.orientation.pitch'] = float(sonar_pitch)
+
     nodes.append(Node(
         package='sonar_3d_reconstruction',
         executable='3d_mapper_node.py',
@@ -62,35 +77,25 @@ def generate_timestamped_map_path(context, *args, **kwargs):
             method_iwlo,
             robot_detection_config,
             crosstalk_config,
-            {
-                'use_sim_time': use_sim_time == 'true',
-                'mounting.orientation.pitch': float(sonar_pitch),
-                'outofcore.map_path': map_path,  # Override map path
-            }
+            mapper_overrides
         ],
         output='screen'
     ))
 
     # Map Visualizer node (if enabled)
     if launch_visualizer.lower() == 'true':
-        # Read common params for visualizer (namespaced structure)
-        with open(common_config, 'r') as f:
-            vis_common_params = yaml.safe_load(f)['sonar_3d_mapper']['ros__parameters']
-
+        # Visualizer uses map_visualizer.yaml + common.yaml values
+        # Only override map_path (already resolved with YAML priority)
         nodes.append(Node(
             package='sonar_3d_reconstruction',
             executable='map_visualizer_node.py',
             name='map_visualizer',
             parameters=[
-                map_visualizer_config,
+                common_config,  # Load common.yaml first for shared params
+                map_visualizer_config,  # Then visualizer-specific params
                 {
                     'use_sim_time': use_sim_time == 'true',
-                    # Pass common.yaml parameters (namespaced)
-                    'outofcore.map_path': map_path,
-                    'outofcore.tile_size': vis_common_params.get('outofcore', {}).get('tile_size', 10.0),
-                    'octree.voxel_resolution': vis_common_params.get('octree', {}).get('voxel_resolution', 0.1),
-                    'mapping.occupied_threshold': vis_common_params.get('mapping', {}).get('occupied_threshold', 0.7),
-                    'frames.map': vis_common_params.get('frames', {}).get('map', 'camera_init'),
+                    'outofcore.map_path': map_path,  # Already resolved with YAML priority
                 }
             ],
             output='screen'
@@ -164,13 +169,13 @@ def generate_launch_description():
         DeclareLaunchArgument('bag_rate',
             default_value=str(common_params.get('bag_playback_rate', 1.0))),
         DeclareLaunchArgument('sonar_pitch',
-            default_value=str(common_params.get('sonar_orientation', {}).get('pitch', 90.0)),
+            default_value=str(common_params.get('mounting', {}).get('orientation', {}).get('pitch', 90.0)),
             description='Sonar pitch angle in degrees'),
         DeclareLaunchArgument('record_bag',
-            default_value=str(common_params.get('record_bag', False)).lower(),
+            default_value=str(common_params.get('recording', {}).get('bag', False)).lower(),
             description='Enable bag recording with auto-increment'),
         DeclareLaunchArgument('record_base_path',
-            default_value=common_params.get('record_base_path', '/workspace/data/experiments'),
+            default_value=common_params.get('recording', {}).get('base_path', '/workspace/data/experiments'),
             description='Base directory for bag recordings'),
         DeclareLaunchArgument('launch_visualizer',
             default_value='true',
@@ -181,17 +186,15 @@ def generate_launch_description():
     ])
 
     # World Init TF Broadcaster (gravity alignment)
+    # Parameters loaded from common.yaml (world_init section)
     ld.add_action(Node(
         package='sonar_3d_reconstruction',
         executable='world_init_broadcaster_node.py',
         name='world_init_broadcaster',
-        parameters=[{
-            'use_sim_time': use_sim_time,
-            'imu_topic': '/sensor/ins/livox_mid360/imu',
-            'init_samples': 50,
-            'parent_frame': 'world_init',
-            'child_frame': 'camera_init',
-        }],
+        parameters=[
+            common_config,  # Load from YAML
+            {'use_sim_time': use_sim_time}
+        ],
         output='screen'
     ))
 

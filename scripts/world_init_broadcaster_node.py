@@ -69,11 +69,11 @@ class WorldInitBroadcaster(Node):
         # Get all parameter values
         params = ParameterManager.get_all(self, WORLD_INIT_PARAMS)
 
-        # Extract parameters
-        imu_topic = params['imu_topic']
-        self.init_samples = params['init_samples']
-        self.parent_frame = params['parent_frame']
-        self.child_frame = params['child_frame']
+        # Extract parameters (namespaced under world_init.*)
+        imu_topic = params['world_init.imu_topic']
+        self.init_samples = params['world_init.init_samples']
+        self.parent_frame = params['world_init.parent_frame']
+        self.child_frame = params['world_init.child_frame']
 
         # State
         self.acc_samples = []
