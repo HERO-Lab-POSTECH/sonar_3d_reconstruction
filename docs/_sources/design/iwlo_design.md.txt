@@ -1,0 +1,251 @@
+# Intensity-Weighted Log-Odds (IWLO) Probability Update
+
+## Overview
+
+IWLO is a novel probability update method that combines the advantages of ==Log-Odds Bayesian== and ==Weighted Average== approaches.
+
+**Core Idea**: Transform intensity information through a sigmoid function to modulate log-odds update strength, and decay the learning rate based on observation count to achieve natural convergence.
+
+---
+
+## 1. Background
+
+### Limitations of Existing Methods
+
+| Method | Advantages | Limitations |
+|--------|------------|-------------|
+| **Log-Odds** | Mathematical rigor, fast change detection | Ignores intensity, saturation risk |
+| **Weighted Average** | Uses intensity, natural convergence | Weak Bayesian justification, slow change detection |
+
+### IWLO Design Goals
+
+1. Continuously utilize intensity information
+2. Maintain log-odds based Bayesian updates
+3. Reflect confidence based on observation count
+4. Maintain appropriate responsiveness to environmental changes
+5. Prevent saturation
+
+---
+
+## 2. Mathematical Formulation
+
+### 2.1 Probability-Log-Odds Transformation
+
+**Definition:**
+
+$$L = \log\left(\frac{P}{1-P}\right)$$
+
+$$P = \frac{1}{1 + e^{-L}}$$
+
+**Property**: Updates in log-odds space are performed as ==additive operations==.
+
+---
+
+### 2.2 Intensity-to-Weight Transformation
+
+**Definition:**
+
+$$w(I) = \begin{cases}
+0 & \text{if } I \leq I_{th} \\
+\sigma\left(\gamma \cdot \left(\frac{I - I_{th}}{I_{max} - I_{th}} - 0.5\right)\right) & \text{otherwise}
+\end{cases}$$
+
+where $\sigma(x) = \frac{1}{1 + e^{-x}}$ (sigmoid function)
+
+**Parameters:**
+
+| Parameter | Symbol | Default | Range | Description |
+|-----------|--------|---------|-------|-------------|
+| Intensity threshold | $I_{th}$ | 35 | [0, 100] | Minimum valid intensity |
+| Maximum intensity | $I_{max}$ | 255 | [100, 255] | Normalization reference maximum |
+| Sharpness | $\gamma$ | 0.1 | [0.1, 5.0] | Sigmoid slope |
+
+**Characteristics:**
+- $I \leq I_{th}$: $w = 0$ (ignored)
+- $I = I_{th} + 0.5(I_{max} - I_{th})$: $w = 0.5$ (midpoint)
+- $I \to I_{max}$: $w \to 1$ (maximum)
+
+---
+
+### 2.3 Learning Rate Decay
+
+**Definition:**
+
+$$\alpha(n) = \max\left(\alpha_{min}, \frac{1}{1 + \lambda \cdot n}\right)$$
+
+**Parameters:**
+
+| Parameter | Symbol | Default | Range | Description |
+|-----------|--------|---------|-------|-------------|
+| Decay rate | $\lambda$ | 0.1 | [0.05, 0.5] | Decay speed |
+| Minimum alpha | $\alpha_{min}$ | 0.3 | [0.01, 0.5] | Minimum learning rate |
+
+**Characteristics:**
+- $n=0$: $\alpha = 1.0$ (first observation)
+- $n \to \infty$: $\alpha \to \alpha_{min}$ (maintains change detection capability)
+
+---
+
+### 2.4 Adaptive Scaling (Bidirectional Protection)
+
+**Occupied Update** (when $I > I_{th}$):
+
+$$s_{occ} = \begin{cases}
+\frac{P}{P_{th}} \cdot r_{max} & \text{if } P < P_{th} \\
+1.0 & \text{otherwise}
+\end{cases}$$
+
+**Free Update** (when $I \leq I_{th}$):
+
+$$s_{free} = \begin{cases}
+r_{max} + (1 - r_{max})(1 - f_p) & \text{if } P > 1 - P_{th} \\
+1.0 & \text{otherwise}
+\end{cases}$$
+
+where $f_p = \frac{P - (1 - P_{th})}{P_{th}}$
+
+**Parameters:**
+
+| Parameter | Symbol | Default | Description |
+|-----------|--------|---------|-------------|
+| Adaptive threshold | $P_{th}$ | 0.5 | Protection start probability |
+| Maximum ratio | $r_{max}$ | 0.3 | Maximum suppression ratio |
+
+**Purpose**: Suppresses noisy occupied updates in regions already ==classified as free==, and suppresses noisy free updates in regions already ==classified as occupied==.
+
+---
+
+### 2.5 Update Formula
+
+**Occupied Update** (when $I > I_{th}$):
+
+$$\Delta L_{occ} = L_{occ} \times w(I) \times \alpha(n) \times s_{occ}$$
+
+**Free Update** (when $I \leq I_{th}$):
+
+$$\Delta L_{free} = L_{free} \times \alpha(n) \times s_{free}$$
+
+**Application:**
+
+$$L_{new} = \text{clamp}(L_{old} + \Delta L, L_{min}, L_{max})$$
+
+**Parameters:**
+
+| Parameter | Symbol | Default | Range | Description |
+|-----------|--------|---------|-------|-------------|
+| Occupied log-odds | $L_{occ}$ | 3.5 | [0.5, 5.0] | Occupied update strength |
+| Free log-odds | $L_{free}$ | -3.0 | [-5.0, -0.5] | Free update strength |
+| Saturation min | $L_{min}$ | -10.0 | [-10.0, 0.0] | Lower bound ($P \approx 0.00005$) |
+| Saturation max | $L_{max}$ | 10.0 | [2.0, 10.0] | Upper bound ($P \approx 0.99995$) |
+
+---
+
+## 3. Algorithm Pseudocode
+
+```
+ALGORITHM: IWLO_Update
+INPUT:
+  - point (x, y, z): voxel coordinates
+  - intensity I: sonar reflection intensity [0, 255]
+  - L_current: current log-odds value
+  - n: observation count
+  - params: {I_th, I_max, γ, λ, α_min, P_th, r_max, L_occ, L_free, L_min, L_max}
+OUTPUT: L_new (new log-odds value)
+
+1. DETERMINE update type:
+   IF I <= I_th THEN
+     is_occupied := FALSE
+     w := 0
+   ELSE
+     is_occupied := TRUE
+     normalized := (I - I_th) / (I_max - I_th)
+     w := sigmoid(γ × (normalized - 0.5))
+   ENDIF
+
+2. COMPUTE learning rate:
+   α := max(α_min, 1 / (1 + λ × n))
+
+3. COMPUTE adaptive scale:
+   P_current := sigmoid(L_current)
+
+   IF adaptive_enabled THEN
+     IF is_occupied AND P_current < P_th THEN
+       scale := (P_current / P_th) × r_max
+     ELSE IF NOT is_occupied AND P_current > (1 - P_th) THEN
+       f_p := (P_current - (1 - P_th)) / P_th
+       scale := r_max + (1 - r_max) × (1 - f_p)
+     ELSE
+       scale := 1.0
+     ENDIF
+   ELSE
+     scale := 1.0
+   ENDIF
+
+4. COMPUTE delta:
+   IF is_occupied THEN
+     ΔL := L_occ × w × α × scale
+   ELSE
+     ΔL := L_free × α × scale
+   ENDIF
+
+5. APPLY update:
+   L_new := clamp(L_current + ΔL, L_min, L_max)
+
+6. RETURN L_new
+```
+
+---
+
+## 4. Parameter Tuning Guide
+
+### 4.1 Sharpness ($\gamma$)
+
+| Value | Behavior |
+|-------|----------|
+| High (4-5) | Sensitive to intensity, approaches binary classification |
+| Low (0.1-1) | Insensitive to intensity, smooth transition |
+
+### 4.2 Decay Rate ($\lambda$)
+
+| Value | Behavior |
+|-------|----------|
+| High (0.3-0.5) | Fast convergence, weakened change detection |
+| Low (0.05-0.1) | Slow convergence, maintains change detection |
+
+### 4.3 Minimum Alpha ($\alpha_{min}$)
+
+| Value | Behavior |
+|-------|----------|
+| High (0.2-0.5) | Fast response to environmental changes |
+| Low (0.01-0.1) | Stable but slow change detection |
+
+---
+
+## 5. Related Documents
+
+### API Reference
+- [probability_updater](../api/probability_updater.md) - In-Memory mode implementation
+- [tile](../api/tile.md) - Out-of-Core mode implementation
+
+### Design Documents
+- [Octree Mapping](octree_mapping.md) - Spatial data structure
+- [Out-of-Core Tile Mapping](outofcore_design.md) - Large-scale storage
+
+---
+
+## 6. References
+
+1. **Moravec & Elfes (1985)**: Original log-odds Bayesian occupancy grid mapping
+2. **OctoMap (Hornung et al., 2013)**: Saturation limits to prevent dead-locking
+3. **VoxelMap (Yuan et al., 2022)**: Weighted average based real-time mapping
+4. **CMU Sonar (Teixeira et al., 2016)**: Underwater sonar-specific sensor model
+
+---
+
+## Changelog
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2024-12-04 | 1.0 | Initial design and implementation |
+| 2024-12-20 | 1.1 | Extended L_min/L_max bounds, adjusted sharpness default |
+| 2024-12-24 | 2.0 | Formal mathematical definitions, algorithm pseudocode, removed unverified predictions |
