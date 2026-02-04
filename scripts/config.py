@@ -183,7 +183,7 @@ MAPPER_PARAMS: List[ParameterDef] = [
                  'Maximum adaptive ratio',
                  read_only=True),
 
-    # IWLO (iwlo.*) - Using method_iwlo.yaml values
+    # IWLO (iwlo.*) - Unified with 3d_mapper.py and C++ backend
     ParameterDef('iwlo.sharpness', 0.1,
                  'IWLO sigmoid steepness for intensity-to-weight mapping',
                  read_only=True),
@@ -193,16 +193,16 @@ MAPPER_PARAMS: List[ParameterDef] = [
     ParameterDef('iwlo.min_alpha', 0.3,
                  'IWLO minimum learning rate for change detection',
                  read_only=True),
-    ParameterDef('iwlo.L_occ', 2.0,
+    ParameterDef('iwlo.L_occ', 3.5,
                  'IWLO max occupied log-odds increment',
                  read_only=True),
-    ParameterDef('iwlo.L_free', -4.0,
+    ParameterDef('iwlo.L_free', -3.0,
                  'IWLO free space log-odds decrement',
                  read_only=True),
-    ParameterDef('iwlo.L_min', -12.0,
+    ParameterDef('iwlo.L_min', -10.0,
                  'IWLO lower saturation bound (P ~ 0.00005)',
                  read_only=True),
-    ParameterDef('iwlo.L_max', 8.0,
+    ParameterDef('iwlo.L_max', 10.0,
                  'IWLO upper saturation bound (P ~ 0.99995)',
                  read_only=True),
 
@@ -260,51 +260,6 @@ MAPPER_PARAMS: List[ParameterDef] = [
                  read_only=True),
 ]
 
-# Robot detection parameters (conditional - only declared when enabled)
-ROBOT_DETECTION_PARAMS: List[ParameterDef] = [
-    ParameterDef('terrain_detection.min_threshold', 80,
-                 'Minimum intensity for terrain classification',
-                 handler='update_terrain_min'),
-    ParameterDef('terrain_detection.max_threshold', 180,
-                 'Maximum intensity for terrain classification',
-                 handler='update_terrain_max'),
-    ParameterDef('robot_detection.min_threshold', 180,
-                 'Minimum intensity for robot detection',
-                 handler='update_robot_min'),
-    ParameterDef('robot_detection.topic', '/sonar_robot_detections',
-                 'Topic for robot detection output',
-                 read_only=True),
-]
-
-# Crosstalk filter parameters (conditional - only declared when enabled)
-CROSSTALK_PARAMS: List[ParameterDef] = [
-    ParameterDef('crosstalk.morpho_enabled', True,
-                 'Enable morphological filtering',
-                 handler='update_crosstalk'),
-    ParameterDef('crosstalk.morpho_kernel_size', 5,
-                 'Morphological kernel size',
-                 handler='update_crosstalk'),
-    ParameterDef('crosstalk.morpho_kernel_shape', 'rect',
-                 'Morphological kernel shape (rect/ellipse/cross)',
-                 handler='update_crosstalk'),
-    ParameterDef('crosstalk.azimuth_enabled', True,
-                 'Enable azimuth consistency check',
-                 handler='update_crosstalk'),
-    ParameterDef('crosstalk.azimuth_threshold', 0.5,
-                 'Azimuth consistency threshold',
-                 handler='update_crosstalk'),
-    # Adaptive threshold (experimental)
-    ParameterDef('crosstalk.adaptive_enabled', False,
-                 'Enable adaptive thresholding',
-                 handler='update_crosstalk'),
-    ParameterDef('crosstalk.adaptive_block_size', 11,
-                 'Adaptive threshold block size',
-                 handler='update_crosstalk'),
-    ParameterDef('crosstalk.adaptive_c', 2,
-                 'Adaptive threshold constant C',
-                 handler='update_crosstalk'),
-]
-
 # Map visualizer parameters
 VISUALIZER_PARAMS: List[ParameterDef] = [
     # === Dynamic Parameters ===
@@ -340,50 +295,6 @@ VISUALIZER_PARAMS: List[ParameterDef] = [
                  read_only=True),
 ]
 
-# World init broadcaster parameters (namespaced under world_init.*)
-WORLD_INIT_PARAMS: List[ParameterDef] = [
-    ParameterDef('world_init.imu_topic', '/sensor/ins/livox_mid360/imu',
-                 'IMU topic for gravity alignment',
-                 read_only=True),
-    ParameterDef('world_init.init_samples', 50,
-                 'Number of IMU samples for initial alignment',
-                 read_only=True),
-    ParameterDef('world_init.parent_frame', 'world_init',
-                 'Parent frame ID (horizontal plane)',
-                 read_only=True),
-    ParameterDef('world_init.child_frame', 'camera_init',
-                 'Child frame ID (initial pose)',
-                 read_only=True),
-]
-
-
-@dataclass
-class TerrainDetectionConfig:
-    """Terrain detection parameters for robot detection mode"""
-    min_threshold: int = 80
-    max_threshold: int = 180
-
-
-@dataclass
-class RobotDetectionConfig:
-    """Robot detection parameters"""
-    min_threshold: int = 180
-    topic: str = '/sonar_robot_detections'
-
-
-@dataclass
-class CrosstalkConfig:
-    """Crosstalk filter parameters"""
-    enabled: bool = False
-    morpho_enabled: bool = True
-    morpho_kernel_size: int = 5
-    morpho_kernel_shape: str = 'rect'
-    azimuth_enabled: bool = True
-    azimuth_threshold: float = 0.5
-    # Adaptive threshold (experimental)
-    adaptive_enabled: bool = False
-    adaptive_block_size: int = 11
-    adaptive_c: int = 2
 
 
 @dataclass
@@ -396,11 +307,6 @@ class SonarMapperConfig:
     min_range: float = 0.5
     intensity_threshold: int = 35
     # max_range is received dynamically from /param/range topic
-
-    # Terrain/robot detection
-    terrain_detection: TerrainDetectionConfig = field(default_factory=TerrainDetectionConfig)
-    enable_robot_detection: bool = False
-    robot_detection: RobotDetectionConfig = field(default_factory=RobotDetectionConfig)
 
     # Sonar mounting (relative to base_link)
     sonar_position: List[float] = field(default_factory=lambda: [0.0, 0.0, -0.5])
@@ -440,9 +346,6 @@ class SonarMapperConfig:
     outofcore_tile_size: float = 10.0
     outofcore_cache_size: int = 16
 
-    # Cross-talk filter
-    crosstalk: CrosstalkConfig = field(default_factory=CrosstalkConfig)
-
     # Processing parameters
     frame_skip: int = 1
 
@@ -457,40 +360,6 @@ class SonarMapperConfig:
         Returns:
             SonarMapperConfig instance
         """
-        # Check conditional feature flags
-        enable_robot_detection = node.get_parameter('robot_detection.enabled').value
-        enable_crosstalk = node.get_parameter('crosstalk.enabled').value
-
-        # Extract robot detection config (conditional)
-        if enable_robot_detection:
-            terrain_config = TerrainDetectionConfig(
-                min_threshold=node.get_parameter('terrain_detection.min_threshold').value,
-                max_threshold=node.get_parameter('terrain_detection.max_threshold').value
-            )
-            robot_config = RobotDetectionConfig(
-                min_threshold=node.get_parameter('robot_detection.min_threshold').value,
-                topic=node.get_parameter('robot_detection.topic').value
-            )
-        else:
-            terrain_config = TerrainDetectionConfig()
-            robot_config = RobotDetectionConfig()
-
-        # Extract crosstalk config (conditional)
-        if enable_crosstalk:
-            crosstalk_config = CrosstalkConfig(
-                enabled=True,
-                morpho_enabled=node.get_parameter('crosstalk.morpho_enabled').value,
-                morpho_kernel_size=node.get_parameter('crosstalk.morpho_kernel_size').value,
-                morpho_kernel_shape=node.get_parameter('crosstalk.morpho_kernel_shape').value,
-                azimuth_enabled=node.get_parameter('crosstalk.azimuth_enabled').value,
-                azimuth_threshold=node.get_parameter('crosstalk.azimuth_threshold').value,
-                adaptive_enabled=node.get_parameter('crosstalk.adaptive_enabled').value,
-                adaptive_block_size=node.get_parameter('crosstalk.adaptive_block_size').value,
-                adaptive_c=node.get_parameter('crosstalk.adaptive_c').value,
-            )
-        else:
-            crosstalk_config = CrosstalkConfig(enabled=False)
-
         # Create main config with namespaced parameters
         config = cls(
             # Sonar hardware (sonar.*)
@@ -500,10 +369,6 @@ class SonarMapperConfig:
             # Filtering (filtering.*)
             min_range=node.get_parameter('filtering.min_range').value,
             intensity_threshold=node.get_parameter('filtering.intensity_threshold').value,
-
-            terrain_detection=terrain_config,
-            enable_robot_detection=enable_robot_detection,
-            robot_detection=robot_config,
 
             # Mounting (mounting.position.*, mounting.orientation.*)
             sonar_position=[
@@ -546,59 +411,22 @@ class SonarMapperConfig:
             outofcore_tile_size=node.get_parameter('outofcore.tile_size').value,
             outofcore_cache_size=node.get_parameter('outofcore.cache_size').value,
 
-            # Crosstalk
-            crosstalk=crosstalk_config,
-
             # Processing (processing.*)
             frame_skip=node.get_parameter('processing.frame_skip').value
         )
         return config
 
     @classmethod
-    def from_params_dict(cls, params_dict: Dict[str, Any],
-                         enable_robot_detection: bool = False,
-                         enable_crosstalk: bool = False) -> 'SonarMapperConfig':
+    def from_params_dict(cls, params_dict: Dict[str, Any]) -> 'SonarMapperConfig':
         """
         Create configuration from parameter dictionary
 
         Args:
             params_dict: Dictionary from ParameterManager.get_all()
-            enable_robot_detection: Whether robot detection is enabled
-            enable_crosstalk: Whether crosstalk filter is enabled
 
         Returns:
             SonarMapperConfig instance
         """
-        # Extract robot detection config (conditional)
-        if enable_robot_detection:
-            terrain_config = TerrainDetectionConfig(
-                min_threshold=params_dict.get('terrain_detection.min_threshold', 80),
-                max_threshold=params_dict.get('terrain_detection.max_threshold', 180)
-            )
-            robot_config = RobotDetectionConfig(
-                min_threshold=params_dict.get('robot_detection.min_threshold', 180),
-                topic=params_dict.get('robot_detection.topic', '/sonar_robot_detections')
-            )
-        else:
-            terrain_config = TerrainDetectionConfig()
-            robot_config = RobotDetectionConfig()
-
-        # Extract crosstalk config (conditional)
-        if enable_crosstalk:
-            crosstalk_config = CrosstalkConfig(
-                enabled=True,
-                morpho_enabled=params_dict.get('crosstalk.morpho_enabled', True),
-                morpho_kernel_size=params_dict.get('crosstalk.morpho_kernel_size', 5),
-                morpho_kernel_shape=params_dict.get('crosstalk.morpho_kernel_shape', 'rect'),
-                azimuth_enabled=params_dict.get('crosstalk.azimuth_enabled', True),
-                azimuth_threshold=params_dict.get('crosstalk.azimuth_threshold', 0.5),
-                adaptive_enabled=params_dict.get('crosstalk.adaptive_enabled', False),
-                adaptive_block_size=params_dict.get('crosstalk.adaptive_block_size', 11),
-                adaptive_c=params_dict.get('crosstalk.adaptive_c', 2),
-            )
-        else:
-            crosstalk_config = CrosstalkConfig(enabled=False)
-
         # Create main config
         config = cls(
             # Sonar hardware
@@ -608,10 +436,6 @@ class SonarMapperConfig:
             # Filtering
             min_range=params_dict.get('filtering.min_range', 0.5),
             intensity_threshold=params_dict.get('filtering.intensity_threshold', 35),
-
-            terrain_detection=terrain_config,
-            enable_robot_detection=enable_robot_detection,
-            robot_detection=robot_config,
 
             # Mounting
             sonar_position=[
@@ -654,9 +478,6 @@ class SonarMapperConfig:
             outofcore_tile_size=params_dict.get('outofcore.tile_size', 10.0),
             outofcore_cache_size=params_dict.get('outofcore.cache_size', 16),
 
-            # Crosstalk
-            crosstalk=crosstalk_config,
-
             # Processing
             frame_skip=params_dict.get('processing.frame_skip', 1)
         )
@@ -675,17 +496,6 @@ class SonarMapperConfig:
             'min_range': self.min_range,
             'intensity_threshold': self.intensity_threshold,
             # max_range is set dynamically from /param/range topic
-
-            'terrain_detection': {
-                'min_threshold': self.terrain_detection.min_threshold,
-                'max_threshold': self.terrain_detection.max_threshold
-            },
-
-            'enable_robot_detection': self.enable_robot_detection,
-            'robot_detection': {
-                'min_threshold': self.robot_detection.min_threshold,
-                'topic': self.robot_detection.topic
-            },
 
             'sonar_position': self.sonar_position,
             'sonar_orientation': self.sonar_orientation,
@@ -715,16 +525,6 @@ class SonarMapperConfig:
             'outofcore_map_path': self.outofcore_map_path,
             'outofcore_tile_size': self.outofcore_tile_size,
             'outofcore_cache_size': self.outofcore_cache_size,
-
-            'crosstalk_filter_enabled': self.crosstalk.enabled,
-            'morpho_filter_enabled': self.crosstalk.morpho_enabled,
-            'morpho_kernel_size': self.crosstalk.morpho_kernel_size,
-            'morpho_kernel_shape': self.crosstalk.morpho_kernel_shape,
-            'azimuth_check_enabled': self.crosstalk.azimuth_enabled,
-            'azimuth_consistency_threshold': self.crosstalk.azimuth_threshold,
-            'adaptive_threshold_enabled': self.crosstalk.adaptive_enabled,
-            'adaptive_block_size': self.crosstalk.adaptive_block_size,
-            'adaptive_c': self.crosstalk.adaptive_c,
 
             'frame_skip': self.frame_skip
         }

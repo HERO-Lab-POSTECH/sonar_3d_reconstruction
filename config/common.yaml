@@ -25,13 +25,13 @@ sonar_3d_mapper:
 
     #===== Octree =====
     octree:
-      voxel_resolution: 0.1        # meters (read-only)
+      voxel_resolution: 0.2        # meters (read-only)
       use_cpp_backend: true        # (read-only)
       dynamic_expansion: true      # (dynamic)
 
     #===== Sonar Hardware (Read-only) =====
     sonar:
-      horizontal_fov: 130.0        # degrees
+      horizontal_fov: 130.0        # degrees 
       vertical_aperture: 20.0      # degrees
 
     #===== Mounting =====
@@ -48,38 +48,23 @@ sonar_3d_mapper:
     #===== Out-of-Core Storage (Read-only) =====
     outofcore:
       use: true                              # true = disk-based, false = RAM-based
-      map_path: "/workspace/data/5_khnp/20251219_seafloor_mapping/raw_oculus_m3000d_test_v2/map_tiles"  # Base directory (timestamped subfolder auto-created)
+      map_path: "/workspace/data/2_kiro_watertank/map_tiles"  # Base directory (timestamped subfolder auto-created)
       tile_size: 0.4                         # Tile size in meters
-      cache_size: 16                         # Max tiles in memory
-
-    #===== Crosstalk Filter =====
-    # When enabled=true, detailed settings are loaded from config/crosstalk_filter.yaml
-    crosstalk:
-      enabled: false
+      cache_size: 32                         # Max tiles in memory
 
     #===== Frame IDs (Read-only) =====
     frames:
       sonar: "sonar_link"
       base: "body"
-      map: "camera_init"           # Set world_init as fixed frame in RViz
+      map: "map"                   # Unified map frame (set as fixed frame in RViz)
       publish_tf: false
 
     #===== Topics (Read-only) =====
     topics:
       sonar: "/sensor/sonar/oculus/m3000d/image"  # range_topic is auto-generated: {base}/param/range
-      odometry: "/fast_lio/odometry"
+      odometry: "/fast_lio/localization/odometry" # Change to cartographer_2d/odometry when using Cartographer
       pointcloud: "/sonar_3d_map"
       marker: "/sonar_3d_map_markers"
-
-    #===== Robot Detection =====
-    # When enabled=true, terrain_detection params are also used
-    robot_detection:
-      enabled: false
-      min_threshold: 180
-      topic: "/sonar_robot_detections"
-    terrain_detection:
-      min_threshold: 80
-      max_threshold: 180
 
     #===== Recording (Read-only) =====
     recording:
@@ -88,20 +73,13 @@ sonar_3d_mapper:
       prefix: "test"
       # Output path is auto-generated: {record_base_path}/YYYYMMDD_HHMMSS/
 
-    #===== World Init Broadcaster =====
-    world_init:
-      imu_topic: "/sensor/ins/livox_mid360/imu"
-      init_samples: 50
-      parent_frame: "world_init"
-      child_frame: "camera_init"
-
     #===== Launch Options =====
     use_sim_time: true
-    launch_fast_lio: true
+    launch_fast_lio: false
     launch_rviz: true
     rviz_config: "3d_mapping.rviz"  # rviz config file name (in rviz/ folder)
 
     #===== Bag Playback =====
     play_bag: true
-    bag_file: "/workspace/data/5_khnp/20251219_seafloor_mapping/raw_oculus_m3000d_test_v2"
+    bag_file: "/workspace/data/2_kiro_watertank/20260122_KIRO/10.90.m3000d.robotO.boat/with_robot_90"
     bag_playback_rate: 1.0

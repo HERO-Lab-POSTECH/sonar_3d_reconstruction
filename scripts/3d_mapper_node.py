@@ -52,7 +52,6 @@ SonarMapperConfig = config_module.SonarMapperConfig
 ParameterManager = config_module.ParameterManager
 MAPPER_PARAMS = config_module.MAPPER_PARAMS
 ROBOT_DETECTION_PARAMS = config_module.ROBOT_DETECTION_PARAMS
-CROSSTALK_PARAMS = config_module.CROSSTALK_PARAMS
 
 
 def get_next_test_number(base_path: str, prefix: str) -> int:
@@ -80,31 +79,12 @@ class SonarMapperNode(Node):
     def __init__(self):
         super().__init__('sonar_3d_mapper')
 
-        # === Step 1: Declare conditional feature flags first (read-only) ===
-        self.declare_parameter('robot_detection.enabled', False,
-                               ParameterDescriptor(read_only=True))
-        self.declare_parameter('crosstalk.enabled', False,
-                               ParameterDescriptor(read_only=True))
-        self.enable_robot_detection = self.get_parameter('robot_detection.enabled').value
-        self.enable_crosstalk = self.get_parameter('crosstalk.enabled').value
+        # === Step 1: Declare all parameters using ParameterManager ===
+        ParameterManager.declare_all(self, MAPPER_PARAMS)
 
-        # === Step 2: Declare all parameters using ParameterManager ===
-        params_to_declare = list(MAPPER_PARAMS)
-        if self.enable_robot_detection:
-            params_to_declare.extend(ROBOT_DETECTION_PARAMS)
-        if self.enable_crosstalk:
-            params_to_declare.extend(CROSSTALK_PARAMS)
-        ParameterManager.declare_all(self, params_to_declare)
-
-        # === Step 3: Create configuration from parameters ===
-        params_dict = ParameterManager.get_all(self, params_to_declare)
-        params_dict['robot_detection.enabled'] = self.enable_robot_detection
-        params_dict['crosstalk.enabled'] = self.enable_crosstalk
-        config_dataclass = SonarMapperConfig.from_params_dict(
-            params_dict,
-            enable_robot_detection=self.enable_robot_detection,
-            enable_crosstalk=self.enable_crosstalk
-        )
+        # === Step 2: Create configuration from parameters ===
+        params_dict = ParameterManager.get_all(self, MAPPER_PARAMS)
+        config_dataclass = SonarMapperConfig.from_params_dict(params_dict)
         config = config_dataclass.to_mapper_dict()
         
         # Get other parameters (with namespaced names)
@@ -127,10 +107,6 @@ class SonarMapperNode(Node):
             range_topic = sonar_topic.rsplit('/image', 1)[0] + '/param/range'
         else:
             range_topic = sonar_topic + '/param/range'
-
-        # Store robot detection settings (topic only available when enabled)
-        # Note: self.enable_robot_detection already set at Step 1
-        self.robot_detection_topic = config['robot_detection']['topic'] if self.enable_robot_detection else None
 
         # Store out-of-core mode flag
         self.use_outofcore = config['use_outofcore']
@@ -206,16 +182,6 @@ class SonarMapperNode(Node):
             qos_profile
         )
 
-        # Create robot detection publisher if enabled
-        if self.enable_robot_detection:
-            self.robot_pub = self.create_publisher(
-                PointCloud2,
-                self.robot_detection_topic,
-                qos_profile
-            )
-        else:
-            self.robot_pub = None
-
         # Subscribe to dynamic range topic from sonar driver
         self.range_sub = self.create_subscription(
             Float32,
@@ -244,16 +210,10 @@ class SonarMapperNode(Node):
         
         # Initialization summary (single line)
         mode_str = "out-of-core" if self.use_outofcore else "in-memory"
-        features = []
-        if self.enable_robot_detection:
-            features.append("robot-det")
-        if self.enable_crosstalk:
-            features.append("crosstalk")
-        features_str = f" [{'+'.join(features)}]" if features else ""
         self.get_logger().info(
             f'Mapper: {config["voxel_resolution"]}m, '
             f'{config["horizontal_fov"]}°x{config["vertical_aperture"]}° FOV, '
-            f'{mode_str}{features_str}'
+            f'{mode_str}'
         )
     
     def parameter_callback(self, params):
@@ -317,40 +277,6 @@ class SonarMapperNode(Node):
             elif name == 'mounting.orientation.yaw':
                 self.mapper.sonar_orientation[2] = np.radians(float(value))
                 orientation_changed = True
-
-            # === Robot Detection (conditional) ===
-            elif name == 'terrain_detection.min_threshold':
-                self.mapper.update_terrain_min(value)
-            elif name == 'terrain_detection.max_threshold':
-                self.mapper.update_terrain_max(value)
-            elif name == 'robot_detection.min_threshold':
-                self.mapper.update_robot_min(value)
-
-            # === Crosstalk (conditional) - direct filter update ===
-            elif name == 'crosstalk.morpho_enabled':
-                if self.mapper.crosstalk_filter is not None:
-                    self.mapper.crosstalk_filter.morpho_enabled = bool(value)
-            elif name == 'crosstalk.morpho_kernel_size':
-                if self.mapper.crosstalk_filter is not None:
-                    self.mapper.crosstalk_filter.kernel_size = int(value)
-            elif name == 'crosstalk.morpho_kernel_shape':
-                if self.mapper.crosstalk_filter is not None:
-                    self.mapper.crosstalk_filter.kernel_shape = str(value)
-            elif name == 'crosstalk.azimuth_enabled':
-                if self.mapper.crosstalk_filter is not None:
-                    self.mapper.crosstalk_filter.azimuth_check_enabled = bool(value)
-            elif name == 'crosstalk.azimuth_threshold':
-                if self.mapper.crosstalk_filter is not None:
-                    self.mapper.crosstalk_filter.consistency_threshold = float(value)
-            elif name == 'crosstalk.adaptive_enabled':
-                if self.mapper.crosstalk_filter is not None:
-                    self.mapper.crosstalk_filter.adaptive_enabled = bool(value)
-            elif name == 'crosstalk.adaptive_block_size':
-                if self.mapper.crosstalk_filter is not None:
-                    self.mapper.crosstalk_filter.adaptive_block_size = int(value)
-            elif name == 'crosstalk.adaptive_c':
-                if self.mapper.crosstalk_filter is not None:
-                    self.mapper.crosstalk_filter.adaptive_c = int(value)
 
             self.get_logger().debug(f'{name} updated: {value}')
 
@@ -572,13 +498,7 @@ class SonarMapperNode(Node):
         # Publish as PointCloud2
         if result['num_occupied'] > 0:
             self.publish_pointcloud2(result['points'], result['probabilities'])
-        
-        # Publish robot detections if enabled
-        if self.enable_robot_detection:
-            robot_detections = result.get('robot_detections', [])
-            if len(robot_detections) > 0:
-                self.publish_robot_detections(robot_detections)
-    
+
     def publish_pointcloud2(self, points: np.ndarray, probabilities: np.ndarray):
         """
         Publish PointCloud2 message with intensity as probability
@@ -620,50 +540,7 @@ class SonarMapperNode(Node):
         
         # Publish
         self.pc_pub.publish(cloud)
-    
-    def publish_robot_detections(self, robot_points):
-        """
-        Publish robot detection PointCloud2 message
-        
-        Args:
-            robot_points: List of tuples (point, intensity) for robot detections
-        """
-        if not self.robot_pub or len(robot_points) == 0:
-            return
-        
-        header = Header()
-        header.stamp = self.get_clock().now().to_msg()
-        header.frame_id = self.map_frame_id
-        
-        # Create PointCloud2 message
-        fields = [
-            PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
-            PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
-            PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
-            PointField(name='intensity', offset=12, datatype=PointField.FLOAT32, count=1)
-        ]
-        
-        cloud = PointCloud2()
-        cloud.header = header
-        cloud.height = 1
-        cloud.width = len(robot_points)
-        cloud.fields = fields
-        cloud.is_bigendian = False
-        cloud.point_step = 16
-        cloud.row_step = cloud.point_step * cloud.width
-        cloud.is_dense = True
-        
-        # Pack data
-        data = []
-        for point, intensity in robot_points:
-            data.append(struct.pack('ffff',
-                                   point[0], point[1], point[2], intensity))
-        
-        cloud.data = b''.join(data)
-        
-        # Publish
-        self.robot_pub.publish(cloud)
-    
+
     def publish_marker_array(self, result: dict):
         """
         Publish MarkerArray with colored voxels

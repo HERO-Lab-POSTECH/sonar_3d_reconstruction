@@ -16,13 +16,6 @@ from typing import Tuple, List, Dict, Any, Optional
 import time
 import warnings
 
-# OpenCV for cross-talk filtering
-try:
-    import cv2
-    CV2_AVAILABLE = True
-except ImportError:
-    CV2_AVAILABLE = False
-
 # Try to import C++ module
 try:
     # Import module directly from ROS2 install path
@@ -50,111 +43,6 @@ except Exception as e:
     warnings.warn(f"[3D Mapper] C++ module unavailable, using Python fallback: {e}")
 
 
-class CrosstalkFilter:
-    """
-    Cross-talk noise filter (horizontal stripe removal)
-
-    Cross-talk noise in multibeam sonar appears as horizontal stripes where
-    high intensity values occur at the same range across all azimuths.
-    """
-
-    def __init__(self, kernel_size=5, kernel_shape="rect",
-                 consistency_threshold=0.5, intensity_threshold=150,
-                 morpho_enabled=True, azimuth_check_enabled=True):
-        """
-        Initialize cross-talk filter
-
-        Args:
-            kernel_size: Morphological kernel size (odd number recommended)
-            kernel_shape: Kernel shape ("rect", "ellipse", "cross")
-            consistency_threshold: Ratio of beams above threshold to classify as noise
-            intensity_threshold: Threshold for high intensity detection
-            morpho_enabled: Enable morphological filtering
-            azimuth_check_enabled: Enable azimuth consistency check
-        """
-        self.kernel_size = kernel_size
-        self.kernel_shape = kernel_shape
-        self.consistency_threshold = consistency_threshold
-        self.intensity_threshold = intensity_threshold
-        self.morpho_enabled = morpho_enabled
-        self.azimuth_check_enabled = azimuth_check_enabled
-
-        if not CV2_AVAILABLE and morpho_enabled:
-            self.morpho_enabled = False
-
-    def filter(self, polar_img):
-        """
-        Apply cross-talk filter to polar sonar image
-
-        Args:
-            polar_img: Polar sonar image (range_bins x bearing_bins)
-
-        Returns:
-            Filtered image
-        """
-        filtered = polar_img.copy()
-
-        # 1. Morphological opening (horizontal stripe removal)
-        if self.morpho_enabled:
-            filtered = self._morphological_filter(filtered)
-
-        # 2. Azimuth consistency check
-        if self.azimuth_check_enabled:
-            mask = self._generate_crosstalk_mask(filtered)
-            filtered = filtered * mask
-
-        return filtered
-
-    def _morphological_filter(self, img):
-        """
-        Morphological opening to remove horizontal stripes
-
-        Uses a vertical kernel to remove horizontal stripes.
-        Opening = Erosion -> Dilation
-        """
-        if not CV2_AVAILABLE:
-            return img
-
-        # Vertical kernel (removes horizontal stripes)
-        if self.kernel_shape == "rect":
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, self.kernel_size))
-        elif self.kernel_shape == "ellipse":
-            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (1, self.kernel_size))
-        else:
-            kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (1, self.kernel_size))
-
-        # Opening = Erosion -> Dilation
-        return cv2.morphologyEx(img.astype(np.uint8), cv2.MORPH_OPEN, kernel).astype(img.dtype)
-
-    def _generate_crosstalk_mask(self, polar_img):
-        """
-        Generate cross-talk mask using azimuth consistency check
-
-        Classifies as noise if high intensity appears at the same range across all azimuths.
-
-        Args:
-            polar_img: Polar sonar image (range_bins x bearing_bins)
-
-        Returns:
-            Binary mask (1 = valid, 0 = noise)
-        """
-        num_beams, num_ranges = polar_img.shape
-        mask = np.ones_like(polar_img, dtype=np.float32)
-
-        # Check each range bin
-        for r in range(num_ranges):
-            range_slice = polar_img[:, r]
-
-            # Calculate ratio of beams with high intensity
-            high_ratio = np.sum(range_slice > self.intensity_threshold) / num_beams
-
-            # Classify as noise if ratio exceeds threshold
-            if high_ratio > self.consistency_threshold:
-                mask[:, r] = 0.0
-
-        return mask
-
-
 # Python SimpleOctree class removed - using C++ backend only
 
 
@@ -179,19 +67,6 @@ class SonarTo3DMapper:
             # max_range is received dynamically from /param/range topic
             'min_range': 0.5,              # meters
             'intensity_threshold': 35,     # 0-255 scale
-
-            # Terrain detection parameters (for robot detection mode)
-            'terrain_detection': {
-                'min_threshold': 80,
-                'max_threshold': 180
-            },
-
-            # Robot detection parameters
-            'enable_robot_detection': False,
-            'robot_detection': {
-                'min_threshold': 180,
-                'topic': '/sonar_robot_detections'
-            },
 
             # Sonar mounting (relative to base_link)
             'sonar_position': [0.0, 0.0, -0.5],  # xyz
@@ -239,15 +114,7 @@ class SonarTo3DMapper:
         self.max_range = None  # Set dynamically from /param/range topic
         self.min_range = default_config['min_range']
         self.intensity_threshold = default_config['intensity_threshold']
-        
-        # Terrain detection parameters  
-        self.terrain_min_threshold = default_config['terrain_detection']['min_threshold']
-        self.terrain_max_threshold = default_config['terrain_detection']['max_threshold']
-        
-        # Robot detection parameters
-        self.enable_robot_detection = default_config['enable_robot_detection']
-        self.robot_min_threshold = default_config['robot_detection']['min_threshold']
-        
+
         # Processing parameters
         self.frame_skip = default_config['frame_skip']
 
@@ -291,14 +158,6 @@ class SonarTo3DMapper:
         self.adaptive_update = default_config.get('adaptive_update', True)
         self.adaptive_threshold = default_config.get('adaptive_threshold', 0.5)
         self.adaptive_max_ratio = default_config.get('adaptive_max_ratio', 0.3)
-
-        # Store crosstalk filter parameters for dynamic updates
-        self.crosstalk_filter_enabled = default_config.get('crosstalk_filter_enabled', False)
-        self.morpho_filter_enabled = default_config.get('morpho_filter_enabled', True)
-        self.morpho_kernel_size = default_config.get('morpho_kernel_size', 5)
-        self.morpho_kernel_shape = default_config.get('morpho_kernel_shape', 'rect')
-        self.azimuth_check_enabled = default_config.get('azimuth_check_enabled', True)
-        self.azimuth_consistency_threshold = default_config.get('azimuth_consistency_threshold', 0.5)
 
         if self.use_outofcore and OUTOFCORE_AVAILABLE:
             # Initialize OutofcoreTileMapper (disk-based)
@@ -381,28 +240,10 @@ class SonarTo3DMapper:
         self.frame_count = 0
         self.processed_frame_count = 0
 
-        # Robot detection storage
-        self.robot_detections = []  # List of (point, intensity, timestamp) tuples
-        self.robot_detection_timeout = 10.0  # seconds
-
         # Processing statistics
         self.last_processing_time = 0.0
         self.total_processing_time = 0.0
 
-        # Cross-talk filter
-        crosstalk_enabled = default_config.get('crosstalk_filter_enabled', False)
-        if crosstalk_enabled:
-            self.crosstalk_filter = CrosstalkFilter(
-                kernel_size=default_config.get('morpho_kernel_size', 5),
-                kernel_shape=default_config.get('morpho_kernel_shape', 'rect'),
-                consistency_threshold=default_config.get('azimuth_consistency_threshold', 0.5),
-                intensity_threshold=self.intensity_threshold,  # Uses intensity_threshold from common.yaml
-                morpho_enabled=default_config.get('morpho_filter_enabled', True),
-                azimuth_check_enabled=default_config.get('azimuth_check_enabled', True)
-            )
-        else:
-            self.crosstalk_filter = None
-    
     def create_transform_matrix(self, position: np.ndarray, rpy: np.ndarray) -> np.ndarray:
         """
         Create 4x4 homogeneous transform matrix from position and RPY
@@ -529,25 +370,6 @@ class SonarTo3DMapper:
         Note: Requires node-level coordination for TF update
         """
         pass  # Node handles this with update_sonar_orientation()
-
-    def update_terrain_min(self, value: int) -> None:
-        """Update terrain minimum threshold"""
-        self.terrain_min_threshold = int(value)
-
-    def update_terrain_max(self, value: int) -> None:
-        """Update terrain maximum threshold"""
-        self.terrain_max_threshold = int(value)
-
-    def update_robot_min(self, value: int) -> None:
-        """Update robot detection minimum threshold"""
-        self.robot_min_threshold = int(value)
-
-    def update_crosstalk(self, value) -> None:
-        """Update crosstalk filter parameters"""
-        if self.crosstalk_filter is not None:
-            # Handler receives any crosstalk.* parameter change
-            # Actual parameter name is checked by node callback
-            pass
 
     def is_bearing_in_valid_fov(self, bearing_angle: float) -> bool:
         """Check if bearing angle is within valid FOV"""
@@ -679,14 +501,25 @@ class SonarTo3DMapper:
         for r_idx in range(0, first_hit_idx, free_sampling_step):
             range_m = r_idx * range_resolution
 
-            # Calculate vertical spread
+            # Calculate vertical spread and sample count
+            # Sparse sampling (4x voxel) for free space - sufficient for carving
             vertical_spread = range_m * np.tan(half_aperture)
             num_vertical = max(1, int(vertical_spread / (self.voxel_resolution * 4)))
 
             for v_step in range(-num_vertical, num_vertical + 1):
-                vertical_angle = (v_step / max(1, num_vertical)) * half_aperture
+                # Normalize to [-1, 1] for exact aperture coverage: ±half_aperture
+                vertical_angle = (v_step / num_vertical) * half_aperture
 
-                # Sonar coordinates (X=forward, Y=right, Z=down)
+                # Sonar coordinate system (NED-style, right-handed):
+                #   X = forward (range direction at bearing=0)
+                #   Y = right (starboard, positive bearing direction)
+                #   Z = down (positive vertical angle = below horizontal)
+                #
+                # Spherical to Cartesian conversion:
+                #   - bearing_angle: horizontal angle from forward (+X axis)
+                #   - vertical_angle: elevation from horizontal plane
+                #   - Y uses negative sin() because positive bearing is clockwise
+                #     when viewed from above, but sin() assumes CCW positive
                 x_sonar = range_m * np.cos(vertical_angle) * np.cos(bearing_angle)
                 y_sonar = -range_m * np.cos(vertical_angle) * np.sin(bearing_angle)
                 z_sonar = range_m * np.sin(vertical_angle)
@@ -702,33 +535,33 @@ class SonarTo3DMapper:
             # Find all high intensity regions
             for r_idx in range(first_hit_idx, min(first_hit_idx + 50, len(intensity_profile))):
                 intensity = intensity_profile[r_idx]
-                
-                # Multi-threshold processing
-                is_robot = (self.enable_robot_detection and intensity >= self.robot_min_threshold)
-                is_terrain = (self.terrain_min_threshold <= intensity <= self.terrain_max_threshold if self.enable_robot_detection 
-                             else intensity > self.intensity_threshold)
-                
-                if is_robot or is_terrain:
+
+                # Simple threshold check
+                is_occupied = intensity > self.intensity_threshold
+
+                if is_occupied:
                     range_m = r_idx * range_resolution
-                    
+
                     # Check both min and max range
                     if range_m < self.min_range:
                         continue
                     if range_m > self.max_range:
                         break
-                    
-                    # Calculate vertical spread
+
+                    # Calculate vertical spread and sample count
+                    # Dense sampling (1.5x voxel) for occupied - higher precision for surfaces
                     vertical_spread = range_m * np.tan(half_aperture)
-                    num_vertical = max(2, int(vertical_spread / (self.voxel_resolution * 1.5)))
-                    
+                    num_vertical = max(1, int(vertical_spread / (self.voxel_resolution * 1.5)))
+
                     for v_step in range(-num_vertical, num_vertical + 1):
-                        vertical_angle = (v_step / max(1, num_vertical)) * half_aperture
-                        
-                        # Sonar coordinates (X=forward, Y=right, Z=down)
+                        # Normalize to [-1, 1] for exact aperture coverage: ±half_aperture
+                        vertical_angle = (v_step / num_vertical) * half_aperture
+
+                        # Sonar coordinates - see free space section for coordinate system details
                         x_sonar = range_m * np.cos(vertical_angle) * np.cos(bearing_angle)
                         y_sonar = -range_m * np.cos(vertical_angle) * np.sin(bearing_angle)
                         z_sonar = range_m * np.sin(vertical_angle)
-                        
+
                         # Transform to world
                         pt_sonar = np.array([x_sonar, y_sonar, z_sonar, 1.0])
                         pt_world = T_sonar_to_world @ pt_sonar
@@ -736,11 +569,6 @@ class SonarTo3DMapper:
                         # Add to regular map updates with intensity value
                         updates.append((pt_world[:3], self.log_odds_occupied, 'occupied', float(intensity)))
 
-                        # Store robot detection separately if enabled
-                        if is_robot:
-                            current_time = time.time()
-                            self.robot_detections.append((pt_world[:3].copy(), intensity, current_time))
-        
         return updates
     
     def process_sonar_image(self, polar_image: np.ndarray,
@@ -761,26 +589,19 @@ class SonarTo3DMapper:
         start_time = time.time()
         self.processed_frame_count += 1
 
-        # Clean up old robot detections (older than 10 seconds)
-        if self.enable_robot_detection and self.robot_detections:
-            current_time = start_time
-            self.robot_detections = [
-                (point, intensity, timestamp) for point, intensity, timestamp in self.robot_detections
-                if current_time - timestamp <= self.robot_detection_timeout
-            ]
-
         # Ensure image is numpy array
         if not isinstance(polar_image, np.ndarray):
             polar_image = np.array(polar_image)
 
-        # Apply cross-talk filter if enabled
-        if self.crosstalk_filter is not None:
-            polar_image = self.crosstalk_filter.filter(polar_image)
-        
         # Get image dimensions dynamically from image shape
         range_bins, bearing_bins = polar_image.shape
 
         # Update bearing angles if first frame or dimension changed
+        # Bearing angle convention for Oculus M750D polar image:
+        #   - Column 0 = left side of FOV = -horizontal_fov/2 (negative angle)
+        #   - Column N-1 = right side of FOV = +horizontal_fov/2 (positive angle)
+        #   - Positive bearing = clockwise from forward (starboard/right)
+        #   - Negative bearing = counter-clockwise from forward (port/left)
         if self.bearing_angles is None or bearing_bins != self.image_width:
             self.bearing_angles = np.linspace(
                 -self.horizontal_fov/2,
@@ -796,7 +617,10 @@ class SonarTo3DMapper:
         # Create transformation matrices
         T_base_to_world = self.create_odometry_transform(robot_position, robot_orientation)
         T_sonar_to_world = T_base_to_world @ self.T_sonar_to_base
-        
+
+        # Extract sonar origin in world coordinates for shadow range calculation
+        sonar_origin_world = T_sonar_to_world[:3, 3]
+
         # Accumulate updates per voxel
         voxel_updates = defaultdict(lambda: {'sum': 0.0, 'count': 0, 'type': 'unknown', 'intensity': None})
 
@@ -843,7 +667,10 @@ class SonarTo3DMapper:
 
                 # Shadow check: skip free updates in shadow regions
                 if update_type == 'free':
-                    voxel_range = np.sqrt(point[0]**2 + point[1]**2)  # 2D range
+                    # Calculate range from sonar origin (not world origin) for correct shadow comparison
+                    # bearing_first_hits stores ranges in sonar coordinate system
+                    voxel_range = np.sqrt((point[0] - sonar_origin_world[0])**2 +
+                                          (point[1] - sonar_origin_world[1])**2)
                     if self.is_in_shadow_region(voxel_range, bearing_angle, bearing_first_hits):
                         continue  # Skip - preserve unknown state in shadow
 
@@ -952,13 +779,11 @@ class SonarTo3DMapper:
             'processed_count': self.processed_frame_count,
             'memory_mb': memory_stats.memory_mb,
             'memory_efficiency': memory_stats.memory_efficiency,
-            'robot_detections': [(point, intensity) for point, intensity, timestamp in self.robot_detections] if self.enable_robot_detection else []
         }
-    
+
     def reset_map(self):
         """Reset the probabilistic map"""
         self.octree.clear()
-        self.robot_detections.clear()  # Clear robot detections as well
         self.frame_count = 0
         self.processed_frame_count = 0
         self.total_processing_time = 0.0

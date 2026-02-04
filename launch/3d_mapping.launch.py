@@ -30,8 +30,6 @@ def generate_timestamped_map_path(context, *args, **kwargs):
     pkg_dir = get_package_share_directory('sonar_3d_reconstruction')
     common_config = os.path.join(pkg_dir, 'config', 'common.yaml')
     method_iwlo = os.path.join(pkg_dir, 'config', 'method_iwlo.yaml')
-    robot_detection_config = os.path.join(pkg_dir, 'config', 'robot_detection.yaml')
-    crosstalk_config = os.path.join(pkg_dir, 'config', 'crosstalk_filter.yaml')
     map_visualizer_config = os.path.join(pkg_dir, 'config', 'map_visualizer.yaml')
 
     use_sim_time = context.launch_configurations.get('use_sim_time', 'true')
@@ -77,8 +75,6 @@ def generate_timestamped_map_path(context, *args, **kwargs):
         parameters=[
             common_config,
             method_iwlo,
-            robot_detection_config,
-            crosstalk_config,
             mapper_overrides
         ],
         output='screen'
@@ -87,13 +83,14 @@ def generate_timestamped_map_path(context, *args, **kwargs):
     # Map Visualizer node (if enabled)
     if launch_visualizer.lower() == 'true':
         # Pass values explicitly due to namespace mismatch with common_config
-        # tile_size, voxel_resolution are automatically read from metadata.json
         visualizer_overrides = {
             'use_sim_time': use_sim_time == 'true',
             'outofcore.map_path': map_path,
-            # Pass common.yaml values (frames, mapping)
+            # Pass common.yaml values (frames, mapping, octree)
             'frames.map': yaml_params.get('frames', {}).get('map', 'camera_init'),
             'mapping.occupied_threshold': yaml_params.get('mapping', {}).get('occupied_threshold', 0.7),
+            'octree.voxel_resolution': yaml_params.get('octree', {}).get('voxel_resolution', 0.1),
+            'outofcore.tile_size': yaml_params.get('outofcore', {}).get('tile_size', 10.0),
         }
         nodes.append(Node(
             package='sonar_3d_reconstruction',
@@ -189,19 +186,6 @@ def generate_launch_description():
             default_value='',
             description='Map output path (default: timestamped folder in /workspace/data/map_tiles/)'),
     ])
-
-    # World Init TF Broadcaster (gravity alignment)
-    # Parameters loaded from common.yaml (world_init section)
-    ld.add_action(Node(
-        package='sonar_3d_reconstruction',
-        executable='world_init_broadcaster_node.py',
-        name='world_init_broadcaster',
-        parameters=[
-            common_config,  # Load from YAML
-            {'use_sim_time': use_sim_time}
-        ],
-        output='screen'
-    ))
 
     # Fast-LIO
     ld.add_action(IncludeLaunchDescription(
