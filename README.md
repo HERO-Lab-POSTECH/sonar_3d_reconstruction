@@ -79,6 +79,14 @@ occupied_threshold: 0.7      # Probability threshold
 
 ## Topics
 
+All topics use `BEST_EFFORT` QoS reliability policy for sensor data consistency.
+
+### QoS Profile
+
+- **Reliability**: BEST_EFFORT
+- **History**: KEEP_LAST
+- **Depth**: 10
+
 ### Subscribe
 
 | Topic | Type | Description |
@@ -94,6 +102,9 @@ occupied_threshold: 0.7      # Probability threshold
 | `/sonar_3d_map` | sensor_msgs/PointCloud2 | 3D point cloud map |
 | `/sonar_3d_map_markers` | visualization_msgs/MarkerArray | RViz markers |
 | `/map_pointcloud` | sensor_msgs/PointCloud2 | Tile visualization (out-of-core) |
+| `/map_octomap` | octomap_msgs/Octomap | Octomap visualization |
+| `/updated_tile_indices` | std_msgs/Int32MultiArray | Updated tile indices |
+| `/sonar_robot_detections` | sensor_msgs/PointCloud2 | ROV detection points (optional) |
 
 ## Nodes
 

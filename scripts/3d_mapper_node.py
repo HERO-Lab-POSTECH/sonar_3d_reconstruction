@@ -169,7 +169,7 @@ class SonarMapperNode(Node):
             history=QoSHistoryPolicy.KEEP_LAST,
             depth=10
         )
-        
+
         # Create synchronized subscribers using message_filters
         self.sonar_sub = Subscriber(
             self,
@@ -177,14 +177,14 @@ class SonarMapperNode(Node):
             sonar_topic,
             qos_profile=qos_profile
         )
-        
+
         self.odom_sub = Subscriber(
             self,
             Odometry,
             odometry_topic,
             qos_profile=qos_profile
         )
-        
+
         # Create time synchronizer with 0.1 second tolerance
         self.time_sync = ApproximateTimeSynchronizer(
             [self.sonar_sub, self.odom_sub],
@@ -193,25 +193,25 @@ class SonarMapperNode(Node):
         )
         self.time_sync.registerCallback(self.synchronized_callback)
         
-        # Create publishers
+        # Create publishers (use same QoS for consistency)
         self.pc_pub = self.create_publisher(
             PointCloud2,
             pointcloud_topic,
-            10
+            qos_profile
         )
-        
+
         self.marker_pub = self.create_publisher(
             MarkerArray,
             marker_topic,
-            10
+            qos_profile
         )
-        
+
         # Create robot detection publisher if enabled
         if self.enable_robot_detection:
             self.robot_pub = self.create_publisher(
                 PointCloud2,
                 self.robot_detection_topic,
-                10
+                qos_profile
             )
         else:
             self.robot_pub = None
@@ -235,7 +235,7 @@ class SonarMapperNode(Node):
             self.tile_update_pub = self.create_publisher(
                 Int32MultiArray,
                 '/updated_tile_indices',
-                10
+                qos_profile
             )
             # Periodically save dirty tiles + notify visualizer
             self.flush_timer = self.create_timer(self.tile_save_interval, self.periodic_flush_and_notify)

@@ -14,6 +14,7 @@ Date: 2025
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 import numpy as np
 import os
 import struct
@@ -134,11 +135,17 @@ class MapVisualizerNode(Node):
         self.pc_pub = self.create_publisher(PointCloud2, '/map_pointcloud', 10)
 
         # Subscribe to tile update notifications from mapper node
+        # Use BEST_EFFORT QoS for consistency with mapper node
+        qos_profile = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=10
+        )
         self.tile_update_sub = self.create_subscription(
             Int32MultiArray,
             '/updated_tile_indices',
             self.tile_update_callback,
-            10
+            qos_profile
         )
         self.pending_tile_updates = []  # Pending tile updates
 
