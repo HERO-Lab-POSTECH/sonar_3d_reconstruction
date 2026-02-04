@@ -138,7 +138,7 @@ Visualization Manager:
           Max Intensity: 255
           Min Color: 0; 0; 0
           Min Intensity: 0
-          Name: CloudMap
+          Name: FastLIO Map
           Position Transformer: XYZ
           Selectable: true
           Size (Pixels): 3
@@ -151,6 +151,74 @@ Visualization Manager:
             History Policy: Keep Last
             Reliability Policy: Reliable
             Value: /fast_lio/map
+          Use Fixed Frame: true
+          Use rainbow: true
+          Value: true
+        - Alpha: 0.30000001192092896
+          Autocompute Intensity Bounds: true
+          Autocompute Value Bounds:
+            Max Value: 67.40343475341797
+            Min Value: -14.458852767944336
+            Value: true
+          Axis: Z
+          Channel Name: intensity
+          Class: rviz_default_plugins/PointCloud2
+          Color: 255; 255; 255
+          Color Transformer: AxisColor
+          Decay Time: 0
+          Enabled: true
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Max Intensity: 255
+          Min Color: 0; 0; 0
+          Min Intensity: 0
+          Name: FastLIO Loc Map
+          Position Transformer: XYZ
+          Selectable: true
+          Size (Pixels): 3
+          Size (m): 0.05000000074505806
+          Style: Flat Squares
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /fast_lio/localization/map
+          Use Fixed Frame: true
+          Use rainbow: true
+          Value: true
+        - Alpha: 0.30000001192092896
+          Autocompute Intensity Bounds: true
+          Autocompute Value Bounds:
+            Max Value: 67.40343475341797
+            Min Value: -14.458852767944336
+            Value: true
+          Axis: Z
+          Channel Name: intensity
+          Class: rviz_default_plugins/PointCloud2
+          Color: 255; 255; 255
+          Color Transformer: AxisColor
+          Decay Time: 0
+          Enabled: true
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Max Intensity: 255
+          Min Color: 0; 0; 0
+          Min Intensity: 0
+          Name: Cartographer Map
+          Position Transformer: XYZ
+          Selectable: true
+          Size (Pixels): 3
+          Size (m): 0.05000000074505806
+          Style: Flat Squares
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: cartographer_2d/map
           Use Fixed Frame: true
           Use rainbow: true
           Value: true
@@ -260,9 +328,9 @@ Visualization Manager:
               Scale: 1
               Value: true
             Value: true
-          Enabled: false
+          Enabled: true
           Keep: 100
-          Name: Odometry
+          Name: FastLIO Odom
           Position Tolerance: 0.10000000149011612
           Shape:
             Alpha: 1
@@ -281,7 +349,85 @@ Visualization Manager:
             History Policy: Keep Last
             Reliability Policy: Reliable
             Value: /fast_lio/odometry
-          Value: false
+          Value: true
+        - Angle Tolerance: 0.10000000149011612
+          Class: rviz_default_plugins/Odometry
+          Covariance:
+            Orientation:
+              Alpha: 0.5
+              Color: 255; 255; 127
+              Color Style: Unique
+              Frame: Local
+              Offset: 1
+              Scale: 1
+              Value: true
+            Position:
+              Alpha: 0.30000001192092896
+              Color: 204; 51; 204
+              Scale: 1
+              Value: true
+            Value: true
+          Enabled: true
+          Keep: 100
+          Name: FastLIO Loc Odom
+          Position Tolerance: 0.10000000149011612
+          Shape:
+            Alpha: 1
+            Axes Length: 1
+            Axes Radius: 0.10000000149011612
+            Color: 0; 255; 0
+            Head Length: 0.30000001192092896
+            Head Radius: 0.10000000149011612
+            Shaft Length: 1
+            Shaft Radius: 0.05000000074505806
+            Value: Arrow
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /fast_lio/localization/odometry
+          Value: true
+        - Angle Tolerance: 0.10000000149011612
+          Class: rviz_default_plugins/Odometry
+          Covariance:
+            Orientation:
+              Alpha: 0.5
+              Color: 255; 255; 127
+              Color Style: Unique
+              Frame: Local
+              Offset: 1
+              Scale: 1
+              Value: true
+            Position:
+              Alpha: 0.30000001192092896
+              Color: 204; 51; 204
+              Scale: 1
+              Value: true
+            Value: true
+          Enabled: true
+          Keep: 100
+          Name: Cartographer Odom
+          Position Tolerance: 0.10000000149011612
+          Shape:
+            Alpha: 1
+            Axes Length: 1
+            Axes Radius: 0.10000000149011612
+            Color: 0; 128; 255
+            Head Length: 0.30000001192092896
+            Head Radius: 0.10000000149011612
+            Shaft Length: 1
+            Shaft Radius: 0.05000000074505806
+            Value: Arrow
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: cartographer_2d/odometry
+          Value: true
         - Alpha: 1
           Buffer Length: 1
           Class: rviz_default_plugins/Path
@@ -292,7 +438,7 @@ Visualization Manager:
           Length: 0.30000001192092896
           Line Style: Lines
           Line Width: 0.029999999329447746
-          Name: Path
+          Name: FastLIO Path
           Offset:
             X: 0
             Y: 0
@@ -309,6 +455,34 @@ Visualization Manager:
             History Policy: Keep Last
             Reliability Policy: Reliable
             Value: /fast_lio/path
+          Value: true
+        - Alpha: 1
+          Buffer Length: 1
+          Class: rviz_default_plugins/Path
+          Color: 255; 170; 0
+          Enabled: true
+          Head Diameter: 0.30000001192092896
+          Head Length: 0.20000000298023224
+          Length: 0.30000001192092896
+          Line Style: Lines
+          Line Width: 0.029999999329447746
+          Name: Cartographer Trajectory
+          Offset:
+            X: 0
+            Y: 0
+            Z: 0
+          Pose Color: 255; 85; 255
+          Pose Style: None
+          Radius: 0.029999999329447746
+          Shaft Diameter: 0.10000000149011612
+          Shaft Length: 0.10000000149011612
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: cartographer_2d/trajectory_nodes
           Value: true
       Enabled: true
       Name: Trajectory

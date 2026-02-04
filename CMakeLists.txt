@@ -66,16 +66,11 @@ install(TARGETS sonar_3d_reconstruction_cpp
   LIBRARY DESTINATION local/lib/python3.10/dist-packages/sonar_3d_reconstruction
 )
 
-# Also create __init__.py for the package
-install(CODE "
-  file(WRITE \"\${CMAKE_INSTALL_PREFIX}/local/lib/python3.10/dist-packages/sonar_3d_reconstruction/__init__.py\"
-    \"# C++ acceleration module for sonar 3D reconstruction\\n\"
-    \"try:\\n\"
-    \"    from .sonar_3d_reconstruction_cpp import *\\n\"
-    \"except ImportError:\\n\"
-    \"    pass\\n\"
-  )
-")
+# Install __init__.py from source (contains C++ module loader)
+install(FILES
+  sonar_3d_reconstruction/__init__.py
+  DESTINATION local/lib/python3.10/dist-packages/sonar_3d_reconstruction
+)
 
 # Add environment hook to set PYTHONPATH
 ament_environment_hooks(
@@ -86,7 +81,8 @@ ament_environment_hooks(
 install(PROGRAMS
   scripts/3d_mapper_node.py
   scripts/map_visualizer_node.py
-  scripts/world_init_broadcaster_node.py
+  scripts/map_diff_analyzer.py
+  scripts/map_diff_visualizer.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

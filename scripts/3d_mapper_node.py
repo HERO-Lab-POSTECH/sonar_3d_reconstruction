@@ -51,7 +51,6 @@ spec_config.loader.exec_module(config_module)
 SonarMapperConfig = config_module.SonarMapperConfig
 ParameterManager = config_module.ParameterManager
 MAPPER_PARAMS = config_module.MAPPER_PARAMS
-ROBOT_DETECTION_PARAMS = config_module.ROBOT_DETECTION_PARAMS
 
 
 def get_next_test_number(base_path: str, prefix: str) -> int:
@@ -200,7 +199,7 @@ class SonarMapperNode(Node):
             self.timer = None
             self.tile_update_pub = self.create_publisher(
                 Int32MultiArray,
-                '/updated_tile_indices',
+                '/sonar_3d_mapper/updated_tile_indices',
                 qos_profile
             )
             # Periodically save dirty tiles + notify visualizer

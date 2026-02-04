@@ -16,31 +16,14 @@ from typing import Tuple, List, Dict, Any, Optional
 import time
 import warnings
 
-# Try to import C++ module
-try:
-    # Import module directly from ROS2 install path
-    import sys
-    import importlib.util
-
-    install_path = "/workspace/ros2_ws/install/sonar_3d_reconstruction/local/lib/python3.10/dist-packages"
-    cpp_file = f"{install_path}/sonar_3d_reconstruction/sonar_3d_reconstruction_cpp.cpython-310-x86_64-linux-gnu.so"
-
-    # Direct loading method
-    spec = importlib.util.spec_from_file_location("sonar_3d_reconstruction_cpp", cpp_file)
-    cpp_module = importlib.util.module_from_spec(spec)
-    sys.modules["sonar_3d_reconstruction_cpp"] = cpp_module
-    spec.loader.exec_module(cpp_module)
-
-    ProbabilityUpdater = cpp_module.ProbabilityUpdater
-    MemoryStats = cpp_module.MemoryStats
-    OutofcoreTileMapper = cpp_module.OutofcoreTileMapper
-
-    CPP_MODULE_AVAILABLE = True
-    OUTOFCORE_AVAILABLE = True
-except Exception as e:
-    CPP_MODULE_AVAILABLE = False
-    OUTOFCORE_AVAILABLE = False
-    warnings.warn(f"[3D Mapper] C++ module unavailable, using Python fallback: {e}")
+# Import C++ module from package
+from sonar_3d_reconstruction import (
+    CPP_MODULE_AVAILABLE,
+    OUTOFCORE_AVAILABLE,
+    ProbabilityUpdater,
+    MemoryStats,
+    OutofcoreTileMapper,
+)
 
 
 # Python SimpleOctree class removed - using C++ backend only
@@ -159,79 +142,9 @@ class SonarTo3DMapper:
         self.adaptive_threshold = default_config.get('adaptive_threshold', 0.5)
         self.adaptive_max_ratio = default_config.get('adaptive_max_ratio', 0.3)
 
-        if self.use_outofcore and OUTOFCORE_AVAILABLE:
-            # Initialize OutofcoreTileMapper (disk-based)
-            map_path = default_config.get('outofcore_map_path', '/workspace/data/map_tiles')
-            tile_size = default_config.get('outofcore_tile_size', 10.0)
-            cache_size = default_config.get('outofcore_cache_size', 16)
-
-            self.octree = OutofcoreTileMapper(
-                map_path,
-                self.voxel_resolution,
-                tile_size,
-                cache_size
-            )
-
-            # Configure IWLO parameters
-            self.octree.set_iwlo_params(
-                default_config.get('sharpness', 0.1),
-                default_config.get('decay_rate', 0.1),
-                default_config.get('min_alpha', 0.3),
-                default_config.get('L_min', -10.0),
-                default_config.get('L_max', 10.0)
-            )
-            self.octree.set_log_odds_params(
-                self.log_odds_occupied,
-                self.log_odds_free
-            )
-            self.octree.set_intensity_params(
-                self.intensity_threshold,
-                default_config.get('intensity_max', 255)
-            )
-            self.octree.set_adaptive_params(
-                default_config['adaptive_update'],
-                default_config['adaptive_threshold'],
-                default_config['adaptive_max_ratio']
-            )
-
-        elif self.use_cpp and CPP_MODULE_AVAILABLE:
-            # Initialize C++ ProbabilityUpdater (RAM-based)
-            self.octree = ProbabilityUpdater(self.voxel_resolution)
-
-            # Configure C++ octree parameters
-            self.octree.set_log_odds_params(
-                self.log_odds_occupied,
-                self.log_odds_free
-            )
-            self.octree.set_adaptive_params(
-                default_config['adaptive_update'],
-                default_config['adaptive_threshold'],
-                default_config['adaptive_max_ratio']
-            )
-
-            # Set clamping thresholds based on log-odds
-            min_prob = 1.0 / (1.0 + np.exp(-default_config['L_min']))
-            max_prob = 1.0 / (1.0 + np.exp(-default_config['L_max']))
-            self.octree.set_clamping_thresholds(min_prob, max_prob)
-
-            # Configure IWLO parameters
-            self.octree.set_iwlo_params(
-                default_config.get('sharpness', 0.1),
-                default_config.get('decay_rate', 0.1),
-                default_config.get('min_alpha', 0.3),
-                default_config.get('L_min', -10.0),
-                default_config.get('L_max', 10.0)
-            )
-            self.octree.set_intensity_params(
-                self.intensity_threshold,
-                default_config.get('intensity_max', 255)
-            )
-        else:
-            # C++ module required but not available
-            raise RuntimeError(
-                "C++ backend is required but not available. "
-                "Please build the C++ module: colcon build --packages-select sonar_3d_reconstruction"
-            )
+        # Initialize octree backend
+        self.octree = self._create_octree_backend(default_config)
+        self._configure_octree(default_config)
         
         # Bearing angles - initialized dynamically in process_sonar_image
         self.bearing_angles = None
@@ -243,6 +156,50 @@ class SonarTo3DMapper:
         # Processing statistics
         self.last_processing_time = 0.0
         self.total_processing_time = 0.0
+
+    def _create_octree_backend(self, config: Dict[str, Any]):
+        """Create octree backend instance based on configuration."""
+        if self.use_outofcore and OUTOFCORE_AVAILABLE:
+            map_path = config.get('outofcore_map_path', '/workspace/data/map_tiles')
+            tile_size = config.get('outofcore_tile_size', 10.0)
+            cache_size = config.get('outofcore_cache_size', 16)
+            return OutofcoreTileMapper(
+                map_path, self.voxel_resolution, tile_size, cache_size
+            )
+        elif self.use_cpp and CPP_MODULE_AVAILABLE:
+            return ProbabilityUpdater(self.voxel_resolution)
+        else:
+            raise RuntimeError(
+                "C++ backend is required but not available. "
+                "Please build the C++ module: colcon build --packages-select sonar_3d_reconstruction"
+            )
+
+    def _configure_octree(self, config: Dict[str, Any]) -> None:
+        """Configure octree parameters for both RAM and disk-based backends."""
+        # Common parameters for all backends
+        self.octree.set_log_odds_params(self.log_odds_occupied, self.log_odds_free)
+        self.octree.set_adaptive_params(
+            config['adaptive_update'],
+            config['adaptive_threshold'],
+            config['adaptive_max_ratio']
+        )
+        self.octree.set_iwlo_params(
+            config.get('sharpness', 0.1),
+            config.get('decay_rate', 0.1),
+            config.get('min_alpha', 0.3),
+            config.get('L_min', -10.0),
+            config.get('L_max', 10.0)
+        )
+        self.octree.set_intensity_params(
+            self.intensity_threshold,
+            config.get('intensity_max', 255)
+        )
+
+        # RAM-based backend specific: clamping thresholds
+        if not self.use_outofcore and hasattr(self.octree, 'set_clamping_thresholds'):
+            min_prob = 1.0 / (1.0 + np.exp(-config['L_min']))
+            max_prob = 1.0 / (1.0 + np.exp(-config['L_max']))
+            self.octree.set_clamping_thresholds(min_prob, max_prob)
 
     def create_transform_matrix(self, position: np.ndarray, rpy: np.ndarray) -> np.ndarray:
         """
@@ -571,11 +528,128 @@ class SonarTo3DMapper:
 
         return updates
     
+    def _collect_first_hits(self, polar_image: np.ndarray, bearing_step: int,
+                            range_resolution: float) -> List[Tuple[float, float]]:
+        """
+        Collect first hit information for shadow region calculation.
+
+        Args:
+            polar_image: 2D sonar image (range_bins x bearing_bins)
+            bearing_step: Step size for bearing iteration
+            range_resolution: Range resolution in meters per bin
+
+        Returns:
+            Sorted list of (bearing_angle, first_hit_range) tuples
+        """
+        bearing_first_hits = []
+        bearing_bins = polar_image.shape[1]
+
+        for b_idx in range(0, bearing_bins, bearing_step):
+            bearing_angle = self.bearing_angles[b_idx]
+            if not self.is_bearing_in_valid_fov(bearing_angle):
+                continue
+
+            intensity_profile = polar_image[:, b_idx]
+            for r_idx, intensity in enumerate(intensity_profile):
+                range_m = r_idx * range_resolution
+                if intensity > self.intensity_threshold and range_m >= self.min_range:
+                    bearing_first_hits.append((bearing_angle, r_idx * range_resolution))
+                    break
+
+        bearing_first_hits.sort(key=lambda x: x[0])
+        return bearing_first_hits
+
+    def _process_rays_with_shadow(self, polar_image: np.ndarray, bearing_step: int,
+                                   T_sonar_to_world: np.ndarray, sonar_origin_world: np.ndarray,
+                                   bearing_first_hits: List[Tuple[float, float]]) -> Dict:
+        """
+        Process rays and accumulate voxel updates with shadow checking.
+
+        Args:
+            polar_image: 2D sonar image
+            bearing_step: Step size for bearing iteration
+            T_sonar_to_world: Transform matrix from sonar to world
+            sonar_origin_world: Sonar origin in world coordinates
+            bearing_first_hits: Sorted list of first hits for shadow check
+
+        Returns:
+            Dictionary of voxel updates keyed by voxel index
+        """
+        voxel_updates = defaultdict(lambda: {'sum': 0.0, 'count': 0, 'type': 'unknown', 'intensity': None})
+        bearing_bins = polar_image.shape[1]
+
+        for b_idx in range(0, bearing_bins, bearing_step):
+            bearing_angle = self.bearing_angles[b_idx]
+            if not self.is_bearing_in_valid_fov(bearing_angle):
+                continue
+
+            intensity_profile = polar_image[:, b_idx]
+            ray_updates = self.process_sonar_ray(bearing_angle, intensity_profile, T_sonar_to_world)
+
+            for point, log_odds, update_type, intensity in ray_updates:
+                key = self.world_to_key(point[0], point[1], point[2])
+
+                # Shadow check: skip free updates in shadow regions
+                if update_type == 'free':
+                    voxel_range = np.sqrt((point[0] - sonar_origin_world[0])**2 +
+                                          (point[1] - sonar_origin_world[1])**2)
+                    if self.is_in_shadow_region(voxel_range, bearing_angle, bearing_first_hits):
+                        continue
+
+                if voxel_updates[key]['type'] != 'occupied':
+                    voxel_updates[key]['type'] = update_type
+                    if intensity is not None:
+                        voxel_updates[key]['intensity'] = intensity
+                voxel_updates[key]['sum'] += log_odds
+                voxel_updates[key]['count'] += 1
+
+        return voxel_updates
+
+    def _apply_updates_to_octree(self, voxel_updates: Dict) -> Tuple[int, int]:
+        """
+        Apply accumulated voxel updates to the octree backend.
+
+        Args:
+            voxel_updates: Dictionary of voxel updates
+
+        Returns:
+            Tuple of (num_occupied, num_free) counts
+        """
+        points_list = []
+        intensities_list = []
+        is_occupied_list = []
+        num_occupied = 0
+        num_free = 0
+
+        for key, update_info in voxel_updates.items():
+            if update_info['count'] > 0:
+                world_point = self.key_to_world(key)
+                points_list.append(world_point)
+
+                intensity_val = update_info.get('intensity', 0.0)
+                intensities_list.append(intensity_val if intensity_val else 0.0)
+
+                is_occupied = update_info['type'] == 'occupied'
+                is_occupied_list.append(is_occupied)
+
+                if is_occupied:
+                    num_occupied += 1
+                else:
+                    num_free += 1
+
+        if points_list:
+            points_array = np.array(points_list, dtype=np.float64)
+            intensities_array = np.array(intensities_list, dtype=np.float64)
+            is_occupied_array = np.array(is_occupied_list, dtype=bool)
+            self.octree.batch_update_iwlo(points_array, intensities_array, is_occupied_array)
+
+        return num_occupied, num_free
+
     def process_sonar_image(self, polar_image: np.ndarray,
                            robot_position: List[float],
                            robot_orientation: List[float]) -> Dict[str, Any]:
         """
-        Process sonar image and update probabilistic map
+        Process sonar image and update probabilistic map.
 
         Args:
             polar_image: 2D numpy array (height x width) with intensity values
@@ -589,157 +663,52 @@ class SonarTo3DMapper:
         start_time = time.time()
         self.processed_frame_count += 1
 
-        # Ensure image is numpy array
         if not isinstance(polar_image, np.ndarray):
             polar_image = np.array(polar_image)
 
-        # Get image dimensions dynamically from image shape
         range_bins, bearing_bins = polar_image.shape
 
-        # Update bearing angles if first frame or dimension changed
-        # Bearing angle convention for Oculus M750D polar image:
-        #   - Column 0 = left side of FOV = -horizontal_fov/2 (negative angle)
-        #   - Column N-1 = right side of FOV = +horizontal_fov/2 (positive angle)
-        #   - Positive bearing = clockwise from forward (starboard/right)
-        #   - Negative bearing = counter-clockwise from forward (port/left)
+        # Update bearing angles if needed
         if self.bearing_angles is None or bearing_bins != self.image_width:
             self.bearing_angles = np.linspace(
-                -self.horizontal_fov/2,
-                self.horizontal_fov/2,
-                bearing_bins
+                -self.horizontal_fov/2, self.horizontal_fov/2, bearing_bins
             )
             self.image_width = bearing_bins
 
-        # Update image height if first frame or range changed
         if self.image_height is None or range_bins != self.image_height:
             self.image_height = range_bins
 
-        # Create transformation matrices
+        # Create transforms
         T_base_to_world = self.create_odometry_transform(robot_position, robot_orientation)
         T_sonar_to_world = T_base_to_world @ self.T_sonar_to_base
-
-        # Extract sonar origin in world coordinates for shadow range calculation
         sonar_origin_world = T_sonar_to_world[:3, 3]
 
-        # Accumulate updates per voxel
-        voxel_updates = defaultdict(lambda: {'sum': 0.0, 'count': 0, 'type': 'unknown', 'intensity': None})
-
-        # Process subset of bearings for efficiency
+        # Processing parameters
         bearing_step = max(1, bearing_bins // 256)
         range_resolution = self.max_range / range_bins
 
-        # Phase 1: Collect first hit information (sorted list for O(log N) lookup)
-        bearing_first_hits = []
-        for b_idx in range(0, bearing_bins, bearing_step):
-            bearing_angle = self.bearing_angles[b_idx]
-            if not self.is_bearing_in_valid_fov(bearing_angle):
-                continue
-
-            intensity_profile = polar_image[:, b_idx]
-            first_hit_idx = -1
-            for r_idx, intensity in enumerate(intensity_profile):
-                range_m = r_idx * range_resolution
-                if intensity > self.intensity_threshold and range_m >= self.min_range:
-                    first_hit_idx = r_idx
-                    break
-
-            if first_hit_idx >= 0:
-                bearing_first_hits.append((bearing_angle, first_hit_idx * range_resolution))
-
-        # Sort for binary search (already sorted due to iteration order, but explicit)
-        bearing_first_hits.sort(key=lambda x: x[0])
+        # Phase 1: Collect first hits
+        bearing_first_hits = self._collect_first_hits(polar_image, bearing_step, range_resolution)
 
         # Phase 2: Process rays with shadow-aware updates
-        for b_idx in range(0, bearing_bins, bearing_step):
-            bearing_angle = self.bearing_angles[b_idx]
+        voxel_updates = self._process_rays_with_shadow(
+            polar_image, bearing_step, T_sonar_to_world, sonar_origin_world, bearing_first_hits
+        )
 
-            # Skip bearings outside valid FOV
-            if not self.is_bearing_in_valid_fov(bearing_angle):
-                continue
+        # Phase 3: Apply updates to octree
+        num_occupied, num_free = self._apply_updates_to_octree(voxel_updates)
 
-            # Process this ray
-            intensity_profile = polar_image[:, b_idx]
-            ray_updates = self.process_sonar_ray(bearing_angle, intensity_profile, T_sonar_to_world)
-
-            # Accumulate updates with shadow check
-            for point, log_odds, update_type, intensity in ray_updates:
-                key = self.world_to_key(point[0], point[1], point[2])
-
-                # Shadow check: skip free updates in shadow regions
-                if update_type == 'free':
-                    # Calculate range from sonar origin (not world origin) for correct shadow comparison
-                    # bearing_first_hits stores ranges in sonar coordinate system
-                    voxel_range = np.sqrt((point[0] - sonar_origin_world[0])**2 +
-                                          (point[1] - sonar_origin_world[1])**2)
-                    if self.is_in_shadow_region(voxel_range, bearing_angle, bearing_first_hits):
-                        continue  # Skip - preserve unknown state in shadow
-
-                if voxel_updates[key]['type'] != 'occupied':  # Occupied has priority
-                    voxel_updates[key]['type'] = update_type
-                    # Store intensity for weighted average method
-                    if intensity is not None:
-                        voxel_updates[key]['intensity'] = intensity
-                voxel_updates[key]['sum'] += log_odds
-                voxel_updates[key]['count'] += 1
-        
-        # Apply averaged updates to octree
-        num_occupied = 0
-        num_free = 0
-        
-        if self.use_cpp and CPP_MODULE_AVAILABLE:
-            # Use C++ batch update
-            points_list = []
-            log_odds_list = []
-            intensities_list = []  # Intensity array for IWLO
-            is_occupied_list = []
-
-            for key, update_info in voxel_updates.items():
-                if update_info['count'] > 0:
-                    avg_update = update_info['sum'] / update_info['count']
-
-                    # Convert key to world coordinates
-                    world_point = self.key_to_world(key)
-                    points_list.append(world_point)
-                    log_odds_list.append(avg_update)
-
-                    # Collect intensity for IWLO (default to 0 if not present)
-                    intensity_val = update_info.get('intensity', 0.0)
-                    intensities_list.append(intensity_val if intensity_val else 0.0)
-
-                    is_occupied = update_info['type'] == 'occupied'
-                    is_occupied_list.append(is_occupied)
-
-                    if is_occupied:
-                        num_occupied += 1
-                    else:
-                        num_free += 1
-
-            # Convert to NumPy arrays for batch update
-            if points_list:
-                points_array = np.array(points_list, dtype=np.float64)
-                log_odds_array = np.array(log_odds_list, dtype=np.float64)
-                intensities_array = np.array(intensities_list, dtype=np.float64)
-                is_occupied_array = np.array(is_occupied_list, dtype=bool)
-
-                # Execute C++ batch update (IWLO only)
-                self.octree.batch_update_iwlo(
-                    points_array, intensities_array, is_occupied_array
-                )
-        
         # Calculate processing time
         processing_time = time.time() - start_time
         self.last_processing_time = processing_time
         self.total_processing_time += processing_time
-        
-        # Get voxel count
-        num_voxels = self.octree.get_num_nodes()
-        
+
         return {
             'frame_count': self.frame_count,
             'processed_count': self.processed_frame_count,
             'num_occupied': num_occupied,
             'num_free': num_free,
-            'num_voxels': num_voxels,
+            'num_voxels': self.octree.get_num_nodes(),
             'processing_time': processing_time,
             'avg_processing_time': self.total_processing_time / max(1, self.processed_frame_count)
         }

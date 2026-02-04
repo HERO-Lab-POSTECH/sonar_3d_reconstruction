@@ -34,24 +34,12 @@ except ImportError:
 # Import parameter management
 from config import ParameterManager, VISUALIZER_PARAMS
 
-# Import C++ module
-try:
-    import sys
-    import importlib.util
-
-    install_path = "/workspace/ros2_ws/install/sonar_3d_reconstruction/local/lib/python3.10/dist-packages"
-    cpp_file = f"{install_path}/sonar_3d_reconstruction/sonar_3d_reconstruction_cpp.cpython-310-x86_64-linux-gnu.so"
-
-    spec = importlib.util.spec_from_file_location("sonar_3d_reconstruction_cpp", cpp_file)
-    cpp_module = importlib.util.module_from_spec(spec)
-    sys.modules["sonar_3d_reconstruction_cpp"] = cpp_module
-    spec.loader.exec_module(cpp_module)
-
-    OutofcoreTileMapper = cpp_module.OutofcoreTileMapper
-    TileIndex = cpp_module.TileIndex
-    CPP_MODULE_AVAILABLE = True
-except Exception:
-    CPP_MODULE_AVAILABLE = False
+# Import C++ module from package
+from sonar_3d_reconstruction import (
+    CPP_MODULE_AVAILABLE,
+    OutofcoreTileMapper,
+    TileIndex,
+)
 
 
 class MapVisualizerNode(Node):
@@ -128,11 +116,11 @@ class MapVisualizerNode(Node):
 
         # Publishers
         if OCTOMAP_MSGS_AVAILABLE:
-            self.octomap_pub = self.create_publisher(Octomap, '/map_octomap', 10)
+            self.octomap_pub = self.create_publisher(Octomap, '/map_visualizer/octomap', 10)
         else:
             self.octomap_pub = None
 
-        self.pc_pub = self.create_publisher(PointCloud2, '/map_pointcloud', 10)
+        self.pc_pub = self.create_publisher(PointCloud2, '/map_visualizer/point_cloud', 10)
 
         # Subscribe to tile update notifications from mapper node
         # Use BEST_EFFORT QoS for consistency with mapper node
@@ -143,7 +131,7 @@ class MapVisualizerNode(Node):
         )
         self.tile_update_sub = self.create_subscription(
             Int32MultiArray,
-            '/updated_tile_indices',
+            '/sonar_3d_mapper/updated_tile_indices',
             self.tile_update_callback,
             qos_profile
         )

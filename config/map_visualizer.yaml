@@ -12,7 +12,7 @@ map_visualizer:
       occupied_threshold: 0.7   # Overridden by common.yaml via launch
 
     frames:
-      map: "camera_init"        # Overridden by common.yaml via launch
+      map: "map"                # Overridden by common.yaml via launch
 
     # === Visualizer-specific parameters ===
     publish_rate: 1.0           # Hz
@@ -20,4 +20,4 @@ map_visualizer:
     refresh_interval: 5.0       # seconds
 
     visualization:
-      mode: 1                   # 0=pointcloud, 1=octomap, 2=all
+      mode: 0                   # 0=pointcloud, 1=octomap, 2=all
