@@ -60,8 +60,8 @@ sonar_3d_mapper:
       publish_tf: false
 
     topics:
-      pointcloud: "/sonar_3d_map"
-      marker: "/sonar_3d_map_markers"
+      pointcloud: "/sonar_3d_mapper/point_cloud"
+      marker: "/sonar_3d_mapper/occupancy_grid"
 
     # ==========================================================================
     # VISUALIZATION [Dynamic]

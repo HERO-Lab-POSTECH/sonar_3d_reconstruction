@@ -241,11 +241,16 @@ MAPPER_PARAMS: List[ParameterDef] = [
     ParameterDef('topics.odometry', '/fast_lio/odometry',
                  'Odometry topic',
                  read_only=True),
-    ParameterDef('topics.pointcloud', '/sonar_3d_map',
+    ParameterDef('topics.pointcloud', '/sonar_3d_mapper/point_cloud',
                  'PointCloud2 output topic',
                  read_only=True),
-    ParameterDef('topics.marker', '/sonar_3d_map_markers',
+    ParameterDef('topics.marker', '/sonar_3d_mapper/occupancy_grid',
                  'Marker array output topic',
+                 read_only=True),
+
+    # QoS (qos.*)
+    ParameterDef('qos.reliability', 'reliable',
+                 'QoS reliability: reliable or best_effort',
                  read_only=True),
 
     # Recording (recording.*)

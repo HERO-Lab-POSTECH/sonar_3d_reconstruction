@@ -9,7 +9,7 @@ Date: 2025
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 import numpy as np
 import time
 import struct
@@ -137,11 +137,20 @@ class SonarMapperNode(Node):
 
         # Register parameter change callback for dynamic updates
         self.add_on_set_parameters_callback(self.parameter_callback)
-        
-        # QoS profile for best effort subscription
+
+        # Get QoS reliability setting (reliable or best_effort)
+        qos_reliability_str = self.get_parameter('qos.reliability').value
+        if qos_reliability_str == 'best_effort':
+            reliability = ReliabilityPolicy.BEST_EFFORT
+            self.get_logger().info('QoS reliability: BEST_EFFORT')
+        else:
+            reliability = ReliabilityPolicy.RELIABLE
+            self.get_logger().info('QoS reliability: RELIABLE')
+
+        # QoS profile for subscription (default: RELIABLE)
         qos_profile = QoSProfile(
-            reliability=QoSReliabilityPolicy.BEST_EFFORT,
-            history=QoSHistoryPolicy.KEEP_LAST,
+            reliability=reliability,
+            history=HistoryPolicy.KEEP_LAST,
             depth=10
         )
 

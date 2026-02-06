@@ -29,6 +29,11 @@ LAUNCH ARGUMENTS
   sonar_pitch   : Sonar pitch angle [deg]                            (default: 90.0)
   launch_visualizer : Launch map visualizer node                     (default: true)
 
+  qos_reliability : QoS reliability for sensor subscribers           (default: reliable)
+                    Options: reliable, best_effort
+                    Note: Use best_effort when playing back old bag files recorded
+                          with BEST_EFFORT QoS
+
 ================================================================================
 TF TREE (provided by SLAM launch or bag file)
 ================================================================================
@@ -76,6 +81,9 @@ EXAMPLES
 
   # Disable Foxglove bridge:
   ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py foxglove:=false
+
+  # BEST_EFFORT QoS (for old bag files):
+  ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py bag_file:=/path/to/bag use_sim_time:=true qos_reliability:=best_effort
 """
 
 import os
@@ -128,6 +136,7 @@ def setup_mapper_nodes(context, *args, **kwargs):
     show_opencv = context.launch_configurations.get('show_opencv', 'false')
     sonar_pitch = context.launch_configurations.get('sonar_pitch', '90.0')
     launch_visualizer = context.launch_configurations.get('launch_visualizer', 'false')
+    qos_reliability = context.launch_configurations.get('qos_reliability', 'reliable')
 
     # Load common.yaml for default values
     with open(common_config, 'r') as f:
@@ -161,6 +170,7 @@ def setup_mapper_nodes(context, *args, **kwargs):
         'topics.odometry': odometry_topic,
         'outofcore.use': use_outofcore,
         'visualization.show_opencv_visualization': show_opencv == 'true',
+        'qos.reliability': qos_reliability,
     }
 
     if use_outofcore:
@@ -334,6 +344,9 @@ def generate_launch_description():
         DeclareLaunchArgument('launch_visualizer',
             default_value='true',
             description='Launch map visualizer node (requires out-of-core mode)'),
+        DeclareLaunchArgument('qos_reliability',
+            default_value='reliable',
+            description='QoS reliability for sensor subscribers: reliable or best_effort'),
     ])
 
     # 3D Mapper + Visualizer nodes
