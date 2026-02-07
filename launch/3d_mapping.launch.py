@@ -26,7 +26,9 @@ LAUNCH ARGUMENTS
   rviz          : Launch RViz                                        (default: false)
   foxglove      : Launch Foxglove bridge (ws://localhost:8765)       (default: false)
 
-  sonar_pitch   : Sonar pitch angle [deg]                            (default: 90.0)
+  sonar_pitch   : Sonar pitch angle [deg] [30.0, 60.0, 90.0]         (default: 90.0)
+                  Loads matching tilt preset: config/presets/tilt_{pitch}.yaml
+                  Each preset has optimized filtering, IWLO, and adaptive parameters
   launch_visualizer : Launch map visualizer node                     (default: true)
 
   qos_reliability : QoS reliability for sensor subscribers           (default: reliable)
@@ -125,7 +127,6 @@ def setup_mapper_nodes(context, *args, **kwargs):
     """Setup 3D mapper and visualizer nodes with resolved launch arguments"""
     pkg_dir = get_package_share_directory('sonar_3d_reconstruction')
     common_config = os.path.join(pkg_dir, 'config', 'common.yaml')
-    method_iwlo = os.path.join(pkg_dir, 'config', 'method_iwlo.yaml')
     map_visualizer_config = os.path.join(pkg_dir, 'config', 'map_visualizer.yaml')
 
     # Get launch configurations
@@ -137,6 +138,16 @@ def setup_mapper_nodes(context, *args, **kwargs):
     sonar_pitch = context.launch_configurations.get('sonar_pitch', '90.0')
     launch_visualizer = context.launch_configurations.get('launch_visualizer', 'false')
     qos_reliability = context.launch_configurations.get('qos_reliability', 'reliable')
+
+    # Resolve tilt preset config
+    tilt_preset = os.path.join(
+        pkg_dir, 'config', 'presets', f'tilt_{int(float(sonar_pitch))}.yaml'
+    )
+    if not os.path.exists(tilt_preset):
+        raise RuntimeError(
+            f'[3D Mapping] No tilt preset for sonar_pitch={sonar_pitch}. '
+            f'Available: config/presets/tilt_30.yaml, tilt_60.yaml, tilt_90.yaml'
+        )
 
     # Load common.yaml for default values
     with open(common_config, 'r') as f:
@@ -155,6 +166,7 @@ def setup_mapper_nodes(context, *args, **kwargs):
 
     # Print configuration
     print(f'[3D Mapping] Sonar: {sonar_model} (FOV={sonar_fov}°, topic={sonar_topic})')
+    print(f'[3D Mapping] Tilt preset: tilt_{int(float(sonar_pitch))}.yaml')
     print(f'[3D Mapping] Odometry: {odometry} (topic={odometry_topic})')
     print(f'[3D Mapping] Out-of-core: {"enabled" if use_outofcore else "disabled (in-memory)"}')
     if use_outofcore:
@@ -191,7 +203,7 @@ def setup_mapper_nodes(context, *args, **kwargs):
         name='sonar_3d_mapper',
         parameters=[
             common_config,
-            method_iwlo,
+            tilt_preset,
             mapper_overrides
         ],
         output='screen'
@@ -340,7 +352,8 @@ def generate_launch_description():
         # =====================================================================
         DeclareLaunchArgument('sonar_pitch',
             default_value='90.0',
-            description='Sonar pitch angle [deg] (90 = pointing down)'),
+            choices=['30.0', '60.0', '90.0'],
+            description='Sonar pitch angle [deg] - loads matching tilt preset config'),
         DeclareLaunchArgument('launch_visualizer',
             default_value='true',
             description='Launch map visualizer node (requires out-of-core mode)'),

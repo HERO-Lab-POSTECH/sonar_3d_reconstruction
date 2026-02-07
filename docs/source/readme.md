@@ -42,7 +42,7 @@ ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py bag_file:=/path/to/bag
 | File | Description |
 |------|-------------|
 | `config/common.yaml` | Main parameters (sonar, voxel, topics) |
-| `config/method_iwlo.yaml` | IWLO probability update parameters |
+| `config/presets/tilt_*.yaml` | Tilt-angle-specific filtering & IWLO parameters (30, 60, 90°) |
 | `config/crosstalk_filter.yaml` | Cross-talk noise filter settings |
 | `config/robot_detection.yaml` | ROV detection parameters |
 | `config/map_visualizer.yaml` | Map visualization settings |

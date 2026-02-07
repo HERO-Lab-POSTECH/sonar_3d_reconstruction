@@ -25,9 +25,16 @@ sonar_3d_mapper:
     # DATA PROCESSING
     # ==========================================================================
 
-    filtering:                       # [Dynamic]
-      min_range: 1.0                 # [m] Minimum valid range (max from /param/range topic)
-      intensity_threshold: 120       # [0-255] Minimum intensity to consider
+    # NOTE: filtering.* and iwlo.* parameters are in config/presets/tilt_XX.yaml
+    #       Selected by sonar_pitch launch argument (30, 60, 90)
+
+    crosstalk:                       # [Dynamic] 2D FFT-based stripe removal
+      enabled: true                 # Filter on/off
+      filter_width: 0.02             # Notch width on bearing freq axis (0.0-1.0)
+      filter_strength: 0.8           # Suppression strength (0.0-1.0)
+      dc_preserve_ratio: 0.05        # DC preservation radius ratio (0.0-0.5)
+      gaussian_sigma: 0.5            # Gaussian rolloff sigma for smooth transition
+      publish_filtered: true        # Publish filtered image to /sonar_3d_mapper/filtered_image
 
     processing:                      # [Dynamic]
       frame_skip: 5                  # Process every N frames

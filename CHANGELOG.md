@@ -85,7 +85,7 @@
   - 강도 기반 시그모이드 가중치 변환
   - 관측 횟수 기반 학습률 감쇠
   - Saturation 방지를 위한 log-odds 범위 제한
-  - 파일: `config/method_iwlo.yaml`, `scripts/3d_mapper.py`, `cpp/probability_updater.cpp`
+  - 파일: `config/presets/tilt_*.yaml`, `scripts/3d_mapper.py`, `cpp/probability_updater.cpp`
 
 - **Cross-talk 노이즈 필터**
   - 멀티빔 소나의 가로 줄무늬 노이즈 억제

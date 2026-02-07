@@ -1,0 +1,32 @@
+# ============================================================================
+# Tilt 90° Preset (Pointing Straight Down)
+# ============================================================================
+# Sonar faces directly downward - strongest reflections from seafloor.
+# High intensity returns allow aggressive filtering thresholds.
+#
+# Use case: Direct seafloor terrain reconstruction
+# ============================================================================
+
+sonar_3d_mapper:
+  ros__parameters:
+
+    # === Filtering [Dynamic] ===
+    filtering:
+      min_range: 1.0                 # [m] Minimum valid range
+      intensity_threshold: 100       # [0-255] High threshold (strong returns)
+
+    # === IWLO Parameters [Read-only] ===
+    iwlo:
+      L_occ: 2.0                     # Max occupied log-odds increment
+      L_free: -4.0                   # Free space log-odds decrement
+      L_max: 8.0                     # Upper saturation bound
+      L_min: -12.0                   # Lower saturation bound
+      sharpness: 0.1                 # Sigmoid steepness
+      decay_rate: 0.1                # Alpha decay rate
+      min_alpha: 0.3                 # Minimum learning rate
+
+    # === Adaptive Update [Read-only] ===
+    adaptive:
+      update: true
+      threshold: 0.5
+      max_ratio: 0.3

@@ -52,6 +52,12 @@ SonarMapperConfig = config_module.SonarMapperConfig
 ParameterManager = config_module.ParameterManager
 MAPPER_PARAMS = config_module.MAPPER_PARAMS
 
+spec_filter = importlib.util.spec_from_file_location("crosstalk_filter",
+    os.path.join(os.path.dirname(__file__), "crosstalk_filter.py"))
+filter_module = importlib.util.module_from_spec(spec_filter)
+spec_filter.loader.exec_module(filter_module)
+CrosstalkFilter = filter_module.CrosstalkFilter
+
 
 def get_next_test_number(base_path: str, prefix: str) -> int:
     """Find existing test folders and return next available number."""
@@ -106,6 +112,16 @@ class SonarMapperNode(Node):
             range_topic = sonar_topic.rsplit('/image', 1)[0] + '/param/range'
         else:
             range_topic = sonar_topic + '/param/range'
+
+        # Initialize crosstalk filter
+        self.crosstalk_filter = CrosstalkFilter(
+            enabled=self.get_parameter('crosstalk.enabled').value,
+            filter_width=self.get_parameter('crosstalk.filter_width').value,
+            filter_strength=self.get_parameter('crosstalk.filter_strength').value,
+            dc_preserve_ratio=self.get_parameter('crosstalk.dc_preserve_ratio').value,
+            gaussian_sigma=self.get_parameter('crosstalk.gaussian_sigma').value,
+        )
+        self.publish_crosstalk_filtered = self.get_parameter('crosstalk.publish_filtered').value
 
         # Store out-of-core mode flag
         self.use_outofcore = config['use_outofcore']
@@ -190,6 +206,13 @@ class SonarMapperNode(Node):
             qos_profile
         )
 
+        # Crosstalk filtered image publisher (for debugging)
+        self.filtered_image_pub = self.create_publisher(
+            Image,
+            '/sonar_3d_mapper/filtered_image',
+            qos_profile
+        )
+
         # Subscribe to dynamic range topic from sonar driver
         self.range_sub = self.create_subscription(
             Float32,
@@ -251,6 +274,20 @@ class SonarMapperNode(Node):
                 self.mapper.update_frame_skip(value)
             elif name == 'octree.dynamic_expansion':
                 self.mapper.update_dynamic_expansion(value)
+
+            # === Crosstalk filter parameters ===
+            elif name == 'crosstalk.enabled':
+                self.crosstalk_filter.update_crosstalk_enabled(value)
+            elif name == 'crosstalk.filter_width':
+                self.crosstalk_filter.update_crosstalk_filter_width(value)
+            elif name == 'crosstalk.filter_strength':
+                self.crosstalk_filter.update_crosstalk_filter_strength(value)
+            elif name == 'crosstalk.dc_preserve_ratio':
+                self.crosstalk_filter.update_crosstalk_dc_preserve_ratio(value)
+            elif name == 'crosstalk.gaussian_sigma':
+                self.crosstalk_filter.update_crosstalk_gaussian_sigma(value)
+            elif name == 'crosstalk.publish_filtered':
+                self.publish_crosstalk_filtered = bool(value)
 
             # === Node-level parameters ===
             elif name == 'visualization.show_opencv_visualization':
@@ -392,7 +429,16 @@ class SonarMapperNode(Node):
         sonar_image = self._decode_sonar_image(sonar_msg)
         if sonar_image is None:
             return
-        
+
+        # Apply crosstalk noise filter
+        sonar_image = self.crosstalk_filter.apply(sonar_image)
+
+        # Publish filtered image for debugging
+        if self.publish_crosstalk_filtered and self.crosstalk_filter.enabled:
+            filtered_msg = self.bridge.cv2_to_imgmsg(sonar_image, encoding='mono8')
+            filtered_msg.header = sonar_msg.header
+            self.filtered_image_pub.publish(filtered_msg)
+
         # Extract odometry position and orientation
         position = [
             odom_msg.pose.pose.position.x,

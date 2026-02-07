@@ -1,0 +1,32 @@
+# ============================================================================
+# Tilt 60° Preset (Moderately Tilted)
+# ============================================================================
+# Sonar tilted 60° from horizontal - moderate angle provides wider coverage
+# with still reasonable reflection strength.
+#
+# Use case: Extended terrain mapping with balanced coverage/quality
+# ============================================================================
+
+sonar_3d_mapper:
+  ros__parameters:
+
+    # === Filtering [Dynamic] ===
+    filtering:
+      min_range: 0.8                 # [m] Slightly shorter min range
+      intensity_threshold: 70        # [0-255] Lower threshold (weaker oblique returns)
+
+    # === IWLO Parameters [Read-only] ===
+    iwlo:
+      L_occ: 1.5                     # Reduced - oblique returns less certain
+      L_free: -3.0                   # Less aggressive free space clearing
+      L_max: 8.0                     # Upper saturation bound
+      L_min: -12.0                   # Lower saturation bound
+      sharpness: 0.08                # Smoother sigmoid for variable intensity
+      decay_rate: 0.08               # Slower decay - need more observations
+      min_alpha: 0.35                # Slightly higher min learning rate
+
+    # === Adaptive Update [Read-only] ===
+    adaptive:
+      update: true
+      threshold: 0.45
+      max_ratio: 0.35

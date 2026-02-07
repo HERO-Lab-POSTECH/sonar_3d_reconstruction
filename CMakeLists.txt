@@ -90,6 +90,7 @@ install(PROGRAMS
 install(FILES
   scripts/3d_mapper.py
   scripts/config.py
+  scripts/crosstalk_filter.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

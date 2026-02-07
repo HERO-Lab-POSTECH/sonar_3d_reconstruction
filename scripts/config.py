@@ -98,10 +98,10 @@ MAPPER_PARAMS: List[ParameterDef] = [
     # === Dynamic Parameters (can be changed at runtime) ===
 
     # Filtering (filtering.*)
-    ParameterDef('filtering.min_range', 0.5,
+    ParameterDef('filtering.min_range', 1.0,
                  'Minimum sonar range in meters',
                  handler='update_min_range'),
-    ParameterDef('filtering.intensity_threshold', 35,
+    ParameterDef('filtering.intensity_threshold', 100,
                  'Intensity threshold for voxel classification (0-255)',
                  handler='update_intensity'),
 
@@ -112,6 +112,26 @@ MAPPER_PARAMS: List[ParameterDef] = [
     ParameterDef('mapping.angular_cone_width', 0.5,
                  'Angular cone width for shadow region protection',
                  handler='update_angular_cone'),
+
+    # Crosstalk Filter (crosstalk.*)
+    ParameterDef('crosstalk.enabled', False,
+                 'Enable 2D FFT-based crosstalk stripe removal filter',
+                 handler='update_crosstalk_enabled'),
+    ParameterDef('crosstalk.filter_width', 0.02,
+                 'Normalized notch width on bearing frequency axis (0.0-1.0)',
+                 handler='update_crosstalk_filter_width'),
+    ParameterDef('crosstalk.filter_strength', 0.8,
+                 'Maximum suppression strength (0.0-1.0)',
+                 handler='update_crosstalk_filter_strength'),
+    ParameterDef('crosstalk.dc_preserve_ratio', 0.05,
+                 'DC preservation radius as ratio of range frequency (0.0-0.5)',
+                 handler='update_crosstalk_dc_preserve_ratio'),
+    ParameterDef('crosstalk.gaussian_sigma', 0.5,
+                 'Gaussian rolloff sigma for smooth notch transition',
+                 handler='update_crosstalk_gaussian_sigma'),
+    ParameterDef('crosstalk.publish_filtered', False,
+                 'Publish filtered polar image to topic for debugging',
+                 handler='update_crosstalk_publish_filtered'),
 
     # Processing (processing.*)
     ParameterDef('processing.frame_skip', 1,
@@ -193,16 +213,16 @@ MAPPER_PARAMS: List[ParameterDef] = [
     ParameterDef('iwlo.min_alpha', 0.3,
                  'IWLO minimum learning rate for change detection',
                  read_only=True),
-    ParameterDef('iwlo.L_occ', 3.5,
+    ParameterDef('iwlo.L_occ', 2.0,
                  'IWLO max occupied log-odds increment',
                  read_only=True),
-    ParameterDef('iwlo.L_free', -3.0,
+    ParameterDef('iwlo.L_free', -4.0,
                  'IWLO free space log-odds decrement',
                  read_only=True),
-    ParameterDef('iwlo.L_min', -10.0,
+    ParameterDef('iwlo.L_min', -12.0,
                  'IWLO lower saturation bound (P ~ 0.00005)',
                  read_only=True),
-    ParameterDef('iwlo.L_max', 10.0,
+    ParameterDef('iwlo.L_max', 8.0,
                  'IWLO upper saturation bound (P ~ 0.99995)',
                  read_only=True),
 
@@ -309,8 +329,8 @@ class SonarMapperConfig:
     # Sonar parameters
     horizontal_fov: float = 130.0
     vertical_aperture: float = 20.0
-    min_range: float = 0.5
-    intensity_threshold: int = 35
+    min_range: float = 1.0
+    intensity_threshold: int = 100
     # max_range is received dynamically from /param/range topic
 
     # Sonar mounting (relative to base_link)
@@ -333,13 +353,13 @@ class SonarMapperConfig:
     angular_cone_width: float = 0.5
 
     # IWLO parameters
-    sharpness: float = 3.0
+    sharpness: float = 0.1
     decay_rate: float = 0.1
-    min_alpha: float = 0.1
-    L_occ: float = 3.5
-    L_free: float = -3.0
-    L_min: float = -10.0
-    L_max: float = 10.0
+    min_alpha: float = 0.3
+    L_occ: float = 2.0
+    L_free: float = -4.0
+    L_min: float = -12.0
+    L_max: float = 8.0
     intensity_max: int = 255
 
     # Backend selection
@@ -438,9 +458,9 @@ class SonarMapperConfig:
             horizontal_fov=params_dict.get('sonar.horizontal_fov', 130.0),
             vertical_aperture=params_dict.get('sonar.vertical_aperture', 20.0),
 
-            # Filtering
-            min_range=params_dict.get('filtering.min_range', 0.5),
-            intensity_threshold=params_dict.get('filtering.intensity_threshold', 35),
+            # Filtering (defaults match tilt_90 preset)
+            min_range=params_dict.get('filtering.min_range', 1.0),
+            intensity_threshold=params_dict.get('filtering.intensity_threshold', 100),
 
             # Mounting
             sonar_position=[
@@ -468,7 +488,7 @@ class SonarMapperConfig:
             occupied_threshold=params_dict.get('mapping.occupied_threshold', 0.7),
             angular_cone_width=params_dict.get('mapping.angular_cone_width', 0.5),
 
-            # IWLO (using method_iwlo.yaml defaults)
+            # IWLO (defaults from config/presets/tilt_XX.yaml)
             sharpness=params_dict.get('iwlo.sharpness', 0.1),
             decay_rate=params_dict.get('iwlo.decay_rate', 0.1),
             min_alpha=params_dict.get('iwlo.min_alpha', 0.3),

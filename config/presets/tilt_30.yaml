@@ -1,0 +1,32 @@
+# ============================================================================
+# Tilt 30° Preset (Near-Horizontal / Forward-Looking)
+# ============================================================================
+# Sonar tilted 30° from horizontal - shallow grazing angle produces weak
+# reflections but covers the widest area ahead of the platform.
+#
+# Use case: Forward-looking terrain preview, obstacle detection
+# ============================================================================
+
+sonar_3d_mapper:
+  ros__parameters:
+
+    # === Filtering [Dynamic] ===
+    filtering:
+      min_range: 0.5                 # [m] Shorter min range for close objects
+      intensity_threshold: 40        # [0-255] Low threshold (weak grazing returns)
+
+    # === IWLO Parameters [Read-only] ===
+    iwlo:
+      L_occ: 1.0                     # Conservative - grazing returns unreliable
+      L_free: -2.0                   # Gentle free space clearing
+      L_max: 6.0                     # Tighter saturation (less confidence)
+      L_min: -10.0                   # Tighter lower bound
+      sharpness: 0.05                # Very smooth sigmoid for noisy data
+      decay_rate: 0.05               # Slow decay - many observations needed
+      min_alpha: 0.4                 # Higher min learning rate for adaptability
+
+    # === Adaptive Update [Read-only] ===
+    adaptive:
+      update: true
+      threshold: 0.4
+      max_ratio: 0.4
