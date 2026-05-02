@@ -1,0 +1,34 @@
+# ============================================================================
+# Robot Detection Preset (Tilt 60° - Detection Mode)
+# ============================================================================
+# Specialized for detecting robots/objects on an EXISTING map.
+# Aggressive occupied updates ensure new objects appear immediately.
+# Conservative free updates protect existing map features (walls, floor).
+#
+# Use case: Robot detection on pre-built map
+# Launch:   ros2 launch sonar_3d_reconstruction robot_3d_mapping.launch.py
+# ============================================================================
+
+sonar_3d_mapper:
+  ros__parameters:
+
+    # === Filtering [Dynamic] ===
+    filtering:
+      min_range: 1.0                 # [m] Short range to catch nearby robots
+      intensity_threshold: 70       # [0-255] High threshold to filter out weak floor returns
+
+    # === IWLO Parameters [Read-only] ===
+    iwlo:
+      L_occ: 15.0                    # Override even 90°'s L_min(-12) in ~2 frames
+      L_free: -1.0                   # Very conservative - protect existing map features
+      L_max: 15.0                    # Very high ceiling - robot detections outweigh everything
+      L_min: -3.0                    # Shallow floor - don't deeply erase existing objects
+      sharpness: 0.12                # Sharp sigmoid for clear detection boundary
+      decay_rate: 0.02               # Very slow decay - keep learning rate high
+      min_alpha: 0.6                 # High minimum - always responsive to new detections
+
+    # === Adaptive Update [Read-only] ===
+    adaptive:
+      update: true
+      threshold: 0.4
+      max_ratio: 0.4

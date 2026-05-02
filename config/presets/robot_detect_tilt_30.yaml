@@ -1,0 +1,36 @@
+# ============================================================================
+# Robot Detection Preset (Tilt 30° - Detection Mode)
+# ============================================================================
+# Specialized for detecting robots/objects on an EXISTING map at 30° tilt.
+# Based on robot_detect_tilt_60.yaml but tuned for shallow grazing angle:
+#   - Lower intensity threshold (weak grazing returns)
+#   - Slightly lower L_occ (grazing returns less reliable)
+#   - Smoother sigmoid (noisier data at shallow angle)
+#
+# Use case: Robot detection on pre-built map with forward-looking sonar
+# Launch:   ros2 launch sonar_3d_reconstruction robot_3d_mapping_v2.launch.py
+# ============================================================================
+
+sonar_3d_mapper:
+  ros__parameters:
+
+    # === Filtering [Dynamic] ===
+    filtering:
+      min_range: 1.0                 # [m] Short range to catch nearby robots
+      intensity_threshold: 70        # [0-255] Low threshold (weak grazing returns at 30°)
+
+    # === IWLO Parameters [Read-only] ===
+    iwlo:
+      L_occ: 10.0                    # Aggressive but less than 60° (grazing less reliable)
+      L_free: -1.0                   # Very conservative - protect existing map features
+      L_max: 12.0                    # High ceiling for robot detections
+      L_min: -3.0                    # Shallow floor - don't deeply erase existing objects
+      sharpness: 0.08                # Smoother than 60° (noisier data at shallow angle)
+      decay_rate: 0.03               # Slow decay - keep learning rate high
+      min_alpha: 0.5                 # High minimum - responsive to new detections
+
+    # === Adaptive Update [Read-only] ===
+    adaptive:
+      update: true
+      threshold: 0.4
+      max_ratio: 0.4

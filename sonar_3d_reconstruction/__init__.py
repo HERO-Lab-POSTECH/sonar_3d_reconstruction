@@ -20,8 +20,9 @@ try:
     import sys
     import importlib.util
 
-    install_path = "/workspace/ros2_ws/install/sonar_3d_reconstruction/local/lib/python3.10/dist-packages"
-    cpp_file = f"{install_path}/sonar_3d_reconstruction/sonar_3d_reconstruction_cpp.cpython-310-x86_64-linux-gnu.so"
+    import os
+    _this_dir = os.path.dirname(os.path.abspath(__file__))
+    cpp_file = os.path.join(_this_dir, "sonar_3d_reconstruction_cpp.cpython-310-x86_64-linux-gnu.so")
 
     spec = importlib.util.spec_from_file_location("sonar_3d_reconstruction_cpp", cpp_file)
     cpp_module = importlib.util.module_from_spec(spec)

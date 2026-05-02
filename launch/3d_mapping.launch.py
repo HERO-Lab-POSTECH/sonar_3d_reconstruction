@@ -21,7 +21,7 @@ LAUNCH ARGUMENTS
   bag_rate      : Bag playback rate                                  (default: 1.0)
   record_path   : Recording output directory                         (default: "" = no recording)
 
-  show_opencv   : Show OpenCV visualization                          (default: false)
+  show_opencv   : Show OpenCV visualization                          (default: true)
   use_sim_time  : Use simulation time                                (default: false)
   rviz          : Launch RViz                                        (default: false)
   foxglove      : Launch Foxglove bridge (ws://localhost:8765)       (default: false)
@@ -31,7 +31,7 @@ LAUNCH ARGUMENTS
                   Each preset has optimized filtering, IWLO, and adaptive parameters
   launch_visualizer : Launch map visualizer node                     (default: true)
 
-  qos_reliability : QoS reliability for sensor subscribers           (default: reliable)
+  qos_reliability : QoS reliability for sensor subscribers           (default: best_effort)
                     Options: reliable, best_effort
                     Note: Use best_effort when playing back old bag files recorded
                           with BEST_EFFORT QoS
@@ -335,7 +335,7 @@ def generate_launch_description():
         # VISUALIZATION & LAUNCH OPTIONS
         # =====================================================================
         DeclareLaunchArgument('show_opencv',
-            default_value='false',
+            default_value='true',
             description='Show OpenCV visualization'),
         DeclareLaunchArgument('use_sim_time',
             default_value='false',
@@ -358,7 +358,7 @@ def generate_launch_description():
             default_value='true',
             description='Launch map visualizer node (requires out-of-core mode)'),
         DeclareLaunchArgument('qos_reliability',
-            default_value='reliable',
+            default_value='best_effort',
             description='QoS reliability for sensor subscribers: reliable or best_effort'),
     ])
 

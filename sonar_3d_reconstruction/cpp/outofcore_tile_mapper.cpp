@@ -630,4 +630,168 @@ OutofcoreTileMapper::group_points_by_tile(const Eigen::MatrixXd& points)
     return groups;
 }
 
+// ============== Ray-casting API ==============
+
+double OutofcoreTileMapper::ray_cast_depth(
+    const Eigen::Vector3d& origin,
+    const Eigen::Vector3d& direction,
+    double max_range,
+    double step_size,
+    double min_probability)
+{
+    // Convert probability to log-odds threshold
+    double min_log_odds;
+    if (min_probability <= 0.0) {
+        min_log_odds = -10.0;
+    } else if (min_probability >= 1.0) {
+        min_log_odds = 10.0;
+    } else {
+        min_log_odds = std::log(min_probability / (1.0 - min_probability));
+    }
+
+    // Normalize direction
+    Eigen::Vector3d dir = direction.normalized();
+    if (dir.norm() < 1e-10) {
+        return -1.0;
+    }
+
+    // Track current tile to avoid repeated lookups
+    TileIndex current_tile_idx(-999999, -999999, -999999);
+    octomap::OcTree* current_octree = nullptr;
+
+    int num_steps = static_cast<int>(std::ceil(max_range / step_size));
+    for (int i = 0; i <= num_steps; ++i) {
+        double t = i * step_size;
+        if (t > max_range) break;
+
+        Eigen::Vector3d point = origin + t * dir;
+
+        // Check tile boundary crossing
+        TileIndex idx = tile_manager_.world_to_tile_index(
+            point.x(), point.y(), point.z());
+
+        if (idx != current_tile_idx) {
+            current_tile_idx = idx;
+            if (tile_manager_.tile_exists(idx)) {
+                Tile* tile = get_or_load_tile(idx);
+                current_octree = (tile) ? tile->get_octree() : nullptr;
+            } else {
+                current_octree = nullptr;
+            }
+        }
+
+        if (!current_octree) continue;
+
+        // Query voxel
+        octomap::point3d oct_point(point.x(), point.y(), point.z());
+        octomap::OcTreeNode* node = current_octree->search(oct_point);
+        if (node && node->getLogOdds() > static_cast<float>(min_log_odds)) {
+            return t;
+        }
+    }
+
+    return -1.0;
+}
+
+Eigen::VectorXd OutofcoreTileMapper::batch_ray_cast_depth(
+    const Eigen::Vector3d& origin,
+    const Eigen::MatrixXd& directions,
+    double max_range,
+    double step_size,
+    double min_probability)
+{
+    if (directions.cols() != 3) {
+        throw std::invalid_argument("batch_ray_cast_depth: directions must be Nx3");
+    }
+
+    int N = directions.rows();
+    Eigen::VectorXd depths(N);
+
+    for (int i = 0; i < N; ++i) {
+        Eigen::Vector3d dir = directions.row(i).transpose();
+        depths(i) = ray_cast_depth(origin, dir, max_range, step_size, min_probability);
+    }
+
+    return depths;
+}
+
+// ============== Batch Occupancy Check ==============
+
+Eigen::VectorXi OutofcoreTileMapper::batch_check_occupied(
+    const Eigen::MatrixXd& points,
+    double min_probability,
+    int tolerance)
+{
+    if (points.cols() != 3) {
+        throw std::invalid_argument("batch_check_occupied: points must be Nx3");
+    }
+
+    // Convert probability to log-odds threshold
+    double min_log_odds;
+    if (min_probability <= 0.0) {
+        min_log_odds = -10.0;
+    } else if (min_probability >= 1.0) {
+        min_log_odds = 10.0;
+    } else {
+        min_log_odds = std::log(min_probability / (1.0 - min_probability));
+    }
+
+    int N = points.rows();
+    Eigen::VectorXi result = Eigen::VectorXi::Zero(N);
+    double step = resolution_;
+
+    // Track current tile to avoid repeated lookups
+    TileIndex current_tile_idx(-999999, -999999, -999999);
+    octomap::OcTree* current_octree = nullptr;
+
+    // Lambda to check a single point against the octree
+    auto check_point = [&](double x, double y, double z) -> bool {
+        TileIndex idx = tile_manager_.world_to_tile_index(x, y, z);
+        if (idx != current_tile_idx) {
+            current_tile_idx = idx;
+            if (tile_manager_.tile_exists(idx)) {
+                Tile* tile = get_or_load_tile(idx);
+                current_octree = (tile) ? tile->get_octree() : nullptr;
+            } else {
+                current_octree = nullptr;
+            }
+        }
+        if (!current_octree) return false;
+
+        octomap::point3d oct_point(x, y, z);
+        octomap::OcTreeNode* node = current_octree->search(oct_point);
+        return (node && node->getLogOdds() > static_cast<float>(min_log_odds));
+    };
+
+    for (int i = 0; i < N; ++i) {
+        double x = points(i, 0);
+        double y = points(i, 1);
+        double z = points(i, 2);
+
+        if (tolerance <= 0) {
+            // Exact voxel check only
+            if (check_point(x, y, z)) {
+                result(i) = 1;
+            }
+        } else {
+            // Check neighborhood: ±tolerance voxels in each direction
+            bool found = false;
+            for (int dx = -tolerance; dx <= tolerance && !found; ++dx) {
+                for (int dy = -tolerance; dy <= tolerance && !found; ++dy) {
+                    for (int dz = -tolerance; dz <= tolerance && !found; ++dz) {
+                        if (check_point(x + dx * step, y + dy * step, z + dz * step)) {
+                            found = true;
+                        }
+                    }
+                }
+            }
+            if (found) {
+                result(i) = 1;
+            }
+        }
+    }
+
+    return result;
+}
+
 }  // namespace sonar_3d_reconstruction

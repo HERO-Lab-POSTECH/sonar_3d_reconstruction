@@ -22,7 +22,10 @@ import time
 
 # ROS2 message imports
 from sensor_msgs.msg import PointCloud2, PointField
-from std_msgs.msg import Header, Int32MultiArray
+from std_msgs.msg import Header, Int32MultiArray, ColorRGBA
+from visualization_msgs.msg import MarkerArray, Marker
+from builtin_interfaces.msg import Duration
+from geometry_msgs.msg import Point
 
 # OctoMap message import
 try:
@@ -69,6 +72,7 @@ class MapVisualizerNode(Node):
         self.auto_refresh = params['auto_refresh']
         self.refresh_interval = params['refresh_interval']
         self.last_refresh_time = 0.0
+        self.marker_lifetime = params['marker_lifetime']
 
         # Read resolution and tile_size from metadata.json (fallback to params if not found)
         self.resolution, self.tile_size = self._load_metadata(
@@ -114,13 +118,19 @@ class MapVisualizerNode(Node):
             except Exception:
                 pass
 
-        # Publishers
+        # Publishers (use node name for unique topic names per instance)
+        node_name = self.get_name()
         if OCTOMAP_MSGS_AVAILABLE:
-            self.octomap_pub = self.create_publisher(Octomap, '/map_visualizer/octomap', 10)
+            self.octomap_pub = self.create_publisher(Octomap, f'/{node_name}/octomap', 10)
         else:
             self.octomap_pub = None
 
-        self.pc_pub = self.create_publisher(PointCloud2, '/map_visualizer/point_cloud', 10)
+        self.pc_pub = self.create_publisher(PointCloud2, f'/{node_name}/point_cloud', 10)
+
+        # MarkerArray publisher for auto-expire mode
+        if self.marker_lifetime > 0:
+            self.marker_pub = self.create_publisher(MarkerArray, f'/{node_name}/marker_array', 10)
+            self.last_tile_update_time = 0.0
 
         # Subscribe to tile update notifications from mapper node
         # Use BEST_EFFORT QoS for consistency with mapper node
@@ -196,6 +206,8 @@ class MapVisualizerNode(Node):
 
         # Add to pending list (processed in publish_callback)
         self.pending_tile_updates.extend(tile_indices)
+        if self.marker_lifetime > 0:
+            self.last_tile_update_time = time.time()
         self.get_logger().debug(f'Received {len(tile_indices)} tile update(s)')
 
     def reload_specific_tiles(self, tile_indices):
@@ -254,6 +266,20 @@ class MapVisualizerNode(Node):
                     pass
             return
 
+        # Marker lifetime mode: publish MarkerArray only when new tile updates arrive
+        # Marker disappears automatically after lifetime (no re-publishing)
+        if self.marker_lifetime > 0:
+            if len(self.pending_tile_updates) > 0:
+                self.reload_specific_tiles(self.pending_tile_updates)
+                self.pending_tile_updates = []
+                try:
+                    stamp = self.get_clock().now().to_msg()
+                    self.publish_marker_array(stamp)
+                except Exception as e:
+                    self.get_logger().error(f'Marker publish error: {e}')
+            return
+
+        # Normal mode: continuous OctoMap/PointCloud2 publishing
         # Selective reload: reload only tiles updated from mapper (priority)
         if len(self.pending_tile_updates) > 0:
             self.reload_specific_tiles(self.pending_tile_updates)
@@ -306,6 +332,63 @@ class MapVisualizerNode(Node):
 
         except Exception:
             pass
+
+    def publish_marker_array(self, stamp):
+        """Publish MarkerArray with auto-expire lifetime (for detection visualization)"""
+        voxels = self.mapper.get_all_occupied_voxels(self.occupied_threshold)
+
+        marker_array = MarkerArray()
+
+        if len(voxels) == 0:
+            # Publish empty array to clear existing markers
+            self.marker_pub.publish(marker_array)
+            return
+
+        marker = Marker()
+        marker.header.stamp = stamp
+        marker.header.frame_id = self.frame_id
+        marker.id = 0
+        marker.type = Marker.CUBE_LIST
+        marker.action = Marker.ADD
+        marker.lifetime = Duration(sec=int(self.marker_lifetime))
+        marker.scale.x = self.resolution
+        marker.scale.y = self.resolution
+        marker.scale.z = self.resolution
+        marker.color.r = 1.0
+        marker.color.g = 0.0
+        marker.color.b = 0.0
+        marker.color.a = 0.8
+
+        # Z-axis coloring for depth perception
+        z_values = voxels[:, 2]
+        z_min, z_max = z_values.min(), z_values.max()
+        z_range = z_max - z_min if z_max > z_min else 1.0
+
+        for i in range(len(voxels)):
+            p = Point()
+            p.x = float(voxels[i, 0])
+            p.y = float(voxels[i, 1])
+            p.z = float(voxels[i, 2])
+            marker.points.append(p)
+
+            # Z-axis rainbow coloring (low=blue → mid=green → high=red)
+            z_ratio = (voxels[i, 2] - z_min) / z_range
+            c = ColorRGBA()
+            if z_ratio < 0.5:
+                t = z_ratio * 2.0
+                c.r = 0.0
+                c.g = t
+                c.b = 1.0 - t
+            else:
+                t = (z_ratio - 0.5) * 2.0
+                c.r = t
+                c.g = 1.0 - t
+                c.b = 0.0
+            c.a = 0.8
+            marker.colors.append(c)
+
+        marker_array.markers.append(marker)
+        self.marker_pub.publish(marker_array)
 
     def publish_pointcloud(self, stamp):
         """Publish PointCloud2"""

@@ -20,7 +20,7 @@ sonar_3d_mapper:
       L_occ: 1.5                     # Reduced - oblique returns less certain
       L_free: -3.0                   # Less aggressive free space clearing
       L_max: 8.0                     # Upper saturation bound
-      L_min: -12.0                   # Lower saturation bound
+      L_min: -5.0                    # Shallow floor to limit free accumulation on seafloor
       sharpness: 0.08                # Smoother sigmoid for variable intensity
       decay_rate: 0.08               # Slower decay - need more observations
       min_alpha: 0.35                # Slightly higher min learning rate

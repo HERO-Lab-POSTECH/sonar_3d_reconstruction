@@ -20,7 +20,7 @@ sonar_3d_mapper:
       L_occ: 1.0                     # Conservative - grazing returns unreliable
       L_free: -2.0                   # Gentle free space clearing
       L_max: 6.0                     # Tighter saturation (less confidence)
-      L_min: -10.0                   # Tighter lower bound
+      L_min: -4.0                    # Shallow floor to limit free accumulation on seafloor
       sharpness: 0.05                # Very smooth sigmoid for noisy data
       decay_rate: 0.05               # Slow decay - many observations needed
       min_alpha: 0.4                 # Higher min learning rate for adaptability

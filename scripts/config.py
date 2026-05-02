@@ -146,6 +146,12 @@ MAPPER_PARAMS: List[ParameterDef] = [
                  'PointCloud2 publishing rate in Hz (in-memory mode)'),
     ParameterDef('visualization.tile_save_interval', 5.0,
                  'Dirty tile save interval in seconds (out-of-core mode)'),
+    ParameterDef('visualization.marker_min_depth', 0.0,
+                 'Min depth for marker grayscale coloring (mapped to black)'),
+    ParameterDef('visualization.marker_max_depth', 10.0,
+                 'Max depth for marker grayscale coloring (mapped to white)'),
+    ParameterDef('visualization.marker_alpha', 0.8,
+                 'Marker transparency (0.0=transparent, 1.0=opaque)'),
 
     # Octree (dynamic)
     ParameterDef('octree.dynamic_expansion', True,
@@ -269,8 +275,25 @@ MAPPER_PARAMS: List[ParameterDef] = [
                  read_only=True),
 
     # QoS (qos.*)
-    ParameterDef('qos.reliability', 'reliable',
+    ParameterDef('qos.reliability', 'best_effort',
                  'QoS reliability: reliable or best_effort',
+                 read_only=True),
+
+    # Depth Estimation (depth_estimation.*) - Reference map comparison for robot detection
+    ParameterDef('depth_estimation.enabled', False,
+                 'Enable depth estimation from reference map',
+                 read_only=True),
+    ParameterDef('depth_estimation.reference_map_path', '',
+                 'Path to reference map tiles (read-only)',
+                 read_only=True),
+    ParameterDef('depth_estimation.depth_diff_threshold', 1.0,
+                 'Min depth difference [m] to consider new object',
+                 read_only=True),
+    ParameterDef('depth_estimation.ray_step_multiplier', 2.0,
+                 'Ray step size = voxel_resolution * this value',
+                 read_only=True),
+    ParameterDef('depth_estimation.min_confidence', 0.7,
+                 'Min occupancy probability in reference map for valid hit',
                  read_only=True),
 
     # Recording (recording.*)
@@ -317,6 +340,9 @@ VISUALIZER_PARAMS: List[ParameterDef] = [
                  read_only=True),
     ParameterDef('auto_refresh', True,
                  'Enable automatic tile refresh',
+                 read_only=True),
+    ParameterDef('marker_lifetime', 0.0,
+                 'Marker lifetime in seconds (0=disabled, >0=publish as MarkerArray with auto-expire)',
                  read_only=True),
 ]
 
@@ -373,6 +399,13 @@ class SonarMapperConfig:
 
     # Processing parameters
     frame_skip: int = 1
+
+    # Depth Estimation
+    depth_estimation_enabled: bool = False
+    depth_estimation_reference_map_path: str = ''
+    depth_estimation_depth_diff_threshold: float = 1.0
+    depth_estimation_ray_step_multiplier: float = 2.0
+    depth_estimation_min_confidence: float = 0.7
 
     @classmethod
     def from_ros_params(cls, node) -> 'SonarMapperConfig':
@@ -504,7 +537,14 @@ class SonarMapperConfig:
             outofcore_cache_size=params_dict.get('outofcore.cache_size', 16),
 
             # Processing
-            frame_skip=params_dict.get('processing.frame_skip', 1)
+            frame_skip=params_dict.get('processing.frame_skip', 1),
+
+            # Depth Estimation
+            depth_estimation_enabled=params_dict.get('depth_estimation.enabled', False),
+            depth_estimation_reference_map_path=params_dict.get('depth_estimation.reference_map_path', ''),
+            depth_estimation_depth_diff_threshold=params_dict.get('depth_estimation.depth_diff_threshold', 1.0),
+            depth_estimation_ray_step_multiplier=params_dict.get('depth_estimation.ray_step_multiplier', 2.0),
+            depth_estimation_min_confidence=params_dict.get('depth_estimation.min_confidence', 0.7),
         )
         return config
 
@@ -551,5 +591,11 @@ class SonarMapperConfig:
             'outofcore_tile_size': self.outofcore_tile_size,
             'outofcore_cache_size': self.outofcore_cache_size,
 
-            'frame_skip': self.frame_skip
+            'frame_skip': self.frame_skip,
+
+            'depth_estimation_enabled': self.depth_estimation_enabled,
+            'depth_estimation_reference_map_path': self.depth_estimation_reference_map_path,
+            'depth_estimation_depth_diff_threshold': self.depth_estimation_depth_diff_threshold,
+            'depth_estimation_ray_step_multiplier': self.depth_estimation_ray_step_multiplier,
+            'depth_estimation_min_confidence': self.depth_estimation_min_confidence,
         }

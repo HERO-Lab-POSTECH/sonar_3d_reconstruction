@@ -225,7 +225,20 @@ PYBIND11_MODULE(sonar_3d_reconstruction_cpp, m) {
              "Prune all cached tiles (merge homogeneous octree nodes)")
         // Eviction notification (for visualizer sync)
         .def("get_and_clear_saved_tiles", &sonar_3d_reconstruction::OutofcoreTileMapper::get_and_clear_saved_tiles,
-             "Get and clear list of recently saved tiles (from eviction)");
+             "Get and clear list of recently saved tiles (from eviction)")
+        // Ray-casting API
+        .def("ray_cast_depth", &sonar_3d_reconstruction::OutofcoreTileMapper::ray_cast_depth,
+             py::arg("origin"), py::arg("direction"), py::arg("max_range"),
+             py::arg("step_size"), py::arg("min_probability") = 0.7,
+             "Ray-cast to find depth of first occupied voxel along a direction")
+        .def("batch_ray_cast_depth", &sonar_3d_reconstruction::OutofcoreTileMapper::batch_ray_cast_depth,
+             py::arg("origin"), py::arg("directions"), py::arg("max_range"),
+             py::arg("step_size"), py::arg("min_probability") = 0.7,
+             "Batch ray-cast for multiple directions from a single origin")
+        .def("batch_check_occupied", &sonar_3d_reconstruction::OutofcoreTileMapper::batch_check_occupied,
+             py::arg("points"), py::arg("min_probability") = 0.7, py::arg("tolerance") = 0,
+             "Batch check if points are occupied (1=occupied, 0=free/unknown). "
+             "tolerance: number of neighboring voxels to check (0=exact, 1=3x3x3, 2=5x5x5)");
 
     // Module version info
     m.attr("__version__") = "1.0.0";

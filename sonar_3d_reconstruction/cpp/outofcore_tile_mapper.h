@@ -230,6 +230,60 @@ public:
      */
     const IWLOParams& get_iwlo_params() const { return iwlo_params_; }
 
+    // ============== Ray-casting API ==============
+
+    /**
+     * Ray-cast to find depth of first occupied voxel along a direction.
+     * Steps along ray from origin, checking each voxel's occupancy.
+     * Handles tile boundary crossings automatically.
+     *
+     * @param origin     3D starting point (world coordinates)
+     * @param direction  3D direction vector (will be normalized)
+     * @param max_range  Maximum search distance (meters)
+     * @param step_size  Step size along ray (meters)
+     * @param min_probability Minimum occupancy probability to count as "hit"
+     * @return Distance to first occupied voxel, or -1.0 if no hit
+     */
+    double ray_cast_depth(
+        const Eigen::Vector3d& origin,
+        const Eigen::Vector3d& direction,
+        double max_range,
+        double step_size,
+        double min_probability = 0.7);
+
+    /**
+     * Batch ray-cast for multiple directions from a single origin.
+     * More cache-efficient than calling ray_cast_depth N times.
+     *
+     * @param origin      3D starting point (world coordinates)
+     * @param directions  Nx3 matrix of direction vectors
+     * @param max_range   Maximum search distance (meters)
+     * @param step_size   Step size along ray (meters)
+     * @param min_probability Minimum occupancy probability threshold
+     * @return N-element vector of depths (-1.0 for misses)
+     */
+    Eigen::VectorXd batch_ray_cast_depth(
+        const Eigen::Vector3d& origin,
+        const Eigen::MatrixXd& directions,
+        double max_range,
+        double step_size,
+        double min_probability = 0.7);
+
+    /**
+     * Batch check if points are occupied in the map.
+     * Useful for filtering detection voxels that overlap with a reference map.
+     *
+     * @param points      Nx3 matrix of world coordinates to check
+     * @param min_probability Minimum occupancy probability threshold
+     * @param tolerance   Number of neighboring voxels to check in each direction.
+     *                    0 = exact voxel only, 1 = ±1 voxel (3x3x3), 2 = ±2 (5x5x5)
+     * @return N-element vector: 1 = occupied, 0 = free/unknown
+     */
+    Eigen::VectorXi batch_check_occupied(
+        const Eigen::MatrixXd& points,
+        double min_probability = 0.7,
+        int tolerance = 0);
+
     // ============== IMapperBackend Optional API ==============
 
     /**

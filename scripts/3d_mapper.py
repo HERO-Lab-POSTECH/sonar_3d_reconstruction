@@ -145,6 +145,16 @@ class SonarTo3DMapper:
         # Initialize octree backend
         self.octree = self._create_octree_backend(default_config)
         self._configure_octree(default_config)
+
+        # Depth estimation from reference map
+        self.depth_estimation_enabled = default_config.get('depth_estimation_enabled', False)
+        self.depth_estimation_threshold = default_config.get('depth_estimation_depth_diff_threshold', 1.0)
+        self.depth_estimation_ray_step_multiplier = default_config.get('depth_estimation_ray_step_multiplier', 2.0)
+        self.depth_estimation_min_confidence = default_config.get('depth_estimation_min_confidence', 0.7)
+        self.reference_map = None
+        ref_map_path = default_config.get('depth_estimation_reference_map_path', '')
+        if self.depth_estimation_enabled and ref_map_path and OUTOFCORE_AVAILABLE:
+            self._load_reference_map(ref_map_path, default_config)
         
         # Bearing angles - initialized dynamically in process_sonar_image
         self.bearing_angles = None
@@ -156,6 +166,131 @@ class SonarTo3DMapper:
         # Processing statistics
         self.last_processing_time = 0.0
         self.total_processing_time = 0.0
+
+    def _load_reference_map(self, ref_map_path: str, config: Dict[str, Any]):
+        """Load reference map as read-only OutofcoreTileMapper for depth estimation."""
+        import os
+        if not os.path.exists(ref_map_path):
+            return
+        try:
+            tile_size = config.get('outofcore_tile_size', 10.0)
+            cache_size = config.get('outofcore_cache_size', 16)
+            self.reference_map = OutofcoreTileMapper(
+                ref_map_path, self.voxel_resolution, tile_size, cache_size
+            )
+        except Exception:
+            self.reference_map = None
+
+    def compute_depth_estimation(self, polar_image: np.ndarray,
+                                  bearing_step: int,
+                                  T_sonar_to_world: np.ndarray,
+                                  sonar_origin_world: np.ndarray,
+                                  range_resolution: float) -> Optional[Dict[str, Any]]:
+        """
+        Ray-cast into reference map and compare with actual sonar depths.
+        Returns depth estimation results for logging/filtering.
+        Returns None if depth estimation is disabled or reference map not loaded.
+        """
+        if self.reference_map is None or not self.depth_estimation_enabled:
+            return None
+        if self.max_range is None:
+            return None
+
+        bearing_bins = polar_image.shape[1]
+        active_indices = []
+        directions = []
+        actual_depths = []
+
+        for b_idx in range(0, bearing_bins, bearing_step):
+            bearing_angle = self.bearing_angles[b_idx]
+            if not self.is_bearing_in_valid_fov(bearing_angle):
+                continue
+
+            # Ray direction in sonar frame → world frame
+            dir_sonar = np.array([
+                np.cos(bearing_angle),
+                -np.sin(bearing_angle),
+                0.0,
+            ])
+            dir_world = T_sonar_to_world[:3, :3] @ dir_sonar
+            dir_norm = np.linalg.norm(dir_world)
+            if dir_norm < 1e-10:
+                continue
+            dir_world /= dir_norm
+
+            # Actual first hit from sonar image
+            intensity_profile = polar_image[:, b_idx]
+            actual_depth = -1.0
+            for r_idx, intensity in enumerate(intensity_profile):
+                range_m = r_idx * range_resolution
+                if intensity > self.intensity_threshold and range_m >= self.min_range:
+                    actual_depth = range_m
+                    break
+
+            active_indices.append(b_idx)
+            directions.append(dir_world)
+            actual_depths.append(actual_depth)
+
+        if not directions:
+            return None
+
+        # Batch ray-cast into reference map
+        directions_array = np.array(directions, dtype=np.float64)
+        origin = np.array(sonar_origin_world[:3], dtype=np.float64)
+        step_size = self.voxel_resolution * self.depth_estimation_ray_step_multiplier
+
+        expected_depths = self.reference_map.batch_ray_cast_depth(
+            origin, directions_array, self.max_range, step_size,
+            self.depth_estimation_min_confidence
+        )
+
+        # Build results
+        threshold = self.depth_estimation_threshold
+        bearing_mask = np.ones(bearing_bins, dtype=bool)
+        num_matched = 0
+        num_new = 0
+        num_no_ref = 0
+        sample_results = []  # For logging
+
+        for i, b_idx in enumerate(active_indices):
+            actual = actual_depths[i]
+            expected = expected_depths[i]
+            bearing_deg = np.degrees(self.bearing_angles[b_idx])
+
+            if expected < 0:
+                # No reference data → process normally
+                bearing_mask[b_idx] = True
+                num_no_ref += 1
+            elif actual < 0:
+                # No sonar hit but reference has data → skip
+                bearing_mask[b_idx] = False
+                num_matched += 1
+            elif (expected - actual) > threshold:
+                # Actual is CLOSER than expected → new object in front
+                bearing_mask[b_idx] = True
+                num_new += 1
+            else:
+                # Actual matches or is further → existing environment, skip
+                bearing_mask[b_idx] = False
+                num_matched += 1
+
+            # Collect samples for logging (every ~50 bearings)
+            if len(sample_results) < 5 and i % max(1, len(active_indices) // 5) == 0:
+                sample_results.append({
+                    'bearing_deg': round(bearing_deg, 1),
+                    'actual': round(actual, 2) if actual >= 0 else -1,
+                    'expected': round(expected, 2) if expected >= 0 else -1,
+                    'is_new': bearing_mask[b_idx],
+                })
+
+        return {
+            'bearing_mask': bearing_mask,
+            'num_matched': num_matched,
+            'num_new': num_new,
+            'num_no_ref': num_no_ref,
+            'total_bearings': len(active_indices),
+            'samples': sample_results,
+        }
 
     def _create_octree_backend(self, config: Dict[str, Any]):
         """Create octree backend instance based on configuration."""
@@ -561,7 +696,8 @@ class SonarTo3DMapper:
 
     def _process_rays_with_shadow(self, polar_image: np.ndarray, bearing_step: int,
                                    T_sonar_to_world: np.ndarray, sonar_origin_world: np.ndarray,
-                                   bearing_first_hits: List[Tuple[float, float]]) -> Dict:
+                                   bearing_first_hits: List[Tuple[float, float]],
+                                   depth_filter_mask: np.ndarray = None) -> Dict:
         """
         Process rays and accumulate voxel updates with shadow checking.
 
@@ -571,6 +707,7 @@ class SonarTo3DMapper:
             T_sonar_to_world: Transform matrix from sonar to world
             sonar_origin_world: Sonar origin in world coordinates
             bearing_first_hits: Sorted list of first hits for shadow check
+            depth_filter_mask: Boolean array per bearing (True=process, False=skip)
 
         Returns:
             Dictionary of voxel updates keyed by voxel index
@@ -581,6 +718,10 @@ class SonarTo3DMapper:
         for b_idx in range(0, bearing_bins, bearing_step):
             bearing_angle = self.bearing_angles[b_idx]
             if not self.is_bearing_in_valid_fov(bearing_angle):
+                continue
+
+            # Depth estimation filter: skip bearings matching existing environment
+            if depth_filter_mask is not None and not depth_filter_mask[b_idx]:
                 continue
 
             intensity_profile = polar_image[:, b_idx]
@@ -690,10 +831,25 @@ class SonarTo3DMapper:
         # Phase 1: Collect first hits
         bearing_first_hits = self._collect_first_hits(polar_image, bearing_step, range_resolution)
 
-        # Phase 2: Process rays with shadow-aware updates
-        voxel_updates = self._process_rays_with_shadow(
-            polar_image, bearing_step, T_sonar_to_world, sonar_origin_world, bearing_first_hits
+        # Phase 1.5: Depth estimation (reference map comparison)
+        depth_estimation_result = self.compute_depth_estimation(
+            polar_image, bearing_step, T_sonar_to_world, sonar_origin_world, range_resolution
         )
+
+        # Phase 2: Process rays with shadow-aware updates + depth filter
+        depth_filter_mask = None
+        if depth_estimation_result is not None:
+            depth_filter_mask = depth_estimation_result.get('bearing_mask')
+        voxel_updates = self._process_rays_with_shadow(
+            polar_image, bearing_step, T_sonar_to_world, sonar_origin_world,
+            bearing_first_hits, depth_filter_mask
+        )
+
+        # Collect current frame's occupied voxel positions (before octree update)
+        current_occupied_points = []
+        for key, update_info in voxel_updates.items():
+            if update_info['count'] > 0 and update_info['type'] == 'occupied':
+                current_occupied_points.append(self.key_to_world(key))
 
         # Phase 3: Apply updates to octree
         num_occupied, num_free = self._apply_updates_to_octree(voxel_updates)
@@ -710,7 +866,9 @@ class SonarTo3DMapper:
             'num_free': num_free,
             'num_voxels': self.octree.get_num_nodes(),
             'processing_time': processing_time,
-            'avg_processing_time': self.total_processing_time / max(1, self.processed_frame_count)
+            'avg_processing_time': self.total_processing_time / max(1, self.processed_frame_count),
+            'occupied_points': np.array(current_occupied_points) if current_occupied_points else np.empty((0, 3)),
+            'depth_estimation': depth_estimation_result,
         }
     
     def get_point_cloud(self, include_free: bool = False) -> Dict[str, Any]:

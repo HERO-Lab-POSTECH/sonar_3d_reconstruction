@@ -1,5 +1,29 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [2026-03-28] — Stable Snapshot
+
+### Added
+- **Robot detection 시스템 통합**
+  - `launch/robot_3d_mapping.launch.py`: 통합 검출 launch
+  - `config/presets/robot_detect_tilt_{30,60,90}.yaml`: 각도별 검출 프리셋
+  - `rviz/robot_detection_v2.rviz`: 검출 결과 시각화 설정
+- **Depth estimation filter** (`docs/source/design/depth_estimation_filter.md`)
+- **Out-of-core tile mapper에 batch ray-casting 추가**
+- **워크스페이스 문서 통합**
+  - `docs/source/operations/deployment-runbook.md`
+  - `docs/source/reference/qos-policy.md`
+  - `docs/source/release-notes/2026-03-28-qos-stabilization.md`
+
+### Changed
+- **Tilt 프리셋 튜닝**: `tilt_30/60/90.yaml` 임계값 재조정
+- **`scripts/3d_mapper_node.py`**: depth estimation + reference map 지원, OpenCV 시각화 타이머 분리
+- **`scripts/map_visualizer_node.py`**: out-of-core 모드 visualization.mode 기본값 정정
+- **QoS 통일**: 워크스페이스 전반 BEST_EFFORT (맵 토픽 3개만 RELIABLE 유지)
+- **Time-sync 하드닝**: sonar↔odometry stamp diff 임계값 도입
+
+### Validation
+- 검증 환경에서 40분 연속 실행 무결성 확인
+
 ## [2025-12-24]
 
 ### Added

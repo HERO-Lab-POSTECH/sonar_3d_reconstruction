@@ -18,12 +18,15 @@ import struct
 from sensor_msgs.msg import Image, PointCloud2, PointField
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Header, Int32MultiArray, Float32
-from geometry_msgs.msg import TransformStamped
+from geometry_msgs.msg import TransformStamped, Point
+from std_msgs.msg import ColorRGBA
 from visualization_msgs.msg import MarkerArray, Marker
+from builtin_interfaces.msg import Duration
 from tf2_ros import StaticTransformBroadcaster
 
-# Message filters for time synchronization
-from message_filters import Subscriber, ApproximateTimeSynchronizer
+# Message filters (kept for reference, using latest-odometry sync instead)
+# from message_filters import Subscriber, ApproximateTimeSynchronizer
+import threading
 
 # Parameter callback and descriptor
 from rcl_interfaces.msg import SetParametersResult, ParameterDescriptor
@@ -100,6 +103,9 @@ class SonarMapperNode(Node):
         self.show_opencv_visualization = self.get_parameter('visualization.show_opencv_visualization').value
         self.pointcloud_publish_rate = self.get_parameter('visualization.pointcloud_publish_rate').value
         self.tile_save_interval = self.get_parameter('visualization.tile_save_interval').value
+        self.marker_min_depth = self.get_parameter('visualization.marker_min_depth').value
+        self.marker_max_depth = self.get_parameter('visualization.marker_max_depth').value
+        self.marker_alpha = self.get_parameter('visualization.marker_alpha').value
 
         # Get topic names (with namespaced names)
         sonar_topic = self.get_parameter('topics.sonar').value
@@ -128,6 +134,14 @@ class SonarMapperNode(Node):
 
         # Initialize mapper
         self.mapper = SonarTo3DMapper(config)
+
+        # Log depth estimation status
+        if config.get('depth_estimation_enabled', False):
+            ref_path = config.get('depth_estimation_reference_map_path', '')
+            if self.mapper.reference_map is not None:
+                self.get_logger().info(f'[DepthEstimation] ENABLED (ref={ref_path})')
+            else:
+                self.get_logger().warn(f'[DepthEstimation] ENABLED but reference map NOT loaded (ref={ref_path})')
 
         # Backend info (silent - available via get_memory_stats())
 
@@ -170,28 +184,25 @@ class SonarMapperNode(Node):
             depth=10
         )
 
-        # Create synchronized subscribers using message_filters
-        self.sonar_sub = Subscriber(
-            self,
-            Image,
-            sonar_topic,
-            qos_profile=qos_profile
-        )
+        # Latest-odometry synchronization (robust against clock skew between machines)
+        # Odometry arrives at ~200Hz, so the latest message is always <5ms old.
+        # When a sonar frame arrives (~14Hz), we pair it with the most recent odometry.
+        self._latest_odom_msg = None
+        self._odom_lock = threading.Lock()
 
-        self.odom_sub = Subscriber(
-            self,
+        self.odom_sub = self.create_subscription(
             Odometry,
             odometry_topic,
-            qos_profile=qos_profile
+            self._odom_callback,
+            qos_profile
         )
 
-        # Create time synchronizer with 0.1 second tolerance
-        self.time_sync = ApproximateTimeSynchronizer(
-            [self.sonar_sub, self.odom_sub],
-            queue_size=10,
-            slop=0.1  # 100ms tolerance for time synchronization
+        self.sonar_sub = self.create_subscription(
+            Image,
+            sonar_topic,
+            self._sonar_callback,
+            qos_profile
         )
-        self.time_sync.registerCallback(self.synchronized_callback)
         
         # Create publishers (use same QoS for consistency)
         self.pc_pub = self.create_publisher(
@@ -358,6 +369,55 @@ class SonarMapperNode(Node):
             self.get_logger().error(f'Image decode failed: {e}')
             return None
 
+    def _viz_thread_loop(self):
+        """Run OpenCV visualization in a separate thread to avoid blocking callbacks."""
+        while rclpy.ok():
+            img = getattr(self, '_viz_latest_image', None)
+            if img is not None:
+                self._visualize_sonar_frame(img)
+            else:
+                cv2.waitKey(30)
+            time.sleep(0.03)  # ~30fps max
+
+    def _setup_opencv_trackbars(self):
+        """Create OpenCV trackbars for real-time parameter tuning."""
+        win = "Sonar: Original | Threshold Applied"
+        cv2.namedWindow(win, cv2.WINDOW_AUTOSIZE)
+
+        # depth_diff_threshold: 0~50 (x0.1 = 0.0~5.0m)
+        init_thresh = int(self.mapper.depth_estimation_threshold * 10)
+        cv2.createTrackbar("DepthDiffThr(x0.1m)", win, init_thresh, 50, self._on_depth_diff_threshold)
+
+        # depth_estimation enabled: 0 or 1
+        init_enabled = 1 if self.mapper.depth_estimation_enabled else 0
+        cv2.createTrackbar("DepthEstimation", win, init_enabled, 1, self._on_depth_estimation_toggle)
+
+        # marker_min_depth: 0~200 (x0.1 = 0.0~20.0m)
+        init_min = int(self.marker_min_depth * 10)
+        cv2.createTrackbar("MarkerMinDepth(x0.1m)", win, init_min, 200, self._on_marker_min_depth)
+
+        # marker_max_depth: 0~200 (x0.1 = 0.0~20.0m)
+        init_max = int(self.marker_max_depth * 10)
+        cv2.createTrackbar("MarkerMaxDepth(x0.1m)", win, init_max, 200, self._on_marker_max_depth)
+
+
+        self._trackbars_created = True
+
+    def _on_depth_diff_threshold(self, val):
+        self.mapper.depth_estimation_threshold = val * 0.1
+
+    def _on_depth_estimation_toggle(self, val):
+        self.mapper.depth_estimation_enabled = bool(val)
+
+    def _on_marker_min_depth(self, val):
+        self.marker_min_depth = val * 0.1
+
+    def _on_marker_max_depth(self, val):
+        self.marker_max_depth = val * 0.1
+
+    def _on_marker_alpha(self, val):
+        self.marker_alpha = val * 0.1
+
     def _visualize_sonar_frame(self, sonar_image: np.ndarray):
         """
         Visualize sonar frame with threshold overlay
@@ -365,6 +425,9 @@ class SonarMapperNode(Node):
         Args:
             sonar_image: Grayscale sonar image
         """
+        if not hasattr(self, '_trackbars_created'):
+            self._setup_opencv_trackbars()
+
         threshold = self.mapper.intensity_threshold
         thresholded = np.where(sonar_image > threshold, 255, 0).astype(np.uint8)
 
@@ -379,6 +442,12 @@ class SonarMapperNode(Node):
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         cv2.putText(overlay, f"Frame: {self.frame_count}", (10, 60),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+        # Show current depth estimation status
+        de_status = "ON" if self.mapper.depth_estimation_enabled else "OFF"
+        de_thresh = self.mapper.depth_estimation_threshold
+        cv2.putText(overlay, f"DepthEst: {de_status} (thr={de_thresh:.1f}m)", (10, 90),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 200, 255), 2)
 
         combined = np.hstack([original_colored, overlay])
 
@@ -401,6 +470,56 @@ class SonarMapperNode(Node):
                 self.get_logger().info(f'max_range received: {new_range:.1f}m')
             else:
                 self.get_logger().info(f'max_range updated: {old_range:.1f}m -> {new_range:.1f}m')
+
+    def _odom_callback(self, msg: Odometry):
+        """Store the latest odometry message (thread-safe)."""
+        with self._odom_lock:
+            self._latest_odom_msg = msg
+
+    def _sonar_callback(self, sonar_msg: Image):
+        """
+        Pair each sonar frame with the latest available odometry.
+        Odometry runs at ~200Hz so the latest message is always very recent.
+        """
+        with self._odom_lock:
+            odom_msg = self._latest_odom_msg
+
+        if odom_msg is None:
+            if not hasattr(self, '_odom_warn_logged'):
+                self.get_logger().warn('Waiting for first odometry message...')
+                self._odom_warn_logged = True
+            return
+
+        # Log time info periodically for debugging
+        sonar_t = sonar_msg.header.stamp.sec + sonar_msg.header.stamp.nanosec * 1e-9
+        odom_t = odom_msg.header.stamp.sec + odom_msg.header.stamp.nanosec * 1e-9
+        wall_t = time.time()
+        stamp_diff = abs(sonar_t - odom_t)
+
+        if not hasattr(self, '_sync_log_count'):
+            self._sync_log_count = 0
+        self._sync_log_count += 1
+        if self._sync_log_count % 50 == 1:
+            self.get_logger().info(
+                f'[TimeSync] sonar_stamp={sonar_t:.3f} odom_stamp={odom_t:.3f} '
+                f'stamp_diff={sonar_t - odom_t:.3f}s '
+                f'sonar_age={wall_t - sonar_t:.3f}s odom_age={wall_t - odom_t:.3f}s'
+            )
+
+        # Reject frames where sonar-odom time difference exceeds threshold
+        MAX_STAMP_DIFF = 0.1  # seconds
+        if stamp_diff > MAX_STAMP_DIFF:
+            if not hasattr(self, '_sync_drop_count'):
+                self._sync_drop_count = 0
+            self._sync_drop_count += 1
+            if self._sync_drop_count % 10 == 1:
+                self.get_logger().warn(
+                    f'[TimeSync] Dropping frame: stamp_diff={stamp_diff:.3f}s > {MAX_STAMP_DIFF}s '
+                    f'(dropped {self._sync_drop_count} frames total)'
+                )
+            return
+
+        self.synchronized_callback(sonar_msg, odom_msg)
 
     def synchronized_callback(self, sonar_msg: Image, odom_msg: Odometry):
         """
@@ -456,13 +575,37 @@ class SonarMapperNode(Node):
         # Process the sonar image
         stats = self.mapper.process_sonar_image(sonar_image, position, orientation)
 
-        # Show visualization if enabled
+        # Publish current frame's occupied voxels as MarkerArray (auto-expire)
+        occupied_points = stats.get('occupied_points', None)
+        if occupied_points is not None and len(occupied_points) > 0:
+            if len(occupied_points) > 0:
+                self.publish_detection_markers(occupied_points)
+
+        # Show visualization if enabled (non-blocking, separate thread)
         if self.show_opencv_visualization:
-            self._visualize_sonar_frame(sonar_image)
+            self._viz_latest_image = sonar_image.copy()
+            if not hasattr(self, '_viz_thread_started'):
+                self._viz_thread_started = True
+                self._viz_latest_image = sonar_image.copy()
+                t = threading.Thread(target=self._viz_thread_loop, daemon=True)
+                t.start()
 
         # Store latest odometry for TF publishing
         self.latest_odometry = odom_msg
-        
+
+        # Log depth estimation results periodically
+        depth_est = stats.get('depth_estimation')
+        if depth_est and self.frame_count % 20 == 0:
+            samples_str = '  '.join(
+                f'[{s["bearing_deg"]:+.0f}° act={s["actual"]:.1f} exp={s["expected"]:.1f} {"NEW" if s["is_new"] else "skip"}]'
+                for s in depth_est.get('samples', [])
+            )
+            self.get_logger().info(
+                f'[DepthEst] matched={depth_est["num_matched"]} '
+                f'new={depth_est["num_new"]} no_ref={depth_est["num_no_ref"]} | '
+                f'{samples_str}'
+            )
+
         # Log statistics periodically (every 100 frames to reduce log noise)
         if not stats.get('skipped', False) and self.frame_count % 100 == 0:
             self.get_logger().info(
@@ -595,62 +738,47 @@ class SonarMapperNode(Node):
         # Publish
         self.pc_pub.publish(cloud)
 
-    def publish_marker_array(self, result: dict):
+    def publish_detection_markers(self, points: np.ndarray):
         """
-        Publish MarkerArray with colored voxels
-        
-        Args:
-            result: Dictionary with classified voxels
+        Publish current frame's occupied voxels as MarkerArray with Z-axis coloring.
+        Each frame gets a unique marker ID so markers expire independently after 5s.
         """
         marker_array = MarkerArray()
-        marker_id = 0
-        
-        # Create marker for occupied voxels (red)
-        if len(result['occupied']) > 0:
-            marker = Marker()
-            marker.header.frame_id = self.map_frame_id
-            marker.header.stamp = self.get_clock().now().to_msg()
-            marker.id = marker_id
-            marker.type = Marker.CUBE_LIST
-            marker.action = Marker.ADD
-            marker.scale.x = self.mapper.voxel_resolution
-            marker.scale.y = self.mapper.voxel_resolution
-            marker.scale.z = self.mapper.voxel_resolution
-            marker.color.r = 1.0
-            marker.color.g = 0.0
-            marker.color.b = 0.0
-            marker.color.a = 0.8
-            
-            for point, prob in result['occupied']:
-                p = marker.points.add()
-                p.x, p.y, p.z = point
-            
-            marker_array.markers.append(marker)
-            marker_id += 1
 
-        # Create marker for unknown voxels (yellow)
-        if len(result.get('unknown', [])) > 0:
-            marker = Marker()
-            marker.header.frame_id = self.map_frame_id
-            marker.header.stamp = self.get_clock().now().to_msg()
-            marker.id = marker_id
-            marker.type = Marker.CUBE_LIST
-            marker.action = Marker.ADD
-            marker.scale.x = self.mapper.voxel_resolution
-            marker.scale.y = self.mapper.voxel_resolution
-            marker.scale.z = self.mapper.voxel_resolution
-            marker.color.r = 1.0
-            marker.color.g = 1.0
-            marker.color.b = 0.0
-            marker.color.a = 0.5
-            
-            for point, prob in result['unknown']:
-                p = marker.points.add()
-                p.x, p.y, p.z = point
-            
-            marker_array.markers.append(marker)
-        
-        # Publish marker array
+        marker = Marker()
+        marker.header.frame_id = self.map_frame_id
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = 'detection'
+        marker.id = self.frame_count  # Unique ID per frame → independent lifetime
+        marker.type = Marker.CUBE_LIST
+        marker.action = Marker.ADD
+        marker.lifetime = Duration(sec=5)
+        marker.scale.x = self.mapper.voxel_resolution
+        marker.scale.y = self.mapper.voxel_resolution
+        marker.scale.z = self.mapper.voxel_resolution
+
+        # Depth-based grayscale (min_depth=black, max_depth=white)
+        min_depth = self.marker_min_depth
+        max_depth = self.marker_max_depth
+        depth_range = max_depth - min_depth if max_depth > min_depth else 1.0
+
+        for i in range(len(points)):
+            p = Point()
+            p.x = float(points[i, 0])
+            p.y = float(points[i, 1])
+            p.z = float(points[i, 2])
+            marker.points.append(p)
+
+            depth = abs(float(points[i, 2]))
+            gray = max(0.0, min((depth - min_depth) / depth_range, 1.0))
+            c = ColorRGBA()
+            c.r = gray
+            c.g = gray
+            c.b = gray
+            c.a = self.marker_alpha
+            marker.colors.append(c)
+
+        marker_array.markers.append(marker)
         self.marker_pub.publish(marker_array)
 
 
