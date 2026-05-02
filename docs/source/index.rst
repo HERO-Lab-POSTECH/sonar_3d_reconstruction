@@ -19,12 +19,31 @@ Features
 
 .. toctree::
    :maxdepth: 2
+   :caption: Operations
+
+   operations/deployment-runbook
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Reference
+
+   reference/qos-policy
+
+.. toctree::
+   :maxdepth: 2
    :caption: Design Documents
 
    design/iwlo_design
    design/octree_mapping
    design/outofcore_design
+   design/depth_estimation_filter
    troubleshooting
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Release Notes
+
+   release-notes/2026-03-28-qos-stabilization
 
 .. toctree::
    :maxdepth: 2
