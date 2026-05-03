@@ -165,7 +165,9 @@ class SonarMapperNode(Node):
         self._latest_confidence_wall_time = None  # float | None
         self._quality_drop_count = 0
         self._quality_stale_warn_count = 0
-        self._node_start_wall_time = time.time()
+        self._quality_closed_no_confidence_warned = False
+        self._quality_closed_stale_warned = False
+        self._node_start_wall_time = time.monotonic()
         self._quality_threshold = float(self.get_parameter('slam_quality.threshold').value)
         self._quality_fail_mode = str(self.get_parameter('slam_quality.fail_mode').value)
         self._quality_grace_period_sec = float(self.get_parameter('slam_quality.grace_period_sec').value)
@@ -506,17 +508,18 @@ class SonarMapperNode(Node):
     def _confidence_callback(self, msg: Float32):
         """Store the latest SLAM confidence value with arrival wall time."""
         self._latest_confidence = float(msg.data)
-        self._latest_confidence_wall_time = time.time()
+        self._latest_confidence_wall_time = time.monotonic()
 
     def _quality_gate_passes(self) -> bool:
         """
         Decide whether the current sonar frame should be processed based on the
         latest SLAM confidence value and freshness.
 
-        Returns True to pass the frame, False to drop it. Honors fail_mode for
-        missing/stale confidence: 'open' = pass with throttled WARN, 'closed' = drop.
+        Fresh = non-None and age <= stale_timeout_sec; passes iff confidence >= threshold.
+        Stale or missing apply fail_mode ('open' = pass with throttled WARN, 'closed' = drop).
+        Uses time.monotonic() for elapsed-time comparisons (immune to NTP corrections).
         """
-        wall_now = time.time()
+        wall_now = time.monotonic()
 
         # Case 1: never received any confidence yet
         if self._latest_confidence is None:
@@ -524,6 +527,13 @@ class SonarMapperNode(Node):
             if elapsed < self._quality_grace_period_sec:
                 return True  # warmup grace
             if self._quality_fail_mode == 'closed':
+                if not self._quality_closed_no_confidence_warned:
+                    self._quality_closed_no_confidence_warned = True
+                    self.get_logger().warn(
+                        f'[SlamQuality] Entering closed-mode silent drop '
+                        f'(no confidence received in {elapsed:.1f}s). '
+                        f'Check that the SLAM confidence publisher is running.'
+                    )
                 return False
             self._quality_stale_warn_count += 1
             if self._quality_stale_warn_count % 50 == 1:
@@ -537,6 +547,13 @@ class SonarMapperNode(Node):
         age = wall_now - self._latest_confidence_wall_time
         if age > self._quality_stale_timeout_sec:
             if self._quality_fail_mode == 'closed':
+                if not self._quality_closed_stale_warned:
+                    self._quality_closed_stale_warned = True
+                    self.get_logger().warn(
+                        f'[SlamQuality] Entering closed-mode stale drop '
+                        f'(confidence age={age:.1f}s > {self._quality_stale_timeout_sec:.1f}s). '
+                        f'Check SLAM publisher liveness.'
+                    )
                 return False
             self._quality_stale_warn_count += 1
             if self._quality_stale_warn_count % 50 == 1:
