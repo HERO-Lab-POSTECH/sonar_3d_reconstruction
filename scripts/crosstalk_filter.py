@@ -19,12 +19,11 @@ class CrosstalkFilter:
     """
 
     def __init__(self, enabled: bool, filter_width: float, filter_strength: float,
-                 dc_preserve_ratio: float, gaussian_sigma: float):
+                 dc_preserve_ratio: float):
         self.enabled = enabled
         self.filter_width = filter_width
         self.filter_strength = filter_strength
         self.dc_preserve_ratio = dc_preserve_ratio
-        self.gaussian_sigma = gaussian_sigma
 
         # Mask cache (invalidated on shape/parameter change)
         self._cached_mask = None
@@ -122,6 +121,3 @@ class CrosstalkFilter:
         self.dc_preserve_ratio = float(value)
         self._invalidate_cache()
 
-    def update_crosstalk_gaussian_sigma(self, value: float):
-        self.gaussian_sigma = float(value)
-        self._invalidate_cache()
