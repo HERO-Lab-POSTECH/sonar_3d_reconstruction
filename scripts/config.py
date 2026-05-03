@@ -126,9 +126,6 @@ MAPPER_PARAMS: List[ParameterDef] = [
     ParameterDef('crosstalk.dc_preserve_ratio', 0.05,
                  'DC preservation radius as ratio of range frequency (0.0-0.5)',
                  handler='update_crosstalk_dc_preserve_ratio'),
-    ParameterDef('crosstalk.gaussian_sigma', 0.5,
-                 'Gaussian rolloff sigma for smooth notch transition',
-                 handler='update_crosstalk_gaussian_sigma'),
     ParameterDef('crosstalk.publish_filtered', False,
                  'Publish filtered polar image to topic for debugging',
                  handler='update_crosstalk_publish_filtered'),
@@ -140,8 +137,7 @@ MAPPER_PARAMS: List[ParameterDef] = [
 
     # Visualization (visualization.*)
     ParameterDef('visualization.show_opencv_visualization', False,
-                 'Show OpenCV visualization window',
-                 handler='update_visualization'),
+                 'Show OpenCV visualization window'),
     ParameterDef('visualization.pointcloud_publish_rate', 10.0,
                  'PointCloud2 publishing rate in Hz (in-memory mode)'),
     ParameterDef('visualization.tile_save_interval', 5.0,
@@ -160,14 +156,11 @@ MAPPER_PARAMS: List[ParameterDef] = [
 
     # Mounting orientation (dynamic - can change at runtime)
     ParameterDef('mounting.orientation.roll', 0.0,
-                 'Sonar roll angle in degrees',
-                 handler='update_orientation'),
+                 'Sonar roll angle in degrees'),
     ParameterDef('mounting.orientation.pitch', 90.0,
-                 'Sonar pitch angle in degrees (90 = pointing down)',
-                 handler='update_orientation'),
+                 'Sonar pitch angle in degrees (90 = pointing down)'),
     ParameterDef('mounting.orientation.yaw', 0.0,
-                 'Sonar yaw angle in degrees',
-                 handler='update_orientation'),
+                 'Sonar yaw angle in degrees'),
 
     # === Read-only Parameters (cannot change at runtime) ===
 
@@ -406,73 +399,6 @@ class SonarMapperConfig:
     depth_estimation_depth_diff_threshold: float = 1.0
     depth_estimation_ray_step_multiplier: float = 2.0
     depth_estimation_min_confidence: float = 0.7
-
-    @classmethod
-    def from_ros_params(cls, node) -> 'SonarMapperConfig':
-        """
-        Create configuration from ROS2 node parameters
-
-        Args:
-            node: ROS2 node with declared parameters
-
-        Returns:
-            SonarMapperConfig instance
-        """
-        # Create main config with namespaced parameters
-        config = cls(
-            # Sonar hardware (sonar.*)
-            horizontal_fov=node.get_parameter('sonar.horizontal_fov').value,
-            vertical_aperture=node.get_parameter('sonar.vertical_aperture').value,
-
-            # Filtering (filtering.*)
-            min_range=node.get_parameter('filtering.min_range').value,
-            intensity_threshold=node.get_parameter('filtering.intensity_threshold').value,
-
-            # Mounting (mounting.position.*, mounting.orientation.*)
-            sonar_position=[
-                node.get_parameter('mounting.position.x').value,
-                node.get_parameter('mounting.position.y').value,
-                node.get_parameter('mounting.position.z').value
-            ],
-            sonar_orientation=[
-                np.radians(node.get_parameter('mounting.orientation.roll').value),
-                np.radians(node.get_parameter('mounting.orientation.pitch').value),
-                np.radians(node.get_parameter('mounting.orientation.yaw').value)
-            ],
-
-            # Octree (octree.*)
-            voxel_resolution=node.get_parameter('octree.voxel_resolution').value,
-            dynamic_expansion=node.get_parameter('octree.dynamic_expansion').value,
-            use_cpp_backend=node.get_parameter('octree.use_cpp_backend').value,
-
-            # Adaptive (adaptive.*)
-            adaptive_update=node.get_parameter('adaptive.update').value,
-            adaptive_threshold=node.get_parameter('adaptive.threshold').value,
-            adaptive_max_ratio=node.get_parameter('adaptive.max_ratio').value,
-
-            # Mapping (mapping.*)
-            occupied_threshold=node.get_parameter('mapping.occupied_threshold').value,
-            angular_cone_width=node.get_parameter('mapping.angular_cone_width').value,
-
-            # IWLO (iwlo.*)
-            sharpness=node.get_parameter('iwlo.sharpness').value,
-            decay_rate=node.get_parameter('iwlo.decay_rate').value,
-            min_alpha=node.get_parameter('iwlo.min_alpha').value,
-            L_occ=node.get_parameter('iwlo.L_occ').value,
-            L_free=node.get_parameter('iwlo.L_free').value,
-            L_min=node.get_parameter('iwlo.L_min').value,
-            L_max=node.get_parameter('iwlo.L_max').value,
-
-            # Outofcore (outofcore.*)
-            use_outofcore=node.get_parameter('outofcore.use').value,
-            outofcore_map_path=node.get_parameter('outofcore.map_path').value,
-            outofcore_tile_size=node.get_parameter('outofcore.tile_size').value,
-            outofcore_cache_size=node.get_parameter('outofcore.cache_size').value,
-
-            # Processing (processing.*)
-            frame_skip=node.get_parameter('processing.frame_skip').value
-        )
-        return config
 
     @classmethod
     def from_params_dict(cls, params_dict: Dict[str, Any]) -> 'SonarMapperConfig':

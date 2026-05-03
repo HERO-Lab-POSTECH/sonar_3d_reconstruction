@@ -125,7 +125,6 @@ class SonarMapperNode(Node):
             filter_width=self.get_parameter('crosstalk.filter_width').value,
             filter_strength=self.get_parameter('crosstalk.filter_strength').value,
             dc_preserve_ratio=self.get_parameter('crosstalk.dc_preserve_ratio').value,
-            gaussian_sigma=self.get_parameter('crosstalk.gaussian_sigma').value,
         )
         self.publish_crosstalk_filtered = self.get_parameter('crosstalk.publish_filtered').value
 

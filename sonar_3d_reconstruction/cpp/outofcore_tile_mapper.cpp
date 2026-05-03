@@ -1,40 +1,12 @@
 #include "outofcore_tile_mapper.h"
-#include <iostream>
+#include "suppress_output.h"
 #include <algorithm>
 #include <sstream>
-#include <cstdio>
-#include <unistd.h>
 #include <limits>
 #include <cmath>
 
 namespace sonar_3d_reconstruction
 {
-
-// RAII class to suppress stdout/stderr at file descriptor level
-class SuppressOutput {
-public:
-    SuppressOutput() {
-        std::cout.flush();
-        std::cerr.flush();
-        fflush(stdout);
-        fflush(stderr);
-        stdout_fd_ = dup(fileno(stdout));
-        stderr_fd_ = dup(fileno(stderr));
-        freopen("/dev/null", "w", stdout);
-        freopen("/dev/null", "w", stderr);
-    }
-    ~SuppressOutput() {
-        fflush(stdout);
-        fflush(stderr);
-        dup2(stdout_fd_, fileno(stdout));
-        dup2(stderr_fd_, fileno(stderr));
-        close(stdout_fd_);
-        close(stderr_fd_);
-    }
-private:
-    int stdout_fd_;
-    int stderr_fd_;
-};
 
 OutofcoreTileMapper::OutofcoreTileMapper(const std::string& map_path,
                                          double resolution,

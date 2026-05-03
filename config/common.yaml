@@ -33,7 +33,6 @@ sonar_3d_mapper:
       filter_width: 0.02             # Notch width on bearing freq axis (0.0-1.0)
       filter_strength: 0.8           # Suppression strength (0.0-1.0)
       dc_preserve_ratio: 0.05        # DC preservation radius ratio (0.0-0.5)
-      gaussian_sigma: 0.5            # Gaussian rolloff sigma for smooth transition
       publish_filtered: true        # Publish filtered image to /sonar_3d_mapper/filtered_image
 
     processing:                      # [Dynamic]
