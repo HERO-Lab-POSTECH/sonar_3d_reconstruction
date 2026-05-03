@@ -329,6 +329,28 @@ class SonarMapperNode(Node):
             elif name == 'crosstalk.publish_filtered':
                 self.publish_crosstalk_filtered = bool(value)
 
+            # === SLAM Quality Gate parameters ===
+            elif name == 'slam_quality.threshold':
+                try:
+                    self._quality_threshold = float(value)
+                    self.get_logger().info(
+                        f'[SlamQuality] threshold updated: {self._quality_threshold:.3f}'
+                    )
+                except (TypeError, ValueError):
+                    return SetParametersResult(
+                        successful=False,
+                        reason=f'invalid threshold value: {value!r}'
+                    )
+            elif name == 'slam_quality.fail_mode':
+                if value in ('open', 'closed'):
+                    self._quality_fail_mode = value
+                    self.get_logger().info(f'[SlamQuality] fail_mode updated: {value}')
+                else:
+                    return SetParametersResult(
+                        successful=False,
+                        reason=f"invalid fail_mode {value!r}; must be 'open' or 'closed'"
+                    )
+
             # === Node-level parameters ===
             elif name == 'visualization.show_opencv_visualization':
                 self.show_opencv_visualization = bool(value)
