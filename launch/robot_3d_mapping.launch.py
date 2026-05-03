@@ -108,6 +108,12 @@ ODOMETRY_CONFIG = {
     'fast_lio_loc': '/fast_lio/localization/odometry',
 }
 
+CONFIDENCE_CONFIG = {
+    'cartographer': '',
+    'fast_lio': '',
+    'fast_lio_loc': '/fast_lio/localization/confidence',
+}
+
 # Valid sonar pitch angles for robot detection
 VALID_PITCHES = [30, 60, 90]
 
@@ -191,11 +197,13 @@ def setup_nodes(context, *args, **kwargs):
 
     # Resolve odometry topic
     odometry_topic = ODOMETRY_CONFIG.get(odometry, ODOMETRY_CONFIG['cartographer'])
+    slam_confidence_topic = CONFIDENCE_CONFIG.get(odometry, '')
 
     # Print configuration
     print(f'[Robot Detection V2] Sonar: {sonar_model} (FOV={sonar_fov})')
     print(f'[Robot Detection V2] Preset: robot_detect_tilt_{pitch_int}.yaml (pitch={sonar_pitch}°)')
     print(f'[Robot Detection V2] Odometry: {odometry} (topic={odometry_topic})')
+    print(f'[Robot Detection V2] SLAM confidence topic: {slam_confidence_topic or "(disabled)"}')
     print(f'[Robot Detection V2] Original map: {original_map_path}')
     print(f'[Robot Detection V2] Detection map: {detection_map_path}')
 
@@ -212,6 +220,7 @@ def setup_nodes(context, *args, **kwargs):
         'sonar.horizontal_fov': sonar_fov,
         'topics.sonar': sonar_topic,
         'topics.odometry': odometry_topic,
+        'topics.slam_confidence': slam_confidence_topic,
         'topics.pointcloud': '/robot_detection/point_cloud',
         'topics.marker': '/robot_detection/occupancy_grid',
         'outofcore.use': True,
