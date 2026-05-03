@@ -1,5 +1,18 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — SLAM quality gating
+
+### Added
+- **SLAM confidence-based frame gating** (`docs/source/design/slam_quality_gating_design.md`)
+  - `3d_mapper_node` subscribes to `/fast_lio/localization/confidence` (Float32) and drops sonar frames whose confidence is below the threshold.
+  - Activates automatically when `odometry:=fast_lio_loc`; cartographer / fast_lio mapping modes auto-disable (fail-open).
+  - New parameters: `topics.slam_confidence`, `slam_quality.threshold` (default 0.4), `slam_quality.fail_mode` (default `open`), `slam_quality.grace_period_sec` (default 1.0), `slam_quality.stale_timeout_sec` (default 5.0).
+- **`CONFIDENCE_CONFIG` dict** in `launch/3d_mapping.launch.py` and `launch/robot_3d_mapping.launch.py` — mirrors the existing `ODOMETRY_CONFIG` pattern so adding a new SLAM source only requires editing two dicts.
+
+### Changed
+- `scripts/3d_mapper_node.py`: `_sonar_callback` now calls `_quality_gate_passes()` between the time-sync gate and `synchronized_callback`. Drop counter (`_quality_drop_count`) is throttled-logged every 10 drops, mirroring the existing `_sync_drop_count` pattern.
+- `parameter_callback`: `slam_quality.threshold` and `slam_quality.fail_mode` are dynamically tunable at runtime; `grace_period_sec` / `stale_timeout_sec` are startup-only.
+
 ## [Unreleased] — Phase A: Cleanup (refactor)
 
 > Master design: `docs/source/design/2026-05-03-quality-perf-uplift-design.md`
