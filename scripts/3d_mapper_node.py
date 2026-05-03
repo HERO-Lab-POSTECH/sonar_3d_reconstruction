@@ -112,6 +112,7 @@ class SonarMapperNode(Node):
         odometry_topic = self.get_parameter('topics.odometry').value
         pointcloud_topic = self.get_parameter('topics.pointcloud').value
         marker_topic = self.get_parameter('topics.marker').value
+        slam_confidence_topic = self.get_parameter('topics.slam_confidence').value
 
         # Auto-generate range_topic from sonar_topic: /sensor/sonar/.../image -> /sensor/sonar/.../param/range
         if sonar_topic.endswith('/image'):
@@ -158,6 +159,18 @@ class SonarMapperNode(Node):
 
         # Initialize latest_odometry to None
         self.latest_odometry = None
+
+        # === SLAM quality gate state ===
+        self._latest_confidence = None  # float | None
+        self._latest_confidence_wall_time = None  # float | None
+        self._quality_drop_count = 0
+        self._quality_stale_warn_count = 0
+        self._node_start_wall_time = time.time()
+        self._quality_threshold = float(self.get_parameter('slam_quality.threshold').value)
+        self._quality_fail_mode = str(self.get_parameter('slam_quality.fail_mode').value)
+        self._quality_grace_period_sec = float(self.get_parameter('slam_quality.grace_period_sec').value)
+        self._quality_stale_timeout_sec = float(self.get_parameter('slam_quality.stale_timeout_sec').value)
+        self._slam_quality_enabled = bool(slam_confidence_topic)
 
         # Frame counter
         self.frame_count = 0
@@ -230,6 +243,21 @@ class SonarMapperNode(Node):
             self.range_callback,
             qos_profile
         )
+
+        # SLAM quality confidence subscription (only if topic configured)
+        if self._slam_quality_enabled:
+            self.slam_confidence_sub = self.create_subscription(
+                Float32,
+                slam_confidence_topic,
+                self._confidence_callback,
+                qos_profile,
+            )
+            self.get_logger().info(
+                f'[SlamQuality] Gate enabled: threshold={self._quality_threshold:.2f}, '
+                f'fail_mode={self._quality_fail_mode}, topic={slam_confidence_topic}'
+            )
+        else:
+            self.get_logger().info('[SlamQuality] Gate disabled (no confidence topic)')
 
         # Create timer for periodic publishing
         if not self.use_outofcore:
@@ -474,6 +502,11 @@ class SonarMapperNode(Node):
         """Store the latest odometry message (thread-safe)."""
         with self._odom_lock:
             self._latest_odom_msg = msg
+
+    def _confidence_callback(self, msg: Float32):
+        """Store the latest SLAM confidence value with arrival wall time."""
+        self._latest_confidence = float(msg.data)
+        self._latest_confidence_wall_time = time.time()
 
     def _sonar_callback(self, sonar_msg: Image):
         """
