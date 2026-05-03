@@ -267,7 +267,8 @@ MAPPER_PARAMS: List[ParameterDef] = [
                  'Marker array output topic',
                  read_only=True),
     ParameterDef('topics.slam_confidence', '',
-                 'SLAM confidence topic (std_msgs/Float32). Empty string disables the gate.'),
+                 'SLAM confidence topic (std_msgs/Float32). Empty string disables the gate.',
+                 read_only=True),
 
     # SLAM Quality Gate (slam_quality.*)
     ParameterDef('slam_quality.threshold', 0.4,
