@@ -56,7 +56,7 @@ fast_lio (loc 모드)
            │
            └── 3d_mapper_node._confidence_callback
                   → _latest_confidence
-                  → _latest_confidence_wall_time = time.time()
+                  → _latest_confidence_wall_time = time.monotonic()
 
 sonar_msg 도착 (~14Hz)
    │
@@ -106,7 +106,7 @@ confidence 토픽이 안 올 때(예: cartographer 모드, fast_lio mapping 모�
 ### 3.4 Stale 검출
 
 `std_msgs/Float32`는 timestamp가 없다. 두 옵션:
-- **(채택)** confidence callback 시점의 wall time(`time.time()`) 기록. `stale_timeout_sec` 경과 시 stale 판정.
+- **(채택)** confidence callback 시점의 monotonic time(`time.monotonic()`) 기록. `stale_timeout_sec` 경과 시 stale 판정. NTP 보정·system clock 점프에 영향받지 않음.
 - (미채택) fast_lio 측을 stamped 메시지로 변경. cross-repo 변경 → 별 phase로 분리.
 
 ### 3.5 SLAM 소스별 호환성
