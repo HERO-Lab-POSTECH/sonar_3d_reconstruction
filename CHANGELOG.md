@@ -1,5 +1,39 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Phase A: Cleanup (refactor)
+
+> Master design: `docs/source/design/2026-05-03-quality-perf-uplift-design.md`
+> Plan: `docs/source/plans/2026-05-03-phase-a-cleanup.md`
+> Risk: 0% (알고리즘 영향 없음). 회귀 측정 의무 없음.
+
+### Removed
+- `config/qos_override.yaml` — launch 어디에서도 미참조 dead file (P0-6)
+- `scripts/config.py`: `SonarMapperConfig.from_ros_params` classmethod — 호출자 0건의 dead code, 또한 depth_estimation 5개 파라미터 누락(잠재 버그) (P3-3, -67 LOC)
+- `scripts/config.py`: `crosstalk.gaussian_sigma` ParameterDef — 마스크 계산에 미참조 (P3-5)
+- `scripts/crosstalk_filter.py`: `gaussian_sigma` 생성자 인자·멤버·setter (P3-5)
+- `scripts/3d_mapper.py`: `update_visualization`, `update_orientation` stub 메서드 — 본문 pass, 노드측이 직접 처리 (P3-7, -13 LOC)
+- `scripts/config.py`: 4개 ParameterDef에서 `handler='update_(visualization|orientation)'` 제거 (P3-7)
+- `config/common.yaml`: `gaussian_sigma` 키 제거 (P3-5)
+
+### Changed
+- `sonar_3d_reconstruction/cpp/octree_mapper.cpp` / `outofcore_tile_mapper.cpp`: 24줄 동일 정의됐던 `SuppressOutput` RAII를 신규 헤더로 추출 (P3-2)
+- `scripts/3d_mapper_node.py`: `CrosstalkFilter()` 생성자 호출에서 `gaussian_sigma` 인자 제거 (P3-5 follow-up)
+
+### Added
+- `sonar_3d_reconstruction/cpp/suppress_output.h` — RAII stdout/stderr 억제 클래스 단일 정의. non-copyable·non-movable 제약 명시 (P3-2)
+- `docs/source/design/2026-05-03-quality-perf-uplift-design.md` — 6 phase 종합 리팩토링 master design
+- `docs/source/plans/2026-05-03-phase-a-cleanup.md` — Phase A 구현 plan (Task 0~7)
+
+### Verification
+- colcon build PASS (Release)
+- import smoke test PASS (`from_ros_params` 부재, `gaussian_sigma` 부재, stub 메서드 부재)
+- 누적 LOC 변화: 약 -100 LOC (코드만), spec/plan 문서 +1.4k LOC
+- 회귀 측정 의무 없음 (알고리즘 영향 0%)
+
+### Notes
+- Phase B-1에서 회귀 인프라(`scripts/regression/`)를 신규 작성 예정. UCRC watertank dataset 2개(P-1, P-2)로 모든 후속 phase 측정.
+- 이 phase는 영구 worktree(`/workspace/ros2_ws_phase_a/`)에서 작업하여 `feat/slam-quality-gating` 세션과 working tree 격리.
+
 ## [2026-03-28] — Stable Snapshot
 
 ### Added
