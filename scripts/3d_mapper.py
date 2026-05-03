@@ -448,20 +448,9 @@ class SonarTo3DMapper:
         """Update frame skip parameter"""
         self.frame_skip = int(value)
 
-    def update_visualization(self, value: bool) -> None:
-        """Update visualization flag (handled by node)"""
-        pass  # Node-level parameter
-
     def update_dynamic_expansion(self, value: bool) -> None:
         """Update dynamic expansion flag"""
         self.dynamic_expansion = bool(value)
-
-    def update_orientation(self, value: float) -> None:
-        """
-        Update sonar orientation (roll/pitch/yaw)
-        Note: Requires node-level coordination for TF update
-        """
-        pass  # Node handles this with update_sonar_orientation()
 
     def is_bearing_in_valid_fov(self, bearing_angle: float) -> bool:
         """Check if bearing angle is within valid FOV"""

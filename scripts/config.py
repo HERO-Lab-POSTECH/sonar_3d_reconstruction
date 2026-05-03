@@ -137,8 +137,7 @@ MAPPER_PARAMS: List[ParameterDef] = [
 
     # Visualization (visualization.*)
     ParameterDef('visualization.show_opencv_visualization', False,
-                 'Show OpenCV visualization window',
-                 handler='update_visualization'),
+                 'Show OpenCV visualization window'),
     ParameterDef('visualization.pointcloud_publish_rate', 10.0,
                  'PointCloud2 publishing rate in Hz (in-memory mode)'),
     ParameterDef('visualization.tile_save_interval', 5.0,
@@ -157,14 +156,11 @@ MAPPER_PARAMS: List[ParameterDef] = [
 
     # Mounting orientation (dynamic - can change at runtime)
     ParameterDef('mounting.orientation.roll', 0.0,
-                 'Sonar roll angle in degrees',
-                 handler='update_orientation'),
+                 'Sonar roll angle in degrees'),
     ParameterDef('mounting.orientation.pitch', 90.0,
-                 'Sonar pitch angle in degrees (90 = pointing down)',
-                 handler='update_orientation'),
+                 'Sonar pitch angle in degrees (90 = pointing down)'),
     ParameterDef('mounting.orientation.yaw', 0.0,
-                 'Sonar yaw angle in degrees',
-                 handler='update_orientation'),
+                 'Sonar yaw angle in degrees'),
 
     # === Read-only Parameters (cannot change at runtime) ===
 
