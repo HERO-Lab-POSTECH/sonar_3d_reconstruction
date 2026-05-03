@@ -508,6 +508,57 @@ class SonarMapperNode(Node):
         self._latest_confidence = float(msg.data)
         self._latest_confidence_wall_time = time.time()
 
+    def _quality_gate_passes(self) -> bool:
+        """
+        Decide whether the current sonar frame should be processed based on the
+        latest SLAM confidence value and freshness.
+
+        Returns True to pass the frame, False to drop it. Honors fail_mode for
+        missing/stale confidence: 'open' = pass with throttled WARN, 'closed' = drop.
+        """
+        wall_now = time.time()
+
+        # Case 1: never received any confidence yet
+        if self._latest_confidence is None:
+            elapsed = wall_now - self._node_start_wall_time
+            if elapsed < self._quality_grace_period_sec:
+                return True  # warmup grace
+            if self._quality_fail_mode == 'closed':
+                return False
+            self._quality_stale_warn_count += 1
+            if self._quality_stale_warn_count % 50 == 1:
+                self.get_logger().warn(
+                    f'[SlamQuality] No confidence received '
+                    f'(elapsed={elapsed:.1f}s) - passing frame (fail_mode=open)'
+                )
+            return True
+
+        # Case 2: confidence received but stale
+        age = wall_now - self._latest_confidence_wall_time
+        if age > self._quality_stale_timeout_sec:
+            if self._quality_fail_mode == 'closed':
+                return False
+            self._quality_stale_warn_count += 1
+            if self._quality_stale_warn_count % 50 == 1:
+                self.get_logger().warn(
+                    f'[SlamQuality] Stale confidence (age={age:.1f}s '
+                    f'> {self._quality_stale_timeout_sec:.1f}s) - passing frame (fail_mode=open)'
+                )
+            return True
+
+        # Case 3: fresh confidence — apply threshold
+        if self._latest_confidence < self._quality_threshold:
+            self._quality_drop_count += 1
+            if self._quality_drop_count % 10 == 1:
+                self.get_logger().warn(
+                    f'[SlamQuality] Drop: confidence={self._latest_confidence:.3f} '
+                    f'< {self._quality_threshold:.3f} '
+                    f'(dropped {self._quality_drop_count} total)'
+                )
+            return False
+
+        return True
+
     def _sonar_callback(self, sonar_msg: Image):
         """
         Pair each sonar frame with the latest available odometry.
@@ -550,6 +601,11 @@ class SonarMapperNode(Node):
                     f'(dropped {self._sync_drop_count} frames total)'
                 )
             return
+
+        # SLAM quality gate (skip frame if confidence too low / stale per fail_mode)
+        if self._slam_quality_enabled:
+            if not self._quality_gate_passes():
+                return
 
         self.synchronized_callback(sonar_msg, odom_msg)
 
