@@ -266,6 +266,19 @@ MAPPER_PARAMS: List[ParameterDef] = [
     ParameterDef('topics.marker', '/sonar_3d_mapper/occupancy_grid',
                  'Marker array output topic',
                  read_only=True),
+    ParameterDef('topics.slam_confidence', '',
+                 'SLAM confidence topic (std_msgs/Float32). Empty string disables the gate.',
+                 read_only=True),
+
+    # SLAM Quality Gate (slam_quality.*)
+    ParameterDef('slam_quality.threshold', 0.4,
+                 'Minimum SLAM confidence to accept a sonar frame. Below this threshold the frame is dropped.'),
+    ParameterDef('slam_quality.fail_mode', 'open',
+                 "Behavior when confidence is None or stale: 'open' (pass with throttled warn) or 'closed' (drop)."),
+    ParameterDef('slam_quality.grace_period_sec', 1.0,
+                 'Initial period (seconds) after node start where missing confidence is tolerated as warmup.'),
+    ParameterDef('slam_quality.stale_timeout_sec', 5.0,
+                 'Confidence is considered stale if the last message arrived more than this many seconds ago.'),
 
     # QoS (qos.*)
     ParameterDef('qos.reliability', 'best_effort',

@@ -122,6 +122,12 @@ ODOMETRY_CONFIG = {
     'fast_lio_loc': '/fast_lio/localization/odometry',
 }
 
+CONFIDENCE_CONFIG = {
+    'cartographer': '',                                  # no per-frame scalar published
+    'fast_lio': '',                                      # mapping mode: fitness undefined
+    'fast_lio_loc': '/fast_lio/localization/confidence',
+}
+
 
 def setup_mapper_nodes(context, *args, **kwargs):
     """Setup 3D mapper and visualizer nodes with resolved launch arguments"""
@@ -160,6 +166,7 @@ def setup_mapper_nodes(context, *args, **kwargs):
 
     # Resolve odometry topic
     odometry_topic = ODOMETRY_CONFIG.get(odometry, ODOMETRY_CONFIG['cartographer'])
+    slam_confidence_topic = CONFIDENCE_CONFIG.get(odometry, '')
 
     # Resolve out-of-core settings
     use_outofcore = bool(map_path)
@@ -168,6 +175,7 @@ def setup_mapper_nodes(context, *args, **kwargs):
     print(f'[3D Mapping] Sonar: {sonar_model} (FOV={sonar_fov}°, topic={sonar_topic})')
     print(f'[3D Mapping] Tilt preset: tilt_{int(float(sonar_pitch))}.yaml')
     print(f'[3D Mapping] Odometry: {odometry} (topic={odometry_topic})')
+    print(f'[3D Mapping] SLAM confidence topic: {slam_confidence_topic or "(disabled)"}')
     print(f'[3D Mapping] Out-of-core: {"enabled" if use_outofcore else "disabled (in-memory)"}')
     if use_outofcore:
         print(f'[3D Mapping] Map path: {map_path}')
@@ -180,6 +188,7 @@ def setup_mapper_nodes(context, *args, **kwargs):
         'sonar.horizontal_fov': sonar_fov,
         'topics.sonar': sonar_topic,
         'topics.odometry': odometry_topic,
+        'topics.slam_confidence': slam_confidence_topic,
         'outofcore.use': use_outofcore,
         'visualization.show_opencv_visualization': show_opencv == 'true',
         'qos.reliability': qos_reliability,

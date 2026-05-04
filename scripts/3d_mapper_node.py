@@ -112,6 +112,7 @@ class SonarMapperNode(Node):
         odometry_topic = self.get_parameter('topics.odometry').value
         pointcloud_topic = self.get_parameter('topics.pointcloud').value
         marker_topic = self.get_parameter('topics.marker').value
+        slam_confidence_topic = self.get_parameter('topics.slam_confidence').value
 
         # Auto-generate range_topic from sonar_topic: /sensor/sonar/.../image -> /sensor/sonar/.../param/range
         if sonar_topic.endswith('/image'):
@@ -158,6 +159,20 @@ class SonarMapperNode(Node):
 
         # Initialize latest_odometry to None
         self.latest_odometry = None
+
+        # === SLAM quality gate state ===
+        self._latest_confidence = None  # float | None
+        self._latest_confidence_wall_time = None  # float | None
+        self._quality_drop_count = 0
+        self._quality_stale_warn_count = 0
+        self._quality_closed_no_confidence_warned = False
+        self._quality_closed_stale_warned = False
+        self._node_start_wall_time = time.monotonic()
+        self._quality_threshold = float(self.get_parameter('slam_quality.threshold').value)
+        self._quality_fail_mode = str(self.get_parameter('slam_quality.fail_mode').value)
+        self._quality_grace_period_sec = float(self.get_parameter('slam_quality.grace_period_sec').value)
+        self._quality_stale_timeout_sec = float(self.get_parameter('slam_quality.stale_timeout_sec').value)
+        self._slam_quality_enabled = bool(slam_confidence_topic)
 
         # Frame counter
         self.frame_count = 0
@@ -231,6 +246,21 @@ class SonarMapperNode(Node):
             qos_profile
         )
 
+        # SLAM quality confidence subscription (only if topic configured)
+        if self._slam_quality_enabled:
+            self.slam_confidence_sub = self.create_subscription(
+                Float32,
+                slam_confidence_topic,
+                self._confidence_callback,
+                qos_profile,
+            )
+            self.get_logger().info(
+                f'[SlamQuality] Gate enabled: threshold={self._quality_threshold:.2f}, '
+                f'fail_mode={self._quality_fail_mode}, topic={slam_confidence_topic}'
+            )
+        else:
+            self.get_logger().info('[SlamQuality] Gate disabled (no confidence topic)')
+
         # Create timer for periodic publishing
         if not self.use_outofcore:
             # In-memory mode: configurable pointcloud publishing rate
@@ -298,6 +328,28 @@ class SonarMapperNode(Node):
                 self.crosstalk_filter.update_crosstalk_gaussian_sigma(value)
             elif name == 'crosstalk.publish_filtered':
                 self.publish_crosstalk_filtered = bool(value)
+
+            # === SLAM Quality Gate parameters ===
+            elif name == 'slam_quality.threshold':
+                try:
+                    self._quality_threshold = float(value)
+                    self.get_logger().info(
+                        f'[SlamQuality] threshold updated: {self._quality_threshold:.3f}'
+                    )
+                except (TypeError, ValueError):
+                    return SetParametersResult(
+                        successful=False,
+                        reason=f'invalid threshold value: {value!r}'
+                    )
+            elif name == 'slam_quality.fail_mode':
+                if value in ('open', 'closed'):
+                    self._quality_fail_mode = value
+                    self.get_logger().info(f'[SlamQuality] fail_mode updated: {value}')
+                else:
+                    return SetParametersResult(
+                        successful=False,
+                        reason=f"invalid fail_mode {value!r}; must be 'open' or 'closed'"
+                    )
 
             # === Node-level parameters ===
             elif name == 'visualization.show_opencv_visualization':
@@ -475,6 +527,77 @@ class SonarMapperNode(Node):
         with self._odom_lock:
             self._latest_odom_msg = msg
 
+    def _confidence_callback(self, msg: Float32):
+        """Store the latest SLAM confidence value with arrival wall time."""
+        self._latest_confidence = float(msg.data)
+        self._latest_confidence_wall_time = time.monotonic()
+
+    def _quality_gate_passes(self) -> bool:
+        """
+        Decide whether the current sonar frame should be processed based on the
+        latest SLAM confidence value and freshness.
+
+        Fresh = non-None and age <= stale_timeout_sec; passes iff confidence >= threshold.
+        Stale or missing apply fail_mode ('open' = pass with throttled WARN, 'closed' = drop).
+        Uses time.monotonic() for elapsed-time comparisons (immune to NTP corrections).
+        """
+        wall_now = time.monotonic()
+
+        # Case 1: never received any confidence yet
+        if self._latest_confidence is None:
+            elapsed = wall_now - self._node_start_wall_time
+            if elapsed < self._quality_grace_period_sec:
+                return True  # warmup grace
+            if self._quality_fail_mode == 'closed':
+                if not self._quality_closed_no_confidence_warned:
+                    self._quality_closed_no_confidence_warned = True
+                    self.get_logger().warn(
+                        f'[SlamQuality] Entering closed-mode silent drop '
+                        f'(no confidence received in {elapsed:.1f}s). '
+                        f'Check that the SLAM confidence publisher is running.'
+                    )
+                return False
+            self._quality_stale_warn_count += 1
+            if self._quality_stale_warn_count % 50 == 1:
+                self.get_logger().warn(
+                    f'[SlamQuality] No confidence received '
+                    f'(elapsed={elapsed:.1f}s) - passing frame (fail_mode=open)'
+                )
+            return True
+
+        # Case 2: confidence received but stale
+        age = wall_now - self._latest_confidence_wall_time
+        if age > self._quality_stale_timeout_sec:
+            if self._quality_fail_mode == 'closed':
+                if not self._quality_closed_stale_warned:
+                    self._quality_closed_stale_warned = True
+                    self.get_logger().warn(
+                        f'[SlamQuality] Entering closed-mode stale drop '
+                        f'(confidence age={age:.1f}s > {self._quality_stale_timeout_sec:.1f}s). '
+                        f'Check SLAM publisher liveness.'
+                    )
+                return False
+            self._quality_stale_warn_count += 1
+            if self._quality_stale_warn_count % 50 == 1:
+                self.get_logger().warn(
+                    f'[SlamQuality] Stale confidence (age={age:.1f}s '
+                    f'> {self._quality_stale_timeout_sec:.1f}s) - passing frame (fail_mode=open)'
+                )
+            return True
+
+        # Case 3: fresh confidence — apply threshold
+        if self._latest_confidence < self._quality_threshold:
+            self._quality_drop_count += 1
+            if self._quality_drop_count % 10 == 1:
+                self.get_logger().warn(
+                    f'[SlamQuality] Drop: confidence={self._latest_confidence:.3f} '
+                    f'< {self._quality_threshold:.3f} '
+                    f'(dropped {self._quality_drop_count} total)'
+                )
+            return False
+
+        return True
+
     def _sonar_callback(self, sonar_msg: Image):
         """
         Pair each sonar frame with the latest available odometry.
@@ -517,6 +640,11 @@ class SonarMapperNode(Node):
                     f'(dropped {self._sync_drop_count} frames total)'
                 )
             return
+
+        # SLAM quality gate (skip frame if confidence too low / stale per fail_mode)
+        if self._slam_quality_enabled:
+            if not self._quality_gate_passes():
+                return
 
         self.synchronized_callback(sonar_msg, odom_msg)
 
