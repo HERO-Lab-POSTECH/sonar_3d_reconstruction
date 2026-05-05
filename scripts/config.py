@@ -274,6 +274,16 @@ MAPPER_PARAMS: List[ParameterDef] = [
     ParameterDef('slam_quality.stale_timeout_sec', 5.0,
                  'Confidence is considered stale if the last message arrived more than this many seconds ago.'),
 
+    # Time Synchronization (time_sync.*) — sonar↔odom pairing tolerance
+    ParameterDef('time_sync.max_stamp_diff_sec', 0.1,
+                 'Max allowed |sonar.stamp - odom.stamp| in seconds. Frames exceeding this are dropped.'),
+    ParameterDef('time_sync.max_odom_age_sec', 0.5,
+                 'Max allowed (now - odom.stamp) in seconds. Reserved for P8 ring-buffer pairing.',
+                 read_only=True),
+    ParameterDef('time_sync.policy', 'latest',
+                 "Pairing policy: 'latest' (current behavior) or 'ringbuffer' (P8 fix). Reserved.",
+                 read_only=True),
+
     # QoS (qos.*)
     ParameterDef('qos.reliability', 'best_effort',
                  'QoS reliability: reliable or best_effort',

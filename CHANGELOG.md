@@ -1,5 +1,33 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Phase P5c+d: ROS Time integrity (refactor)
+
+### Changed
+- `scripts/3d_mapper_node.py`:
+  - sonar/odom timesync log: `wall_t = time.time()` 제거 → `ros_now = self.get_clock().now()` (use_sim_time 정합, spec §2.6.1)
+  - `MAX_STAMP_DIFF = 0.1` 하드코딩 제거 → `time_sync.max_stamp_diff_sec` config (default 0.1)
+  - dead `self.last_publish_time = time.time()` 제거 (unused)
+  - `_wall_*` prefix 변수에 NTP-immune 의도 주석 강화
+- `scripts/map_visualizer_node.py`:
+  - `last_refresh_time`, `last_tile_update_time` → ros clock (sim time 정합 throttle)
+  - `time.sleep(0.03)` (fps cap)는 wall clock 유지 (적절)
+- `scripts/config.py`:
+  - 신규 ParameterDef 3개 추가:
+    - `time_sync.max_stamp_diff_sec` (default 0.1) — sonar↔odom stamp tolerance
+    - `time_sync.max_odom_age_sec` (default 0.5, read_only) — P8 ring-buffer pairing 예약
+    - `time_sync.policy` (default 'latest', read_only) — P8 정책 선택자 예약
+
+### Verification
+- colcon build PASS
+- 3d_mapper 노드 startup PASS (use_sim_time 자동 정합 로그 정상)
+- bag rate=1.0 vs 2.0 stamp_diff 안정성 — P8 회귀 단계에서 일괄 검증
+
+### Why preserved as wall clock
+- `_node_start_wall_time` (grace period), `_latest_confidence_wall_time` (staleness): NTP-immune wall-clock 측정 의도. ros clock으로 전환 시 sim-time 일시정지 등 비정상 케이스에서 타이머가 잘못 동작.
+- `time.sleep(0.03)` (visualizer fps cap): wall throttle이 자연스러움.
+
+---
+
 ## [Unreleased] — Phase P5b: use_sim_time 자동 정합 (refactor)
 
 ### Added

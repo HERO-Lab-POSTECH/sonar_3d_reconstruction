@@ -200,7 +200,7 @@ class MapVisualizerNode(Node):
         # Add to pending list (processed in publish_callback)
         self.pending_tile_updates.extend(tile_indices)
         if self.marker_lifetime > 0:
-            self.last_tile_update_time = time.time()
+            self.last_tile_update_time = self.get_clock().now().nanoseconds * 1e-9
         self.get_logger().debug(f'Received {len(tile_indices)} tile update(s)')
 
     def reload_specific_tiles(self, tile_indices):
@@ -273,17 +273,19 @@ class MapVisualizerNode(Node):
             return
 
         # Normal mode: continuous OctoMap/PointCloud2 publishing
-        # Selective reload: reload only tiles updated from mapper (priority)
+        # Selective reload: reload only tiles updated from mapper (priority).
+        # last_refresh_time uses ROS clock so refresh throttle stays correct
+        # under bag replay (use_sim_time:=true).
+        ros_now = self.get_clock().now().nanoseconds * 1e-9
         if len(self.pending_tile_updates) > 0:
             self.reload_specific_tiles(self.pending_tile_updates)
             self.pending_tile_updates = []
-            self.last_refresh_time = time.time()  # Reset refresh timer
+            self.last_refresh_time = ros_now
 
         # Fallback: full reload if auto_refresh enabled and no topic updates
-        current_time = time.time()
-        if self.auto_refresh and (current_time - self.last_refresh_time) >= self.refresh_interval:
+        if self.auto_refresh and (ros_now - self.last_refresh_time) >= self.refresh_interval:
             self.reload_tiles()
-            self.last_refresh_time = current_time
+            self.last_refresh_time = ros_now
 
         try:
             stamp = self.get_clock().now().to_msg()
