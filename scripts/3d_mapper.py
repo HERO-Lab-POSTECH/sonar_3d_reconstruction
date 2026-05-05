@@ -735,11 +735,13 @@ class SonarTo3DMapper:
         points_list = []
         intensities_list = []
         is_occupied_list = []
+        weights_list = []
         num_occupied = 0
         num_free = 0
 
         for key, update_info in voxel_updates.items():
-            if update_info['count'] > 0:
+            count = update_info['count']
+            if count > 0:
                 world_point = self.key_to_world(key)
                 points_list.append(world_point)
 
@@ -748,6 +750,7 @@ class SonarTo3DMapper:
 
                 is_occupied = update_info['type'] == 'occupied'
                 is_occupied_list.append(is_occupied)
+                weights_list.append(float(count))
 
                 if is_occupied:
                     num_occupied += 1
@@ -758,7 +761,14 @@ class SonarTo3DMapper:
             points_array = np.array(points_list, dtype=np.float64)
             intensities_array = np.array(intensities_list, dtype=np.float64)
             is_occupied_array = np.array(is_occupied_list, dtype=bool)
-            self.octree.batch_update_iwlo(points_array, intensities_array, is_occupied_array)
+            weights_array = np.array(weights_list, dtype=np.float64)
+            # P0-5: pass count as weight so a voxel that received N
+            # observations in this frame applies N× the per-observation
+            # log-odds delta — converges proportionally faster.
+            self.octree.batch_update_iwlo(
+                points_array, intensities_array, is_occupied_array,
+                weights_array,
+            )
 
         return num_occupied, num_free
 
