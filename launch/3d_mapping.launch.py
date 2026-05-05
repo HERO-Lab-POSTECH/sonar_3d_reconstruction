@@ -67,8 +67,28 @@ CONFIDENCE_CONFIG = {
 }
 
 
+def _auto_force_sim_time(context):
+    """Force use_sim_time=true when bag_path is set (spec §2.6.1).
+
+    Silent — overrides any prior value. Bag replay always implies sim time;
+    distinguishing user-explicit-false from default-false is unreliable
+    via LaunchContext, so we always force. Mutates
+    context.launch_configurations so downstream OpaqueFunctions see the
+    corrected value.
+    """
+    bag_path = context.launch_configurations.get('bag_path', '')
+    if not bag_path:
+        return
+    prev = context.launch_configurations.get('use_sim_time', 'false').lower()
+    if prev != 'true':
+        print(f"[launch] bag_path='{bag_path}' → forcing use_sim_time:=true (was: {prev})")
+    context.launch_configurations['use_sim_time'] = 'true'
+
+
 def setup_mapper_nodes(context, *args, **kwargs):
     """Setup 3D mapper and visualizer nodes with resolved launch arguments"""
+    _auto_force_sim_time(context)
+
     pkg_dir = get_package_share_directory('sonar_3d_reconstruction')
     common_config = os.path.join(pkg_dir, 'config', 'common.yaml')
     map_visualizer_config = os.path.join(pkg_dir, 'config', 'map_visualizer.yaml')
