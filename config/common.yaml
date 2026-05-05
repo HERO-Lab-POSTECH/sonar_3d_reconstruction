@@ -66,12 +66,31 @@ sonar_3d_mapper:
       publish_tf: false
 
     # ==========================================================================
+    # TIME SYNC [Dynamic]
+    # ==========================================================================
+    time_sync:
+      max_stamp_diff_sec: 0.1       # [s] sonar↔odom stamp diff cutoff
+      max_odom_age_sec: 0.5         # [s] odom freshness cutoff (P8 ring-buffer)
+      policy: "latest"              # latest | interpolate | nearest
+
+    # ==========================================================================
     # VISUALIZATION [Dynamic]
     # ==========================================================================
 
     visualization:
       pointcloud_publish_rate: 10.0  # [Hz] PointCloud2 publish rate (in-memory)
       tile_save_interval: 5.0        # [s] Dirty tile save interval (out-of-core)
+      marker_min_depth: 0.0          # [m] [Dynamic] marker 최소 depth
+      marker_max_depth: 5.0          # [m] [Dynamic] marker 최대 depth
+      marker_alpha: 0.8              # [Dynamic] marker 투명도 (0.0-1.0)
+      show_opencv_visualization: false  # [Dynamic] OpenCV preview window
+
+    # ==========================================================================
+    # OUTPUT [Static]
+    # ==========================================================================
+    output:
+      map_dir: ""                    # "" = use $PKRC_MAP_DIR or ~/data/maps
+      auto_timestamp: true           # 빈 output_map_path면 YYYYMMDD_HHMMSS 디렉터리 생성
 
     # ==========================================================================
     # RVIZ

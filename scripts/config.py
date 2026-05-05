@@ -316,6 +316,14 @@ MAPPER_PARAMS: List[ParameterDef] = [
     ParameterDef('recording.prefix', 'test',
                  'Recording folder prefix',
                  read_only=True),
+
+    # Output (output.*)
+    ParameterDef('output.map_dir', '',
+                 'Map output directory. Empty = use $PKRC_MAP_DIR env var or ~/data/maps',
+                 read_only=True),
+    ParameterDef('output.auto_timestamp', True,
+                 'If output_map_path is empty, create a YYYYMMDD_HHMMSS subdirectory automatically',
+                 read_only=True),
 ]
 
 # Map visualizer parameters
