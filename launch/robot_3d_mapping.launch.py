@@ -33,8 +33,6 @@ LAUNCH ARGUMENTS
   show_opencv   : Show OpenCV sonar visualization                       (default: true)
   use_sim_time  : Use simulation time                                   (default: false)
   rviz          : Launch RViz                                           (default: false)
-  foxglove      : Launch Foxglove bridge (ws://localhost:8765)          (default: false)
-
   launch_visualizer : Launch original map visualizer node               (default: true)
   qos_reliability   : QoS reliability for sensor subscribers            (default: best_effort)
 
@@ -324,7 +322,6 @@ def generate_launch_description():
     # Launch configurations
     use_sim_time = LaunchConfiguration('use_sim_time')
     rviz = LaunchConfiguration('rviz')
-    foxglove = LaunchConfiguration('foxglove')
 
     # Build launch description
     ld = LaunchDescription([
@@ -375,9 +372,6 @@ def generate_launch_description():
         DeclareLaunchArgument('rviz',
             default_value='false',
             description='Launch RViz'),
-        DeclareLaunchArgument('foxglove',
-            default_value='false',
-            description='Launch Foxglove bridge (connect via ws://localhost:8765)'),
 
         # =====================================================================
         # ADVANCED OPTIONS
@@ -409,14 +403,6 @@ def generate_launch_description():
         arguments=['-d', rviz_config],
         parameters=[{'use_sim_time': use_sim_time}],
         condition=IfCondition(rviz)
-    ))
-
-    # Foxglove bridge (conditional)
-    ld.add_action(Node(
-        package='foxglove_bridge',
-        executable='foxglove_bridge',
-        parameters=[{'use_sim_time': use_sim_time}],
-        condition=IfCondition(foxglove)
     ))
 
     # Bag playback (conditional on bag_file)

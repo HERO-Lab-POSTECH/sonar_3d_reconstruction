@@ -24,8 +24,6 @@ LAUNCH ARGUMENTS
   show_opencv   : Show OpenCV visualization                          (default: true)
   use_sim_time  : Use simulation time                                (default: false)
   rviz          : Launch RViz                                        (default: false)
-  foxglove      : Launch Foxglove bridge (ws://localhost:8765)       (default: false)
-
   sonar_pitch   : Sonar pitch angle [deg] [30.0, 60.0, 90.0]         (default: 90.0)
                   Loads matching tilt preset: config/presets/tilt_{pitch}.yaml
                   Each preset has optimized filtering, IWLO, and adaptive parameters
@@ -80,9 +78,6 @@ EXAMPLES
 
   # Out-of-core mapping (disk-based, for large maps):
   ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py map_path:=/path/to/map_dir
-
-  # Disable Foxglove bridge:
-  ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py foxglove:=false
 
   # BEST_EFFORT QoS (for old bag files):
   ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py bag_file:=/path/to/bag use_sim_time:=true qos_reliability:=best_effort
@@ -304,7 +299,6 @@ def generate_launch_description():
     # Launch configurations
     use_sim_time = LaunchConfiguration('use_sim_time')
     rviz = LaunchConfiguration('rviz')
-    foxglove = LaunchConfiguration('foxglove')
 
     # Build launch description
     ld = LaunchDescription([
@@ -352,9 +346,6 @@ def generate_launch_description():
         DeclareLaunchArgument('rviz',
             default_value='false',
             description='Launch RViz'),
-        DeclareLaunchArgument('foxglove',
-            default_value='false',
-            description='Launch Foxglove bridge (connect via ws://localhost:8765)'),
 
         # =====================================================================
         # ADVANCED OPTIONS
@@ -382,15 +373,6 @@ def generate_launch_description():
         parameters=[{'use_sim_time': use_sim_time}],
         condition=IfCondition(rviz)
     ))
-
-    # Foxglove bridge (conditional)
-    ld.add_action(Node(
-        package='foxglove_bridge',
-        executable='foxglove_bridge',
-        parameters=[{'use_sim_time': use_sim_time}],
-        condition=IfCondition(foxglove)
-    ))
-
 
     # Bag playback (conditional on bag_file)
     ld.add_action(OpaqueFunction(function=setup_bag_playback))

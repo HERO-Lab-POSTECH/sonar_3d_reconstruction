@@ -1,5 +1,17 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Phase P2: Foxglove removal (refactor)
+
+### Removed
+- `foxglove` launch arg + `foxglove_bridge` Node 일괄 제거
+  - `launch/3d_mapping.launch.py`
+  - `launch/robot_3d_mapping.launch.py`
+  - `launch/map_visualizer.launch.py`
+
+### Verification
+- colcon build PASS
+- 3 launch 모두 `--show-args`에 foxglove 없음
+
 ## [Unreleased] — Phase D: process_sonar_ray vectorization (perf, A안)
 
 > Master design: `docs/source/design/2026-05-03-quality-perf-uplift-design.md` §3 Phase D
