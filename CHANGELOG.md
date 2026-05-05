@@ -1,5 +1,26 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Phase B-3: Concurrency (refactor)
+
+> Master design: `docs/source/design/2026-05-03-quality-perf-uplift-design.md`
+> Plan: `docs/source/plans/2026-05-05-phase-b3-concurrency.md`
+> 게이트: SLAM quality gating PR #2 머지 완료 (`f45ac5c`).
+
+### Fixed
+- **B-3a (P0-1)** `outofcore_tile_mapper.{h,cpp}`: `get_or_load_tile()` 을 `_unlocked` 헬퍼와 public wrapper 로 분리. 호출자가 outer `cache_mutex_` 잡은 채 `_unlocked` 호출 가능 → 재귀 lock(`std::mutex` non-recursive) 회피. `preload_region` 즉시 적용 (single lock acquisition for whole loop).
+- **B-3b (P1-1)** `scripts/3d_mapper_node.py`: `rclpy.spin(node)` → `MultiThreadedExecutor(num_threads=4)` + 콜백 그룹 partition.
+  - `odom_cbg = ReentrantCallbackGroup()`: 200Hz odom 콜백 동시 실행 허용. `_latest_odom_msg` 는 `_odom_lock` 으로 이미 보호.
+  - `sonar_cbg = MutuallyExclusiveCallbackGroup()`: sonar / range / confidence sub + publish_pointcloud / periodic_flush_and_notify timer 모두 같은 그룹 → mapper 객체 동시 진입 차단. 기존 single-thread 불변량 보존.
+
+### Verification
+- colcon build PASS (Release).
+- 단위 테스트 14 PASS.
+- Smoke test (P-2, 60s): 677 cloud messages, 68/68 frames 처리, 16015/59286 occupied voxels — multi-threaded executor 에서 데드락 / 처리 실패 없음.
+
+### Notes
+- helgrind / TSan race 검사는 컨테이너 toolchain 부재로 deferred.
+- 다음 phase: **C** (algorithm unify, 연속형 IWLO P2-2 + P2-5/6).
+
 ## [Unreleased] — Phase B-2: Correctness Fixes (refactor)
 
 > Master design: `docs/source/design/2026-05-03-quality-perf-uplift-design.md`

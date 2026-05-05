@@ -483,9 +483,15 @@ void OutofcoreTileMapper::preload_region(const Eigen::Vector3d& min_bound,
 {
     auto tile_indices = tile_manager_.get_tiles_in_region(min_bound, max_bound);
 
+    // Hold cache_mutex_ once for the whole preload loop instead of
+    // re-locking per tile. Multi-threaded callers (Phase B-3b
+    // MultiThreadedExecutor) would otherwise see partially-loaded
+    // regions whenever an interleaved callback drained a tile between
+    // our per-tile re-locks.
+    std::lock_guard<std::mutex> lock(cache_mutex_);
     for (const auto& idx : tile_indices) {
         if (tile_manager_.tile_exists(idx)) {
-            get_or_load_tile(idx);
+            get_or_load_tile_unlocked(idx);
         }
     }
 }
@@ -527,6 +533,12 @@ size_t OutofcoreTileMapper::prune_all()
 Tile* OutofcoreTileMapper::get_or_load_tile(const TileIndex& idx)
 {
     std::lock_guard<std::mutex> lock(cache_mutex_);
+    return get_or_load_tile_unlocked(idx);
+}
+
+Tile* OutofcoreTileMapper::get_or_load_tile_unlocked(const TileIndex& idx)
+{
+    // Caller must already hold cache_mutex_.
 
     // Check cache first
     auto* tile_ptr = tile_cache_.get(idx);
