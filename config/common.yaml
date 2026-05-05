@@ -72,6 +72,7 @@ sonar_3d_mapper:
       max_stamp_diff_sec: 0.1       # [s] sonar↔odom stamp diff cutoff
       max_odom_age_sec: 0.5         # [s] odom freshness cutoff (P8 ring-buffer)
       policy: "latest"              # latest | interpolate | nearest
+      compensate_rotation: false    # [Static] apply angular_vel × dt rotation to paired odom
 
     # ==========================================================================
     # VISUALIZATION [Dynamic]

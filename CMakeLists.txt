@@ -71,6 +71,8 @@ install(FILES
   sonar_3d_reconstruction/__init__.py
   sonar_3d_reconstruction/qos.py
   sonar_3d_reconstruction/map_save.py
+  sonar_3d_reconstruction/odom_buffer.py
+  sonar_3d_reconstruction/timesync_diagnostics.py
   DESTINATION local/lib/python3.10/dist-packages/sonar_3d_reconstruction
 )
 
