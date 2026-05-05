@@ -256,10 +256,17 @@ bool OctreeStorage::load_iwlo_meta(const std::string& filepath)
         ifs.read(reinterpret_cast<char*>(&meta.log_odds), sizeof(double));
         ifs.read(reinterpret_cast<char*>(&meta.observation_count), sizeof(int));
 
+        if (!ifs.good()) {
+            std::cerr << "[OctreeStorage] IWLO metadata truncated at entry "
+                      << i << " of declared " << count << std::endl;
+            iwlo_meta_.clear();
+            return false;
+        }
+
         iwlo_meta_[key] = meta;
     }
 
-    return ifs.good();
+    return true;
 }
 
 // =============================================================================
