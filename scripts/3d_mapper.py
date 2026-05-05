@@ -561,38 +561,37 @@ class SonarTo3DMapper:
         # Note: min_range only affects first hit detection, not free space carving
         # All voxels before first hit are free (including those within min_range)
         free_sampling_step = 10
-        for r_idx in range(0, first_hit_idx, free_sampling_step):
+        r_idx = np.arange(0, first_hit_idx, free_sampling_step)
+        if r_idx.size > 0:
             range_m = r_idx * range_resolution
-
-            # Calculate vertical spread and sample count
             # Sparse sampling (4x voxel) for free space - sufficient for carving
             vertical_spread = range_m * np.tan(half_aperture)
-            num_vertical = max(1, int(vertical_spread / (self.voxel_resolution * 4)))
+            num_vert = np.maximum(1, (vertical_spread / (self.voxel_resolution * 4)).astype(int))
+            V_max = int(num_vert.max())
+            v_steps = np.arange(-V_max, V_max + 1)                          # (2V+1,)
+            mask = np.abs(v_steps[None, :]) <= num_vert[:, None]            # (R, 2V+1)
+            # vertical_angle[r, v] = (v_steps[v] / num_vert[r]) * half_aperture
+            vertical_angle = (v_steps[None, :].astype(np.float64) /
+                              num_vert[:, None].astype(np.float64)) * half_aperture
+            cos_va = np.cos(vertical_angle)
+            sin_va = np.sin(vertical_angle)
+            range_2d = range_m[:, None]
+            # Sonar coordinate system (NED-style, right-handed):
+            #   X = forward (range direction at bearing=0)
+            #   Y = right (starboard, positive bearing direction)
+            #   Z = down (positive vertical angle = below horizontal)
+            # Y uses negative sin() because positive bearing is clockwise
+            # when viewed from above, but sin() assumes CCW positive.
+            x_s = range_2d * cos_va * np.cos(bearing_angle)
+            y_s = -range_2d * cos_va * np.sin(bearing_angle)
+            z_s = range_2d * sin_va
+            ones = np.ones_like(x_s)
+            pts_sonar = np.stack([x_s, y_s, z_s, ones], axis=-1)[mask]      # (N, 4)
+            pts_world = (T_sonar_to_world @ pts_sonar.T).T[:, :3]           # (N, 3)
+            for pw in pts_world:
+                updates.append((pw, self.log_odds_free, 'free', None))
 
-            for v_step in range(-num_vertical, num_vertical + 1):
-                # Normalize to [-1, 1] for exact aperture coverage: ±half_aperture
-                vertical_angle = (v_step / num_vertical) * half_aperture
 
-                # Sonar coordinate system (NED-style, right-handed):
-                #   X = forward (range direction at bearing=0)
-                #   Y = right (starboard, positive bearing direction)
-                #   Z = down (positive vertical angle = below horizontal)
-                #
-                # Spherical to Cartesian conversion:
-                #   - bearing_angle: horizontal angle from forward (+X axis)
-                #   - vertical_angle: elevation from horizontal plane
-                #   - Y uses negative sin() because positive bearing is clockwise
-                #     when viewed from above, but sin() assumes CCW positive
-                x_sonar = range_m * np.cos(vertical_angle) * np.cos(bearing_angle)
-                y_sonar = -range_m * np.cos(vertical_angle) * np.sin(bearing_angle)
-                z_sonar = range_m * np.sin(vertical_angle)
-
-                # Transform to world
-                pt_sonar = np.array([x_sonar, y_sonar, z_sonar, 1.0])
-                pt_world = T_sonar_to_world @ pt_sonar
-
-                updates.append((pt_world[:3], self.log_odds_free, 'free', None))
-        
         # Process occupied regions (dense)
         if first_hit_idx < len(intensity_profile):
             # Find all high intensity regions
