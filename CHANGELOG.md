@@ -1,5 +1,45 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Phase D: process_sonar_ray vectorization (perf, A안)
+
+> Master design: `docs/source/design/2026-05-03-quality-perf-uplift-design.md` §3 Phase D
+> Phase design: `docs/source/design/2026-05-05-phase-d-vectorization-design.md`
+> Plan: `docs/source/plans/2026-05-05-phase-d-vectorization.md`
+
+### Changed
+- **D-1 (P1-3 free-space)** `scripts/3d_mapper.py::process_sonar_ray`: free-space inner loop (range × vertical_step) 를 `np.arange` 기반 (R, 2V+1) 메쉬 + 단일 batched transform `T @ pts.T` 로 교체. ray 당 ~4N scalar transform → ~1 numpy call.
+- **D-2 (P1-3 occupied)** `scripts/3d_mapper.py::process_sonar_ray`: occupied inner loop 도 동일 broadcast 패턴 (voxel_resolution × 1.5 dense sampling). intensity threshold + min/max range 는 단일 boolean mask `mask_r` 로 통합. break-on-max_range 의미는 monotonic `range_m` 로 보존. transform 은 `np.einsum('ij,rvj->rvi', T, pts_sonar)` 로 (R, 2V+1, 4) 텐서 일괄 처리. inner Python loop 한 단은 점별 intensity attach 위해 유지 (~5% 비용).
+
+### Added
+- `tests/test_process_sonar_ray_vectorization.py` — golden fixture 비교 unit test 2 케이스.
+  - `test_vectorized_matches_scalar_for_100_bearings` — 반환 형태 sanity.
+  - `test_vectorized_voxel_keys_bit_exact` — 100 bearing × random intensity profile 에 대해 voxel key (kind, ix, iy, iz) 집합이 scalar baseline 과 **완전 동일** (atol=0).
+- `tests/fixtures/process_sonar_ray_scalar_golden.pkl` — scalar baseline snapshot (1.6 MB, 100 bearing × ~224 update).
+- `docs/source/design/2026-05-05-phase-d-vectorization-design.md` — Phase D thin design.
+- `docs/source/plans/2026-05-05-phase-d-vectorization.md` — Phase D 4-task plan.
+
+### Verification
+- colcon build PASS (Release).
+- pytest tests/ — **16/16 PASS** (14 prior + 2 new vectorization tests).
+- Unit-level **bit-exact** 검증: 100 bearing × random intensity 에 대해 vectorized 와 scalar 의 voxel key 집합이 atol=0 에서 일치.
+- 회귀 측정 (P-2, `m3000d-range15-tilt90`, 90s, fast_lio odom, ROS_DOMAIN_ID=0):
+  - baseline (main 7bf13e4): 21,762 voxels, avg proc_time **104.2 ms** (Frame 100/200/300/400 = 105.3 / 104.0 / 94.3 / 113.1 ms).
+  - candidate (HEAD): 21,765 voxels, avg proc_time **71.0 ms** (70.2 / 72.5 / 65.4 / 75.8 ms).
+  - jaccard = **0.974**, common = 21,480 voxels (~98.7%), mean Δlog-odds = 0.078.
+  - **처리량 1.47×** — Q-D1 임계 1.5× 에 약 0.03× 미달.
+
+### Notes
+- **정확도 0.974 vs 임계 0.99**: B-1 측정에서 동일 코드 두 run 의 jaccard ≈ 0.82 였던 환경 노이즈 (fast_lio drift + bag timing 비결정성) 가 회귀 노이즈의 거의 전부. 코드 단위 bit-exact 는 unit test 의 100 bearing × random intensity 에서 voxel key 집합이 완전 일치함 (atol=0) 으로 별도 입증 — 알고리즘 동작 보존 확실.
+- **처리량 1.47× vs 임계 1.5×**: 오차 0.03× 는 측정당 ±5 ms 변동 범위 내 (Frame 100~400 의 ±9 ms 변동 참조). 추가 sample 누적이나 더 긴 (180s+) replay 로 평균이 안정화되면 1.5× 도달 가능성 있음.
+- **Q-D1 결정 의뢰**: A안 수치는 임계와 매우 근접하나 strict 통과는 아님. 다음 옵션을 사용자 결정 의뢰:
+  - (a) 본 PR 머지 후 Phase D 종결 — 코드 단위 bit-exact + 1.47× 처리량 효과를 충분으로 봄.
+  - (b) 본 PR 머지 후 B안 (C++ ray-cast 이관) 추가 진행 — 별도 spec / PR.
+  - (c) 본 PR 머지 차단, 추가 vectorize 여지 (예: `_process_rays_with_shadow` 외부 루프) 탐색.
+- 호출자 (`_process_rays_with_shadow`) 변경 없음. 반환 시그니처 `List[Tuple[ndarray(3,), float, str, Optional[float]]]` 유지.
+- `_first_hit_index` 와 shadow region 검사는 이미 Phase B-1 에서 vectorize 됨 (변경 없음).
+
+---
+
 ## [Unreleased] — Phase C: Octree Storage Hardening (refactor)
 
 > Master design: `docs/source/design/2026-05-03-quality-perf-uplift-design.md`

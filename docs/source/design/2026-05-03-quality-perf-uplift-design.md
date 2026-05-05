@@ -223,6 +223,11 @@
 - 처리량: ≥ 1.5× baseline (A안 임계), ≥ 5× baseline (B안 임계)
 - 안정성: 60s+ 연속 실행에서 메모리 누수·드롭률 변화 없음
 
+**A안 측정 결과 (2026-05-05, P-2 m3000d-range15-tilt90, 90s, fast_lio odom)**:
+- jaccard = 0.974 (임계 0.99 미달, 그러나 unit test 의 100 bearing 에서 voxel key bit-exact atol=0 별도 입증).
+- avg proc_time baseline 104.2 ms → candidate 71.0 ms = **1.47×** (임계 1.5× 에 0.03× 미달).
+- Q-D1 결정 의뢰는 PR description 에서. B안 진행 여부는 측정 변동 (±5 ms) 과 fast_lio drift 노이즈를 감안한 사용자 판단에 위임.
+
 ---
 
 ## 4. 회귀 검증 인프라
