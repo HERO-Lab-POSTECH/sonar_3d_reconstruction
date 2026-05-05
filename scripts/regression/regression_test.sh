@@ -44,6 +44,20 @@ set -euo pipefail
 # 0 이 아닌 값이면 default group 과 분리됨. override 가능.
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-42}"
 
+# 환경 fail-safe: 호출 셸이 ROS env 를 source 하지 않은 채 들어와도
+# launch 가 패키지를 찾도록 자체적으로 source 한다. 이미 source 된
+# 호출자는 동일 path 가 prefix 되어도 동작에 영향 없음.
+: "${ROS_DISTRO:=humble}"
+if [[ -f "/opt/ros/${ROS_DISTRO}/setup.bash" ]]; then
+    # shellcheck disable=SC1090
+    source "/opt/ros/${ROS_DISTRO}/setup.bash"
+fi
+: "${WORKSPACE_SETUP:=/workspace/ros2_ws/install/setup.bash}"
+if [[ -f "${WORKSPACE_SETUP}" ]]; then
+    # shellcheck disable=SC1090
+    source "${WORKSPACE_SETUP}"
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
