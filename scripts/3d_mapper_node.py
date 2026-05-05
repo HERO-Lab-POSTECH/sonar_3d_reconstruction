@@ -161,13 +161,17 @@ class SonarMapperNode(Node):
         self.latest_odometry = None
 
         # === SLAM quality gate state ===
+        # _wall_* fields use time.monotonic() intentionally (NTP-immune
+        # wall clock). They measure elapsed time for grace-period and
+        # stale-confidence checks — not bag-clock-correlated; never replace
+        # with self.get_clock().now().
         self._latest_confidence = None  # float | None
-        self._latest_confidence_wall_time = None  # float | None
+        self._latest_confidence_wall_time = None  # float | None — wall clock
         self._quality_drop_count = 0
         self._quality_stale_warn_count = 0
         self._quality_closed_no_confidence_warned = False
         self._quality_closed_stale_warned = False
-        self._node_start_wall_time = time.monotonic()
+        self._node_start_wall_time = time.monotonic()  # wall clock
         self._quality_threshold = float(self.get_parameter('slam_quality.threshold').value)
         self._quality_fail_mode = str(self.get_parameter('slam_quality.fail_mode').value)
         self._quality_grace_period_sec = float(self.get_parameter('slam_quality.grace_period_sec').value)
@@ -177,7 +181,7 @@ class SonarMapperNode(Node):
         # Frame counter
         self.frame_count = 0
         self.frame_skip = config['frame_skip']
-        self.last_publish_time = time.time()
+        self._max_stamp_diff_sec = float(self.get_parameter('time_sync.max_stamp_diff_sec').value)
 
         # Register parameter change callback for dynamic updates
         self.add_on_set_parameters_callback(self.parameter_callback)
@@ -638,10 +642,13 @@ class SonarMapperNode(Node):
                 self._odom_warn_logged = True
             return
 
-        # Log time info periodically for debugging
+        # Log time info periodically for debugging.
+        # ros_now uses ROS clock — when use_sim_time:=true (bag replay), this
+        # tracks bag time, so age values stay meaningful. With wall clock the
+        # ages would drift by the wall–sim delta.
         sonar_t = sonar_msg.header.stamp.sec + sonar_msg.header.stamp.nanosec * 1e-9
         odom_t = odom_msg.header.stamp.sec + odom_msg.header.stamp.nanosec * 1e-9
-        wall_t = time.time()
+        ros_now = self.get_clock().now().nanoseconds * 1e-9
         stamp_diff = abs(sonar_t - odom_t)
 
         if not hasattr(self, '_sync_log_count'):
@@ -651,19 +658,18 @@ class SonarMapperNode(Node):
             self.get_logger().info(
                 f'[TimeSync] sonar_stamp={sonar_t:.3f} odom_stamp={odom_t:.3f} '
                 f'stamp_diff={sonar_t - odom_t:.3f}s '
-                f'sonar_age={wall_t - sonar_t:.3f}s odom_age={wall_t - odom_t:.3f}s'
+                f'sonar_age={ros_now - sonar_t:.3f}s odom_age={ros_now - odom_t:.3f}s'
             )
 
         # Reject frames where sonar-odom time difference exceeds threshold
-        MAX_STAMP_DIFF = 0.1  # seconds
-        if stamp_diff > MAX_STAMP_DIFF:
+        if stamp_diff > self._max_stamp_diff_sec:
             if not hasattr(self, '_sync_drop_count'):
                 self._sync_drop_count = 0
             self._sync_drop_count += 1
             if self._sync_drop_count % 10 == 1:
                 self.get_logger().warn(
-                    f'[TimeSync] Dropping frame: stamp_diff={stamp_diff:.3f}s > {MAX_STAMP_DIFF}s '
-                    f'(dropped {self._sync_drop_count} frames total)'
+                    f'[TimeSync] Dropping frame: stamp_diff={stamp_diff:.3f}s > '
+                    f'{self._max_stamp_diff_sec}s (dropped {self._sync_drop_count} frames total)'
                 )
             return
 
