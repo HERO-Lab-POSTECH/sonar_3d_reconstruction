@@ -122,11 +122,16 @@ public:
      * @param points Nx3 matrix of point coordinates
      * @param intensities N-vector of intensity values
      * @param is_occupied N-vector of boolean flags
+     * @param weights Optional N-vector of per-point delta scaling
+     *   factors. Empty → all 1.0 (legacy behaviour). Used by callers
+     *   that aggregate multiple sub-voxel observations into a single
+     *   batch entry and want their cumulative effect reflected.
      */
     void batch_update_iwlo(
         const Eigen::MatrixXd& points,
         const Eigen::VectorXd& intensities,
-        const std::vector<bool>& is_occupied
+        const std::vector<bool>& is_occupied,
+        const Eigen::VectorXd& weights = Eigen::VectorXd()
     ) override;
 
     // batch_update_weighted_average() removed - using IWLO only

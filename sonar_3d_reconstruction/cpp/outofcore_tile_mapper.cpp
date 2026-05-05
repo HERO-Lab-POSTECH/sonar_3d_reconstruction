@@ -40,7 +40,8 @@ OutofcoreTileMapper::~OutofcoreTileMapper()
 
 void OutofcoreTileMapper::batch_update_iwlo(const Eigen::MatrixXd& points,
                                             const Eigen::VectorXd& intensities,
-                                            const std::vector<bool>& is_occupied)
+                                            const std::vector<bool>& is_occupied,
+                                            const Eigen::VectorXd& weights)
 {
     if (points.rows() != intensities.rows() ||
         points.rows() != static_cast<int>(is_occupied.size())) {
@@ -50,6 +51,16 @@ void OutofcoreTileMapper::batch_update_iwlo(const Eigen::MatrixXd& points,
     if (points.cols() != 3) {
         throw std::invalid_argument("batch_update_iwlo: points must be Nx3");
     }
+
+    if (weights.rows() > 0 && weights.rows() != points.rows()) {
+        throw std::invalid_argument("batch_update_iwlo: weights size mismatch");
+    }
+    // P0-5 weight propagation into out-of-core tiles is intentionally
+    // deferred — the per-tile Tile::batch_update path does not yet
+    // accept a weight vector. Default callers (weights empty) still
+    // get legacy behaviour. Callers that supply weights when the
+    // out-of-core backend is active are silently treated as 1.0 here.
+    (void)weights;
 
     // Group points by tile
     auto groups = group_points_by_tile(points);

@@ -10,6 +10,7 @@ Author: Sonar 3D Reconstruction Team
 Date: 2025
 """
 
+import bisect
 import numpy as np
 from collections import defaultdict
 from typing import Tuple, List, Dict, Any, Optional
@@ -483,38 +484,21 @@ class SonarTo3DMapper:
         bearing_resolution = self.horizontal_fov / self.image_width
         tolerance = bearing_resolution * self.angular_cone_width * 2
 
-        # Binary search for nearest bearing
-        left, right = 0, len(bearing_first_hits) - 1
-        while left <= right:
-            mid = (left + right) // 2
-            mid_bearing = bearing_first_hits[mid][0]
-
-            if abs(mid_bearing - bearing_angle) < tolerance:
-                # Found adjacent bearing - check shadow
-                if mid_bearing != bearing_angle:
-                    first_hit = bearing_first_hits[mid][1]
-                    if first_hit > 0 and voxel_range > first_hit:
-                        return True
-
-                # Check immediate neighbors
-                if mid > 0:
-                    prev_bearing, prev_hit = bearing_first_hits[mid - 1]
-                    if abs(prev_bearing - bearing_angle) < tolerance and prev_bearing != bearing_angle:
-                        if prev_hit > 0 and voxel_range > prev_hit:
-                            return True
-
-                if mid < len(bearing_first_hits) - 1:
-                    next_bearing, next_hit = bearing_first_hits[mid + 1]
-                    if abs(next_bearing - bearing_angle) < tolerance and next_bearing != bearing_angle:
-                        if next_hit > 0 and voxel_range > next_hit:
-                            return True
-                return False
-
-            elif mid_bearing < bearing_angle:
-                left = mid + 1
-            else:
-                right = mid - 1
-
+        # Bracket the bearings whose angle is within `tolerance` of the
+        # query. `bisect` over the sorted bearings — `bearing_first_hits[i][0]`
+        # is the sort key — and check every entry in [left, right). Previous
+        # implementation used a hand-rolled binary search that examined only
+        # `mid` and `mid±1`, missing entries when more than two bearings fell
+        # inside the tolerance window (full overlap mode).
+        bearings = [b for b, _ in bearing_first_hits]
+        left = bisect.bisect_left(bearings, bearing_angle - tolerance)
+        right = bisect.bisect_right(bearings, bearing_angle + tolerance)
+        for i in range(left, right):
+            other_bearing, other_hit = bearing_first_hits[i]
+            if other_bearing == bearing_angle:
+                continue
+            if other_hit > 0 and voxel_range > other_hit:
+                return True
         return False
 
     def world_to_key(self, x: float, y: float, z: float) -> Tuple[int, int, int]:
@@ -651,7 +635,8 @@ class SonarTo3DMapper:
         return updates
     
     def _collect_first_hits(self, polar_image: np.ndarray, bearing_step: int,
-                            range_resolution: float) -> List[Tuple[float, float]]:
+                            range_resolution: float,
+                            depth_filter_mask: np.ndarray = None) -> List[Tuple[float, float]]:
         """
         Collect first hit information for shadow region calculation.
 
@@ -659,6 +644,10 @@ class SonarTo3DMapper:
             polar_image: 2D sonar image (range_bins x bearing_bins)
             bearing_step: Step size for bearing iteration
             range_resolution: Range resolution in meters per bin
+            depth_filter_mask: Optional boolean array per bearing
+                (True=keep, False=skip). When provided, bearings filtered
+                out by depth estimation are excluded from the shadow
+                geometry, matching `_process_rays_with_shadow`.
 
         Returns:
             Sorted list of (bearing_angle, first_hit_range) tuples
@@ -669,6 +658,8 @@ class SonarTo3DMapper:
         for b_idx in range(0, bearing_bins, bearing_step):
             bearing_angle = self.bearing_angles[b_idx]
             if not self.is_bearing_in_valid_fov(bearing_angle):
+                continue
+            if depth_filter_mask is not None and not depth_filter_mask[b_idx]:
                 continue
 
             intensity_profile = polar_image[:, b_idx]
@@ -744,11 +735,13 @@ class SonarTo3DMapper:
         points_list = []
         intensities_list = []
         is_occupied_list = []
+        weights_list = []
         num_occupied = 0
         num_free = 0
 
         for key, update_info in voxel_updates.items():
-            if update_info['count'] > 0:
+            count = update_info['count']
+            if count > 0:
                 world_point = self.key_to_world(key)
                 points_list.append(world_point)
 
@@ -757,6 +750,7 @@ class SonarTo3DMapper:
 
                 is_occupied = update_info['type'] == 'occupied'
                 is_occupied_list.append(is_occupied)
+                weights_list.append(float(count))
 
                 if is_occupied:
                     num_occupied += 1
@@ -767,7 +761,14 @@ class SonarTo3DMapper:
             points_array = np.array(points_list, dtype=np.float64)
             intensities_array = np.array(intensities_list, dtype=np.float64)
             is_occupied_array = np.array(is_occupied_list, dtype=bool)
-            self.octree.batch_update_iwlo(points_array, intensities_array, is_occupied_array)
+            weights_array = np.array(weights_list, dtype=np.float64)
+            # P0-5: pass count as weight so a voxel that received N
+            # observations in this frame applies N× the per-observation
+            # log-odds delta — converges proportionally faster.
+            self.octree.batch_update_iwlo(
+                points_array, intensities_array, is_occupied_array,
+                weights_array,
+            )
 
         return num_occupied, num_free
 
@@ -813,18 +814,22 @@ class SonarTo3DMapper:
         bearing_step = max(1, bearing_bins // 256)
         range_resolution = self.max_range / range_bins
 
-        # Phase 1: Collect first hits
-        bearing_first_hits = self._collect_first_hits(polar_image, bearing_step, range_resolution)
-
-        # Phase 1.5: Depth estimation (reference map comparison)
+        # Phase 1: Depth estimation (reference map comparison) — produces the
+        # bearing mask that filters both shadow geometry and ray processing.
         depth_estimation_result = self.compute_depth_estimation(
             polar_image, bearing_step, T_sonar_to_world, sonar_origin_world, range_resolution
         )
-
-        # Phase 2: Process rays with shadow-aware updates + depth filter
         depth_filter_mask = None
         if depth_estimation_result is not None:
             depth_filter_mask = depth_estimation_result.get('bearing_mask')
+
+        # Phase 2: Collect first hits using the same mask so shadow geometry
+        # is computed only over bearings that survive depth filtering (P0-4).
+        bearing_first_hits = self._collect_first_hits(
+            polar_image, bearing_step, range_resolution, depth_filter_mask
+        )
+
+        # Phase 3: Process rays with shadow-aware updates + depth filter
         voxel_updates = self._process_rays_with_shadow(
             polar_image, bearing_step, T_sonar_to_world, sonar_origin_world,
             bearing_first_hits, depth_filter_mask

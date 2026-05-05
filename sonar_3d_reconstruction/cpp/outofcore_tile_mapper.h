@@ -56,7 +56,8 @@ public:
      */
     void batch_update_iwlo(const Eigen::MatrixXd& points,
                            const Eigen::VectorXd& intensities,
-                           const std::vector<bool>& is_occupied) override;
+                           const std::vector<bool>& is_occupied,
+                           const Eigen::VectorXd& weights = Eigen::VectorXd()) override;
 
     /**
      * Set IWLO parameters

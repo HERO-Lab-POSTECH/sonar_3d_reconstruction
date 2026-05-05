@@ -306,7 +306,8 @@ double ProbabilityUpdater::compute_alpha(int observation_count) const
 void ProbabilityUpdater::batch_update_iwlo(
     const Eigen::MatrixXd& points,
     const Eigen::VectorXd& intensities,
-    const std::vector<bool>& is_occupied)
+    const std::vector<bool>& is_occupied,
+    const Eigen::VectorXd& weights)
 {
     if (points.rows() != intensities.rows()) {
         throw std::invalid_argument("Points and intensities must have same number of rows");
@@ -318,6 +319,11 @@ void ProbabilityUpdater::batch_update_iwlo(
 
     if (points.cols() != 3) {
         throw std::invalid_argument("Points must have 3 columns (x, y, z)");
+    }
+
+    const bool has_weights = (weights.rows() > 0);
+    if (has_weights && weights.rows() != points.rows()) {
+        throw std::invalid_argument("Weights must have same number of rows as points (or be empty)");
     }
 
     for (int i = 0; i < points.rows(); ++i) {
@@ -371,6 +377,15 @@ void ProbabilityUpdater::batch_update_iwlo(
         } else {
             // Free space update: ΔL = L_free × α(n) × scale (now with bidirectional protection)
             delta_L = log_odds_free_ * alpha_n * adapt_scale;
+        }
+
+        // 4b. Per-point delta scale (P0-5): callers that fold multiple
+        // sub-voxel observations into one batch entry pass the count as
+        // weight so the cumulative effect is applied here rather than
+        // collapsed to a single update. Default 1.0 preserves the
+        // legacy behaviour for callers that omit weights.
+        if (has_weights) {
+            delta_L *= weights(i);
         }
 
         // 5. Apply update with saturation limits

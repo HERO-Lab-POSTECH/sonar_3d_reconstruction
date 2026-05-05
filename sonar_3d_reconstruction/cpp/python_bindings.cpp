@@ -120,8 +120,10 @@ PYBIND11_MODULE(sonar_3d_reconstruction_cpp, m) {
              "Set IWLO (Intensity-Weighted Log-Odds) parameters")
         .def("batch_update_iwlo", &sonar_3d_reconstruction::ProbabilityUpdater::batch_update_iwlo,
              py::arg("points"), py::arg("intensities"), py::arg("is_occupied"),
+             py::arg("weights") = Eigen::VectorXd(),
              py::call_guard<py::gil_scoped_release>(),
-             "Batch update with IWLO method (combines Log-Odds with Weighted Average)")
+             "Batch update with IWLO method (combines Log-Odds with Weighted Average). "
+             "Optional `weights` per-point delta multiplier (P0-5 voxel multiplicity).")
         .def("set_incremental_sync", &sonar_3d_reconstruction::ProbabilityUpdater::set_incremental_sync,
              py::arg("enable") = true,
              "Enable or disable incremental synchronization")
@@ -153,8 +155,10 @@ PYBIND11_MODULE(sonar_3d_reconstruction_cpp, m) {
         // IWLO update (main interface)
         .def("batch_update_iwlo", &sonar_3d_reconstruction::OutofcoreTileMapper::batch_update_iwlo,
              py::arg("points"), py::arg("intensities"), py::arg("is_occupied"),
+             py::arg("weights") = Eigen::VectorXd(),
              py::call_guard<py::gil_scoped_release>(),
-             "Batch update with IWLO method")
+             "Batch update with IWLO method. `weights` (P0-5) currently "
+             "validated but not yet propagated through Tile::batch_update.")
         // Parameter setters
         .def("set_iwlo_params", &sonar_3d_reconstruction::OutofcoreTileMapper::set_iwlo_params,
              py::arg("sharpness"), py::arg("decay_rate"), py::arg("min_alpha"),

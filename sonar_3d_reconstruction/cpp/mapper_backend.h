@@ -41,11 +41,14 @@ public:
      * @param points Nx3 matrix of point coordinates
      * @param intensities N-vector of intensity values
      * @param is_occupied N-vector of boolean flags
+     * @param weights Optional N-vector of delta scaling factors. Empty
+     *   defaults to all 1.0 to preserve legacy behaviour.
      */
     virtual void batch_update_iwlo(
         const Eigen::MatrixXd& points,
         const Eigen::VectorXd& intensities,
-        const std::vector<bool>& is_occupied) = 0;
+        const std::vector<bool>& is_occupied,
+        const Eigen::VectorXd& weights = Eigen::VectorXd()) = 0;
 
     // =========================================================================
     // Parameter Configuration API (Required)
