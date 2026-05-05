@@ -22,12 +22,12 @@
 baseline 은 main HEAD (또는 phase 시작 시 찍은 archive baseline tag) 를 의미합니다.
 
 ```bash
-cd /workspace/ros2_ws_phase_a/src/sonar_3d_reconstruction
+cd /workspace/ros2_ws/src/sonar_3d_reconstruction
 git checkout main
-cd /workspace/ros2_ws_phase_a
+cd /workspace/ros2_ws
 colcon build --packages-select sonar_3d_reconstruction --cmake-args -DCMAKE_BUILD_TYPE=Release
 source install/setup.bash
-bash src/sonar_3d_reconstruction/scripts/regression/regression_test.sh baseline
+ROS_DOMAIN_ID=42 bash src/sonar_3d_reconstruction/scripts/regression/regression_test.sh baseline
 ```
 
 ### b) candidate 빌드 + 측정
@@ -35,12 +35,12 @@ bash src/sonar_3d_reconstruction/scripts/regression/regression_test.sh baseline
 candidate 는 현재 refactor branch HEAD 입니다.
 
 ```bash
-cd /workspace/ros2_ws_phase_a/src/sonar_3d_reconstruction
+cd /workspace/ros2_ws/src/sonar_3d_reconstruction
 git checkout refactor/phase-b1-perf-surgical
-cd /workspace/ros2_ws_phase_a
+cd /workspace/ros2_ws
 colcon build --packages-select sonar_3d_reconstruction --cmake-args -DCMAKE_BUILD_TYPE=Release
 source install/setup.bash
-bash src/sonar_3d_reconstruction/scripts/regression/regression_test.sh candidate
+ROS_DOMAIN_ID=42 bash src/sonar_3d_reconstruction/scripts/regression/regression_test.sh candidate
 ```
 
 ### c) 비교 + plot
@@ -56,14 +56,15 @@ python3 src/sonar_3d_reconstruction/scripts/regression/regression_plot.py
 
 | 변수 | 기본값 | 의미 |
 |------|--------|------|
-| `BAG_PATH` | (P-1 경로, §6 참조) | replay 할 bag 파일 절대 경로 |
-| `PLAY_DURATION` | `60` | bag 재생 시간 (초). 짧게 잡으면 노이즈 증가, 길수록 안정 |
+| `BAG_PATH` | (P-1 경로, §5 참조) | replay 할 bag 파일 절대 경로 |
+| `PLAY_DURATION` | `90` | bag 재생 시간 (초). 짧게 잡으면 노이즈 증가, 길수록 안정 |
 | `OUT_DIR` | `/tmp/sonar3d_regression` | 결과 저장 루트 (`baseline/`, `candidate/`, `compare/` 하위 생성) |
-| `JACCARD_THRESHOLD` | `1.0` (B-1) | jaccard_set 최소값 (phase 별 §5 표 참조) |
+| `JACCARD_THRESHOLD` | `1.0` (B-1) | jaccard_set 최소값 (phase 별 §4 표 참조) |
 | `MEAN_LOG_ODDS_THRESHOLD` | `0.0` (B-1) | mean_log_odds_diff 최대값 |
-| `LAUNCH_FILE` | `octree_sonar_mapper.launch.py` | 실행할 launch 파일 |
-| `SLAM_LAUNCH_PKG` | `sonar_3d_reconstruction` | launch 가 속한 패키지 |
-| `PC_TOPIC` | `/sonar/pointcloud` | replay 측 토픽 (필요 시 remap) |
+| `LAUNCH_PKG` / `LAUNCH_FILE` | `sonar_3d_reconstruction` / `3d_mapping.launch.py` | sonar 처리 launch |
+| `SLAM_LAUNCH_PKG` / `SLAM_LAUNCH_FILE` | `fast_lio` / `mapping.launch.py` | SLAM (odom 공급) launch |
+| `PC_TOPIC` | `/pkrc/sonar/cpp_pointcloud` | record 대상 출력 토픽 |
+| `ROS_DOMAIN_ID` | `42` | DDS 도메인 격리 (§8 참조). 0 이 아니면 default group 과 분리 |
 
 ## 4. 임계값 (Spec §4.4)
 
@@ -91,20 +92,40 @@ python3 src/sonar_3d_reconstruction/scripts/regression/regression_plot.py
 - 결과 디렉토리(`/tmp/sonar3d_regression/`) 는 `.gitignore` 대상 — repo commit 금지 (재생성 가능).
 - plot 이미지(PNG) 는 PR 본문에 attach 만 하고 repo 에는 commit 하지 않습니다.
 - bag/db3/metadata.yaml 절대 삭제·수정 금지 (CLAUDE.md 데이터 안전 정책). `mv` 만 허용.
-- 격리 worktree(`/workspace/ros2_ws_phase_a/`) 에서 작업합니다 — 메인 worktree(`/workspace/ros2_ws/`) 와 환경 충돌 방지.
 
-## 7. 환경 셋업 주의 (Task 0 발견)
-
-메인 worktree 에 동일 패키지가 설치돼 있으면 의존성 자동 source 결과 generic_type 이중 register 충돌이 발생합니다. 격리 worktree 에서 측정 시 다음 절차로 환경 변수를 정리한 뒤 진행합니다.
+## 7. 환경 셋업 (단일 worktree, 2026-05-04 통합 후)
 
 ```bash
 unset AMENT_PREFIX_PATH CMAKE_PREFIX_PATH ROS_PACKAGE_PATH COLCON_PREFIX_PATH PYTHONPATH LD_LIBRARY_PATH
 source /opt/ros/humble/setup.bash
-source /workspace/ros2_ws_phase_a/install/setup.bash
-# 메인 ws sonar_3d_reconstruction 항목 제거 (의존성 자동 source 결과)
-for var in PYTHONPATH AMENT_PREFIX_PATH LD_LIBRARY_PATH; do
-    val=$(eval "echo \$$var")
-    new=$(echo "$val" | tr ':' '\n' | grep -v '/workspace/ros2_ws/install/sonar_3d_reconstruction' | paste -sd:)
-    eval "export $var=\"$new\""
-done
+cd /workspace/ros2_ws
+colcon build --packages-select sonar_3d_reconstruction --cmake-args -DCMAKE_BUILD_TYPE=Release
+source install/setup.bash
 ```
+
+## 8. 측정 환경 함정 (2026-05-04 발견, 후속 phase 모두 적용)
+
+### a) DDS 도메인 격리 (`ROS_DOMAIN_ID`)
+
+같은 컨테이너의 다른 Claude 세션이 default `ROS_DOMAIN_ID=0` 으로 sonar 노드를 띄우고 있으면 토픽이 cross-talk 되어 `cloud_0.db3` messages=0 같은 이상 결과가 나옵니다. `regression_test.sh` 헤더에서 `ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-42}"` 로 격리 — override 가능.
+
+다른 세션 활동 검사 (kill 금지, 격리만으로 충분):
+
+```bash
+ps aux | grep '/workspace/ros2_ws/install/sonar_3d_reconstruction' | grep -v grep
+ps aux | grep -E '3d_mapper_node|fastlio_mapping' | grep -v grep
+```
+
+### b) `ros2 launch` SIGINT 자식 미정리 → process group 강제 정리
+
+`fastlio_mapping` 등 C++ 노드가 SIGINT 만으로는 종료되지 않아 `wait` 가 hang 합니다. `regression_test.sh` 는 `setsid` 로 launch 를 새 process group 에 띄우고 종료 시 `kill -INT/-TERM/-KILL -<pgid>` 3 단계 escalation 으로 정리합니다.
+
+### c) cpp module 이중 dlopen 회피
+
+테스트/스모크 코드는 반드시 top-level 만 import:
+
+```python
+from sonar_3d_reconstruction import ProbabilityUpdater, OutofcoreTileMapper, MemoryStats
+```
+
+`from sonar_3d_reconstruction.cpp_module import ...` 또는 `from sonar_3d_reconstruction import sonar_3d_reconstruction_cpp` 는 **금지** (pybind11 `generic_type already registered` 충돌).

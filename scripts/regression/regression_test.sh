@@ -32,6 +32,10 @@ set -euo pipefail
 : "${JACCARD_THRESHOLD:=1.0}"
 : "${MEAN_LOG_ODDS_THRESHOLD:=0.0}"
 
+# DDS 격리: 같은 컨테이너의 다른 세션 노드와 cross-talk 방지.
+# 0 이 아닌 값이면 default group 과 분리됨. override 가능.
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-42}"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 usage() {
@@ -77,25 +81,26 @@ run_replay() {
     fi
 
     echo "[regression_test] mode=${label} bag=${BAG_PATH} duration=${PLAY_DURATION}s out=${out}"
+    echo "[regression_test] ROS_DOMAIN_ID=${ROS_DOMAIN_ID}"
 
     # 1) out 디렉토리 정리 + 생성
     rm -rf "${out}"
     mkdir -p "${out}"
 
-    # 2) fast_lio mapping.launch.py 백그라운드 launch
+    # 2) fast_lio mapping.launch.py 백그라운드 launch (setsid → 독립 process group)
     echo "[regression_test] launching SLAM: ${SLAM_LAUNCH_PKG} ${SLAM_LAUNCH_FILE}"
-    ros2 launch "${SLAM_LAUNCH_PKG}" "${SLAM_LAUNCH_FILE}" \
+    setsid ros2 launch "${SLAM_LAUNCH_PKG}" "${SLAM_LAUNCH_FILE}" \
         use_sim_time:=true rviz:=false foxglove:=false \
         > "${out}/slam_launch.log" 2>&1 &
-    local slam_pid=$!
+    local slam_pgid=$!
     sleep 5
 
-    # 3) sonar_3d mapping.launch.py 백그라운드 launch
+    # 3) sonar_3d mapping.launch.py 백그라운드 launch (setsid → 독립 process group)
     echo "[regression_test] launching SONAR: ${LAUNCH_PKG} ${LAUNCH_FILE}"
-    ros2 launch "${LAUNCH_PKG}" "${LAUNCH_FILE}" \
+    setsid ros2 launch "${LAUNCH_PKG}" "${LAUNCH_FILE}" \
         use_sim_time:=true rviz:=false \
         > "${out}/sonar_launch.log" 2>&1 &
-    local sonar_pid=$!
+    local sonar_pgid=$!
     sleep 8
 
     # 4) bag record (sqlite3) 백그라운드
@@ -110,7 +115,7 @@ run_replay() {
     timeout "$((PLAY_DURATION + 10))" ros2 bag play "${BAG_PATH}" --clock --rate 1.0 \
         > "${out}/play.log" 2>&1 || true
 
-    # 6) drain + kill (record → sonar → slam 순)
+    # 6) drain + kill (record → sonar → slam 순, process group 단위 3단계 escalation)
     echo "[regression_test] draining 5s"
     sleep 5
 
@@ -118,15 +123,31 @@ run_replay() {
     kill -INT "${record_pid}" 2>/dev/null || true
     wait "${record_pid}" 2>/dev/null || true
 
-    echo "[regression_test] stopping sonar (pid=${sonar_pid})"
-    kill -INT "${sonar_pid}" 2>/dev/null || true
-    wait "${sonar_pid}" 2>/dev/null || true
+    echo "[regression_test] stopping sonar (pgid=${sonar_pgid})"
+    _kill_pgroup "${sonar_pgid}"
 
-    echo "[regression_test] stopping slam (pid=${slam_pid})"
-    kill -INT "${slam_pid}" 2>/dev/null || true
-    wait "${slam_pid}" 2>/dev/null || true
+    echo "[regression_test] stopping slam (pgid=${slam_pgid})"
+    _kill_pgroup "${slam_pgid}"
 
     echo "[regression_test] mode=${label} done. logs+cloud bag at: ${out}"
+}
+
+# ---------------------------------------------------------------------------
+# _kill_pgroup <pgid>
+#   ros2 launch 의 자식 C++ 노드(예: fastlio_mapping)가 SIGINT 만으로는
+#   정리되지 않는 사례가 있어 INT → TERM → KILL 3 단계 escalation.
+# ---------------------------------------------------------------------------
+_kill_pgroup() {
+    local pgid="${1:-}"
+    if [[ -z "${pgid}" ]]; then
+        return 0
+    fi
+    kill -INT  "-${pgid}" 2>/dev/null || true
+    sleep 5
+    kill -TERM "-${pgid}" 2>/dev/null || true
+    sleep 5
+    kill -KILL "-${pgid}" 2>/dev/null || true
+    wait "${pgid}" 2>/dev/null || true
 }
 
 # ---------------------------------------------------------------------------
