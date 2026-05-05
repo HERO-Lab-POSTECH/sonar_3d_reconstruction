@@ -651,7 +651,8 @@ class SonarTo3DMapper:
         return updates
     
     def _collect_first_hits(self, polar_image: np.ndarray, bearing_step: int,
-                            range_resolution: float) -> List[Tuple[float, float]]:
+                            range_resolution: float,
+                            depth_filter_mask: np.ndarray = None) -> List[Tuple[float, float]]:
         """
         Collect first hit information for shadow region calculation.
 
@@ -659,6 +660,10 @@ class SonarTo3DMapper:
             polar_image: 2D sonar image (range_bins x bearing_bins)
             bearing_step: Step size for bearing iteration
             range_resolution: Range resolution in meters per bin
+            depth_filter_mask: Optional boolean array per bearing
+                (True=keep, False=skip). When provided, bearings filtered
+                out by depth estimation are excluded from the shadow
+                geometry, matching `_process_rays_with_shadow`.
 
         Returns:
             Sorted list of (bearing_angle, first_hit_range) tuples
@@ -669,6 +674,8 @@ class SonarTo3DMapper:
         for b_idx in range(0, bearing_bins, bearing_step):
             bearing_angle = self.bearing_angles[b_idx]
             if not self.is_bearing_in_valid_fov(bearing_angle):
+                continue
+            if depth_filter_mask is not None and not depth_filter_mask[b_idx]:
                 continue
 
             intensity_profile = polar_image[:, b_idx]
@@ -813,18 +820,22 @@ class SonarTo3DMapper:
         bearing_step = max(1, bearing_bins // 256)
         range_resolution = self.max_range / range_bins
 
-        # Phase 1: Collect first hits
-        bearing_first_hits = self._collect_first_hits(polar_image, bearing_step, range_resolution)
-
-        # Phase 1.5: Depth estimation (reference map comparison)
+        # Phase 1: Depth estimation (reference map comparison) — produces the
+        # bearing mask that filters both shadow geometry and ray processing.
         depth_estimation_result = self.compute_depth_estimation(
             polar_image, bearing_step, T_sonar_to_world, sonar_origin_world, range_resolution
         )
-
-        # Phase 2: Process rays with shadow-aware updates + depth filter
         depth_filter_mask = None
         if depth_estimation_result is not None:
             depth_filter_mask = depth_estimation_result.get('bearing_mask')
+
+        # Phase 2: Collect first hits using the same mask so shadow geometry
+        # is computed only over bearings that survive depth filtering (P0-4).
+        bearing_first_hits = self._collect_first_hits(
+            polar_image, bearing_step, range_resolution, depth_filter_mask
+        )
+
+        # Phase 3: Process rays with shadow-aware updates + depth filter
         voxel_updates = self._process_rays_with_shadow(
             polar_image, bearing_step, T_sonar_to_world, sonar_origin_world,
             bearing_first_hits, depth_filter_mask
