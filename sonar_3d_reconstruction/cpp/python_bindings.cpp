@@ -41,19 +41,23 @@ PYBIND11_MODULE(sonar_3d_reconstruction_cpp, m) {
              "Update single point in octree")
         .def("batch_update", &sonar_3d_reconstruction::OctreeMapper::batch_update,
              py::arg("points"), py::arg("occupied_flags"),
+             py::call_guard<py::gil_scoped_release>(),
              "Batch update multiple points")
         .def("batch_update_with_log_odds", &sonar_3d_reconstruction::OctreeMapper::batch_update_with_log_odds,
              py::arg("points"), py::arg("log_odds_updates"),
+             py::call_guard<py::gil_scoped_release>(),
              "Batch update with log-odds values (Python SimpleOctree compatible)")
         .def("insert_ray", &sonar_3d_reconstruction::OctreeMapper::insert_ray,
              py::arg("origin"), py::arg("endpoint"),
              "Insert ray from origin to endpoint")
         .def("get_occupied_voxels", &sonar_3d_reconstruction::OctreeMapper::get_occupied_voxels,
              py::arg("min_probability") = -1.0,
+             py::call_guard<py::gil_scoped_release>(),
              "Get all occupied voxels above threshold")
         .def("get_memory_usage", &sonar_3d_reconstruction::OctreeMapper::get_memory_usage,
              "Get memory usage statistics")
         .def("prune_tree", &sonar_3d_reconstruction::OctreeMapper::prune_tree,
+             py::call_guard<py::gil_scoped_release>(),
              "Prune unnecessary nodes")
         .def("clear", &sonar_3d_reconstruction::OctreeMapper::clear,
              "Clear all data")
@@ -91,6 +95,7 @@ PYBIND11_MODULE(sonar_3d_reconstruction_cpp, m) {
         // batch_update() removed - using IWLO only
         .def("get_occupied_voxels", &sonar_3d_reconstruction::ProbabilityUpdater::get_occupied_voxels,
              py::arg("min_probability") = 0.5,
+             py::call_guard<py::gil_scoped_release>(),
              "Get all occupied voxels above threshold")
         .def("get_memory_usage", &sonar_3d_reconstruction::ProbabilityUpdater::get_memory_usage,
              "Get memory usage statistics")
@@ -115,11 +120,13 @@ PYBIND11_MODULE(sonar_3d_reconstruction_cpp, m) {
              "Set IWLO (Intensity-Weighted Log-Odds) parameters")
         .def("batch_update_iwlo", &sonar_3d_reconstruction::ProbabilityUpdater::batch_update_iwlo,
              py::arg("points"), py::arg("intensities"), py::arg("is_occupied"),
+             py::call_guard<py::gil_scoped_release>(),
              "Batch update with IWLO method (combines Log-Odds with Weighted Average)")
         .def("set_incremental_sync", &sonar_3d_reconstruction::ProbabilityUpdater::set_incremental_sync,
              py::arg("enable") = true,
              "Enable or disable incremental synchronization")
         .def("force_full_sync", &sonar_3d_reconstruction::ProbabilityUpdater::force_full_sync,
+             py::call_guard<py::gil_scoped_release>(),
              "Force full synchronization from internal storage to octree");
 
     // TileIndex structure
@@ -146,6 +153,7 @@ PYBIND11_MODULE(sonar_3d_reconstruction_cpp, m) {
         // IWLO update (main interface)
         .def("batch_update_iwlo", &sonar_3d_reconstruction::OutofcoreTileMapper::batch_update_iwlo,
              py::arg("points"), py::arg("intensities"), py::arg("is_occupied"),
+             py::call_guard<py::gil_scoped_release>(),
              "Batch update with IWLO method")
         // Parameter setters
         .def("set_iwlo_params", &sonar_3d_reconstruction::OutofcoreTileMapper::set_iwlo_params,
@@ -167,12 +175,15 @@ PYBIND11_MODULE(sonar_3d_reconstruction_cpp, m) {
         // Getters
         .def("get_occupied_voxels", &sonar_3d_reconstruction::OutofcoreTileMapper::get_occupied_voxels,
              py::arg("min_probability") = 0.5,
+             py::call_guard<py::gil_scoped_release>(),
              "Get occupied voxels from cached tiles only")
         .def("get_all_occupied_voxels", &sonar_3d_reconstruction::OutofcoreTileMapper::get_all_occupied_voxels,
              py::arg("min_probability") = 0.5,
+             py::call_guard<py::gil_scoped_release>(),
              "Get ALL occupied voxels from ALL tiles (loads from disk)")
         .def("get_occupied_voxels_in_region", &sonar_3d_reconstruction::OutofcoreTileMapper::get_occupied_voxels_in_region,
              py::arg("min_bound"), py::arg("max_bound"), py::arg("min_probability") = 0.5,
+             py::call_guard<py::gil_scoped_release>(),
              "Get occupied voxels in a specific region")
         .def("get_memory_usage", &sonar_3d_reconstruction::OutofcoreTileMapper::get_memory_usage,
              "Get memory usage statistics")
@@ -182,15 +193,18 @@ PYBIND11_MODULE(sonar_3d_reconstruction_cpp, m) {
              "Get total number of nodes across cached tiles")
         // Tile management
         .def("flush_all", &sonar_3d_reconstruction::OutofcoreTileMapper::flush_all,
+             py::call_guard<py::gil_scoped_release>(),
              "Flush all dirty tiles to disk")
         .def("flush_tile", &sonar_3d_reconstruction::OutofcoreTileMapper::flush_tile,
              py::arg("idx"),
+             py::call_guard<py::gil_scoped_release>(),
              "Flush specific tile to disk")
         .def("clear", &sonar_3d_reconstruction::OutofcoreTileMapper::clear,
              "Clear all data")
         // Octree export
         .def("save_merged_octree", &sonar_3d_reconstruction::OutofcoreTileMapper::save_merged_octree,
              py::arg("filepath"),
+             py::call_guard<py::gil_scoped_release>(),
              "Save merged octree to .bt file")
         .def("get_octree_binary", [](sonar_3d_reconstruction::OutofcoreTileMapper& self, double min_probability) {
              auto result = self.get_octree_binary(min_probability);
@@ -200,6 +214,7 @@ PYBIND11_MODULE(sonar_3d_reconstruction_cpp, m) {
                  result.second
              );
          }, py::arg("min_probability") = 0.5,
+            py::call_guard<py::gil_scoped_release>(),
             "Get octree as binary data (data, tree_id) for ROS octomap_msgs, filtered by probability threshold")
         // Statistics
         .def("get_cached_tile_count", &sonar_3d_reconstruction::OutofcoreTileMapper::get_cached_tile_count,
@@ -213,30 +228,38 @@ PYBIND11_MODULE(sonar_3d_reconstruction_cpp, m) {
         // Region preloading
         .def("preload_region", &sonar_3d_reconstruction::OutofcoreTileMapper::preload_region,
              py::arg("min_bound"), py::arg("max_bound"),
+             py::call_guard<py::gil_scoped_release>(),
              "Preload tiles in a region")
         // Selective tile reload (for visualization optimization)
         .def("reload_tiles", &sonar_3d_reconstruction::OutofcoreTileMapper::reload_tiles,
              py::arg("indices"),
+             py::call_guard<py::gil_scoped_release>(),
              "Reload specific tiles from disk (for visualization sync)")
         .def("flush_and_get_dirty_tiles", &sonar_3d_reconstruction::OutofcoreTileMapper::flush_and_get_dirty_tiles,
+             py::call_guard<py::gil_scoped_release>(),
              "Flush all dirty tiles and return their indices")
         // Pruning
         .def("prune_all", &sonar_3d_reconstruction::OutofcoreTileMapper::prune_all,
+             py::call_guard<py::gil_scoped_release>(),
              "Prune all cached tiles (merge homogeneous octree nodes)")
         // Eviction notification (for visualizer sync)
         .def("get_and_clear_saved_tiles", &sonar_3d_reconstruction::OutofcoreTileMapper::get_and_clear_saved_tiles,
+             py::call_guard<py::gil_scoped_release>(),
              "Get and clear list of recently saved tiles (from eviction)")
         // Ray-casting API
         .def("ray_cast_depth", &sonar_3d_reconstruction::OutofcoreTileMapper::ray_cast_depth,
              py::arg("origin"), py::arg("direction"), py::arg("max_range"),
              py::arg("step_size"), py::arg("min_probability") = 0.7,
+             py::call_guard<py::gil_scoped_release>(),
              "Ray-cast to find depth of first occupied voxel along a direction")
         .def("batch_ray_cast_depth", &sonar_3d_reconstruction::OutofcoreTileMapper::batch_ray_cast_depth,
              py::arg("origin"), py::arg("directions"), py::arg("max_range"),
              py::arg("step_size"), py::arg("min_probability") = 0.7,
+             py::call_guard<py::gil_scoped_release>(),
              "Batch ray-cast for multiple directions from a single origin")
         .def("batch_check_occupied", &sonar_3d_reconstruction::OutofcoreTileMapper::batch_check_occupied,
              py::arg("points"), py::arg("min_probability") = 0.7, py::arg("tolerance") = 0,
+             py::call_guard<py::gil_scoped_release>(),
              "Batch check if points are occupied (1=occupied, 0=free/unknown). "
              "tolerance: number of neighboring voxels to check (0=exact, 1=3x3x3, 2=5x5x5)");
 
