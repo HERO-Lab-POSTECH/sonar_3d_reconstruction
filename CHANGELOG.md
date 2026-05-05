@@ -1,5 +1,24 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Phase P7: Map save UX (sonar_3d) (refactor)
+
+### Added
+- `sonar_3d_reconstruction/map_save.py` — workspace map save helper:
+  - `get_default_map_dir(pkg)` — `$PKRC_MAP_DIR/<pkg>` or `~/data/maps/<pkg>`
+  - `resolve_map_save_path(user_path, pkg, fname)` — empty path → auto-timestamp dir
+  - `update_latest_symlink(saved_path, pkg)` — relative `latest -> <ts>` symlink
+- `scripts/3d_mapper_node.py`: `~/save_map` (std_srvs/Trigger) 서비스:
+  - outofcore 모드: flush_map + save_merged_octree + symlink 갱신
+  - in-memory 모드: success=False + 안내 메시지 (기존 mapper API 한계)
+- `CMakeLists.txt`: `map_save.py` install 라인 추가 (qos.py와 동일 패턴)
+
+### Verification
+- colcon build PASS (0.40s)
+- Python 헬퍼 스모크 테스트 PASS (auto-timestamp + symlink)
+- Service `/sonar_3d_mapper/save_map` 등록 확인
+
+---
+
 ## [Unreleased] — Phase P6: Config structure (refactor)
 
 ### Added

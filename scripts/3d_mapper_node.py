@@ -11,6 +11,8 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from sonar_3d_reconstruction.qos import SENSOR_QOS, RELIABLE_QOS, LATCHED_QOS
+from std_srvs.srv import Trigger
+from sonar_3d_reconstruction.map_save import resolve_map_save_path, update_latest_symlink
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 import numpy as np
@@ -302,7 +304,11 @@ class SonarMapperNode(Node):
             )
         
         # No need for TF timer anymore since we use static transform
-        
+
+        # Map save service (spec §2.9)
+        self._save_map_srv = self.create_service(
+            Trigger, '~/save_map', self._save_map_callback)
+
         # Initialization summary (single line)
         mode_str = "out-of-core" if self.use_outofcore else "in-memory"
         self.get_logger().info(
@@ -896,6 +902,40 @@ class SonarMapperNode(Node):
         
         # Publish
         self.pc_pub.publish(cloud)
+
+    def _save_map_callback(self, request, response):
+        """Trigger service: save current map to .bt file (outofcore mode).
+
+        In-memory mode is not supported by the existing mapper API and
+        returns success=False with a guidance message.
+        """
+        try:
+            user_path = self.get_parameter('output.map_dir').value if \
+                self.has_parameter('output.map_dir') else ''
+            if not self.use_outofcore:
+                response.success = False
+                response.message = (
+                    'In-memory mode: save_map service not yet supported. '
+                    'Run with map_path:=<dir> for outofcore mode.'
+                )
+                return response
+
+            save_path = resolve_map_save_path(user_path, 'sonar_3d', 'map.bt')
+            # Flush dirty tiles to disk first
+            self.mapper.flush_map()
+            # Then merge all tiles into a single .bt file
+            ok = self.mapper.save_merged_octree(str(save_path))
+            if ok:
+                update_latest_symlink(save_path, 'sonar_3d')
+                response.success = True
+                response.message = f'Saved: {save_path}'
+            else:
+                response.success = False
+                response.message = f'save_merged_octree returned False (path: {save_path})'
+        except Exception as e:
+            response.success = False
+            response.message = f'Save failed: {e}'
+        return response
 
     def publish_detection_markers(self, points: np.ndarray):
         """
