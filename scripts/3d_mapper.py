@@ -594,42 +594,44 @@ class SonarTo3DMapper:
 
         # Process occupied regions (dense)
         if first_hit_idx < len(intensity_profile):
-            # Find all high intensity regions
-            for r_idx in range(first_hit_idx, min(first_hit_idx + 50, len(intensity_profile))):
-                intensity = intensity_profile[r_idx]
-
-                # Simple threshold check
-                is_occupied = intensity > self.intensity_threshold
-
-                if is_occupied:
-                    range_m = r_idx * range_resolution
-
-                    # Check both min and max range
-                    if range_m < self.min_range:
-                        continue
-                    if range_m > self.max_range:
-                        break
-
-                    # Calculate vertical spread and sample count
+            r_end = min(first_hit_idx + 50, len(intensity_profile))
+            r_idx = np.arange(first_hit_idx, r_end)
+            if r_idx.size > 0:
+                intensities = intensity_profile[r_idx]
+                range_m = r_idx * range_resolution
+                # Preserve scalar break/continue semantics: range_m is monotonic, so
+                # `break on > max_range` collapses to `<= max_range` mask.
+                mask_r = (intensities > self.intensity_threshold) & \
+                         (range_m >= self.min_range) & \
+                         (range_m <= self.max_range)
+                if mask_r.any():
+                    range_m = range_m[mask_r]
+                    intensities = intensities[mask_r]
                     # Dense sampling (1.5x voxel) for occupied - higher precision for surfaces
                     vertical_spread = range_m * np.tan(half_aperture)
-                    num_vertical = max(1, int(vertical_spread / (self.voxel_resolution * 1.5)))
-
-                    for v_step in range(-num_vertical, num_vertical + 1):
-                        # Normalize to [-1, 1] for exact aperture coverage: ±half_aperture
-                        vertical_angle = (v_step / num_vertical) * half_aperture
-
-                        # Sonar coordinates - see free space section for coordinate system details
-                        x_sonar = range_m * np.cos(vertical_angle) * np.cos(bearing_angle)
-                        y_sonar = -range_m * np.cos(vertical_angle) * np.sin(bearing_angle)
-                        z_sonar = range_m * np.sin(vertical_angle)
-
-                        # Transform to world
-                        pt_sonar = np.array([x_sonar, y_sonar, z_sonar, 1.0])
-                        pt_world = T_sonar_to_world @ pt_sonar
-
-                        # Add to regular map updates with intensity value
-                        updates.append((pt_world[:3], self.log_odds_occupied, 'occupied', float(intensity)))
+                    num_vert = np.maximum(1, (vertical_spread / (self.voxel_resolution * 1.5)).astype(int))
+                    V_max = int(num_vert.max())
+                    v_steps = np.arange(-V_max, V_max + 1)                  # (2V+1,)
+                    mask = np.abs(v_steps[None, :]) <= num_vert[:, None]    # (R, 2V+1)
+                    # vertical_angle[r, v] = (v_steps[v] / num_vert[r]) * half_aperture
+                    vertical_angle = (v_steps[None, :].astype(np.float64) /
+                                      num_vert[:, None].astype(np.float64)) * half_aperture
+                    cos_va = np.cos(vertical_angle)
+                    sin_va = np.sin(vertical_angle)
+                    range_2d = range_m[:, None]
+                    # Sonar coordinates - see free space section for coordinate system details
+                    x_s = range_2d * cos_va * np.cos(bearing_angle)
+                    y_s = -range_2d * cos_va * np.sin(bearing_angle)
+                    z_s = range_2d * sin_va
+                    ones = np.ones_like(x_s)
+                    pts_sonar = np.stack([x_s, y_s, z_s, ones], axis=-1)    # (R, 2V+1, 4)
+                    pts_world_full = np.einsum('ij,rvj->rvi', T_sonar_to_world, pts_sonar)[..., :3]
+                    # Per-range intensity tag attached per emitted point.
+                    for r_slot in range(range_m.size):
+                        pts_kept = pts_world_full[r_slot][mask[r_slot]]
+                        inten = float(intensities[r_slot])
+                        for pw in pts_kept:
+                            updates.append((pw, self.log_odds_occupied, 'occupied', inten))
 
         return updates
     
