@@ -11,7 +11,6 @@ LAUNCH ARGUMENTS
   map_path      : Out-of-core map directory path               (required)
   use_sim_time  : Use simulation time                          (default: false)
   rviz          : Launch RViz                                  (default: false)
-  foxglove      : Launch Foxglove bridge                       (default: true)
   publish_rate  : Point cloud publish rate [Hz]                (default: 1.0)
   vis_mode      : Visualization mode (0=pointcloud, 1=octomap, 2=all) (default: 0)
 
@@ -104,7 +103,6 @@ def generate_launch_description():
 
     use_sim_time = LaunchConfiguration('use_sim_time')
     rviz = LaunchConfiguration('rviz')
-    foxglove = LaunchConfiguration('foxglove')
 
     return LaunchDescription([
         DeclareLaunchArgument('map_path',
@@ -115,9 +113,6 @@ def generate_launch_description():
         DeclareLaunchArgument('rviz',
             default_value='false',
             description='Launch RViz'),
-        DeclareLaunchArgument('foxglove',
-            default_value='true',
-            description='Launch Foxglove bridge'),
         DeclareLaunchArgument('publish_rate',
             default_value='1.0',
             description='PointCloud publish rate [Hz]'),
@@ -137,11 +132,4 @@ def generate_launch_description():
             condition=IfCondition(rviz)
         ),
 
-        # Foxglove bridge (conditional)
-        Node(
-            package='foxglove_bridge',
-            executable='foxglove_bridge',
-            parameters=[{'use_sim_time': use_sim_time}],
-            condition=IfCondition(foxglove)
-        ),
     ])
