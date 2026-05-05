@@ -83,3 +83,54 @@ TEST(OctreeStorageLoad, ReturnsTrueOnCompleteMeta) {
     EXPECT_EQ(storage.get_num_voxels(), 4u);
     fs::remove_all(dir);
 }
+
+TEST(OctreeStorageSync, IncrementalSyncProducesSameOctreeAsFullSync) {
+    OctreeStorage a(0.1);
+    OctreeStorage b(0.1);
+
+    octomap::OcTreeKey k1 = a.coord_to_key(octomap::point3d(0.05, 0.05, 0.05));
+    octomap::OcTreeKey k2 = a.coord_to_key(octomap::point3d(0.15, 0.05, 0.05));
+    octomap::OcTreeKey k3 = a.coord_to_key(octomap::point3d(0.25, 0.05, 0.05));
+
+    for (auto* s : {&a, &b}) {
+        s->set_log_odds(k1, 1.5);
+        s->set_log_odds(k2, -0.7);
+        s->set_log_odds(k3, 0.3);
+    }
+
+    a.sync_to_octree();
+    b.sync_to_octree();
+
+    auto* ta = a.get_octree();
+    auto* tb = b.get_octree();
+    octomap::OcTreeNode* na1 = ta->search(k1);
+    octomap::OcTreeNode* nb1 = tb->search(k1);
+    ASSERT_NE(na1, nullptr); ASSERT_NE(nb1, nullptr);
+    EXPECT_NEAR(na1->getLogOdds(), nb1->getLogOdds(), 1e-9);
+    octomap::OcTreeNode* na3 = ta->search(k3);
+    octomap::OcTreeNode* nb3 = tb->search(k3);
+    ASSERT_NE(na3, nullptr); ASSERT_NE(nb3, nullptr);
+    EXPECT_NEAR(na3->getLogOdds(), nb3->getLogOdds(), 1e-9);
+
+    // Mutate one key in 'a' and verify only that voxel changes
+    a.set_log_odds(k2, 2.0);
+    a.sync_to_octree();
+    octomap::OcTreeNode* na2 = ta->search(k2);
+    ASSERT_NE(na2, nullptr);
+    EXPECT_NEAR(na2->getLogOdds(), 2.0f, 1e-5);
+
+    octomap::OcTreeNode* na1_after = ta->search(k1);
+    ASSERT_NE(na1_after, nullptr);
+    EXPECT_NEAR(na1_after->getLogOdds(), 1.5f, 1e-5);
+}
+
+TEST(OctreeStorageSync, ClearAlsoResetsDirtyKeys) {
+    OctreeStorage s(0.1);
+    octomap::OcTreeKey k = s.coord_to_key(octomap::point3d(0.05, 0.05, 0.05));
+    s.set_log_odds(k, 1.0);
+    s.sync_to_octree();
+    s.clear();
+    EXPECT_EQ(s.get_num_voxels(), 0u);
+    s.sync_to_octree();
+    EXPECT_EQ(s.get_octree()->getNumLeafNodes(), 0u);
+}
