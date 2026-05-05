@@ -1,5 +1,24 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Phase P6: Config structure (refactor)
+
+### Added
+- `time_sync` 카테고리 (P5c+d ParameterDef와 정합):
+  - max_stamp_diff_sec (0.1), max_odom_age_sec (0.5), policy ('latest')
+- `visualization` 카테고리 확장:
+  - marker_min_depth (0.0 m), marker_max_depth (5.0 m), marker_alpha (0.8), show_opencv_visualization (false)
+  - P5a launch arg에서 이동 (BREAKING removed args의 안식처)
+- `output` 카테고리 추가 (P7 활용):
+  - map_dir (""), auto_timestamp (true)
+- `scripts/config.py`: output.map_dir, output.auto_timestamp ParameterDef 추가 (read_only)
+
+### Verification
+- colcon build PASS (0.15s)
+- python yaml.safe_load PASS (top-level keys: time_sync, visualization, output 포함)
+- 노드 startup PASS — parameter mismatch 0건
+
+---
+
 ## [Unreleased] — Phase P5c+d: ROS Time integrity (refactor)
 
 ### Changed
