@@ -83,13 +83,14 @@
 
 ## Tasks
 
-### Task 0: 게이트 + dataset 매트릭스 점검
+### Task 0: 게이트 + dataset 매트릭스 점검 (✅ 2026-05-05 완료)
 
-- [ ] PR #3 머지 + main HEAD 갱신 + branch 분기 확인 (위 게이트)
-- [ ] `BAG_PATH=…/m3000d-range20-tilt30 bash scripts/regression/regression_test.sh baseline` 1회 측정 → frame 처리 확인
-  - 0/0 이면: B-2c 시점에 `time_sync.max_diff` 임계 완화 검토 (별도 mini-task) 또는 P-1 매트릭스 잠시 빠짐 (B-2c 까지 P-2 단일)
-  - 처리되면: P-1 매트릭스 합류
-- [ ] (선택) 결과를 `CHANGELOG` Notes 에 기록
+- [x] PR #3 머지 (squash `c7f5c38`) + main HEAD 갱신 + `refactor/phase-b2-correctness` 분기.
+- [x] `BAG_PATH=…/m3000d-range20-tilt30 bash scripts/regression/regression_test.sh baseline` 1회 측정.
+  - **결과**: stamp_diff ≈ 0.211~0.227s 일정하게 임계 0.1s 초과 → `Dropping frame` 341+ 누적, `Shutdown: 0/0 frames`.
+  - **결정**: spec §4.1 Notes 그대로 — Phase B-2 는 **P-2 단일** 진행. P-1 정상화는 별도 fix (TimeSync 임계 완화 또는 stamp 보정) 영역으로 분리. 본 plan scope 에서 제외.
+- [x] (인프라) `scripts/regression/regression_test.sh` 가 fresh shell 에서 호출돼도 ROS env 를 못 찾는 결함 발견 → `/opt/ros/humble/setup.bash` + `install/setup.bash` self-source 추가 (commit `61f5e8b`).
+- [x] B-1 회귀 인프라 동작 확인 (`tests/test_gil_release` 2 PASS, `tests/regression/test_metric` 6 PASS, colcon build PASS).
 
 ### Task 1 — B-2a: IWLO intensity 0-division guard (P0-2)
 
