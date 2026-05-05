@@ -2,9 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** master spec §3 Phase C 의 세 항목 (P2-6 corrupt detection, P2-5 incremental sync, P2-2 algorithm unification) 을 단일 PR (sub-commit C-a/b/c) 로 정리한다.
+> **2026-05-05 갱신**: Task 3 (C-c) 는 회귀 측정에서 P-2 dataset 90s 동안 occupied voxel 0 (baseline 21,776) 으로 사용자 핵심 제약 위반 → **본 PR 에서 분리**. C-c 는 별도 spec 으로 재설계 (IWLOParams `L_occ` / `L_free` 비대칭 재튜닝 포함). Task 3 의 단계는 historical 자료로 보존하되 실행 안 함. 본 PR 은 Task 1 (C-a) + Task 2 (C-b) + Task 4 (CHANGELOG + PR, C-c 항목 제외) 만 진행. design doc §6 참조.
 
-**Architecture:** C-a → C-b 는 결과 동일성 (jaccard ≥ 0.99) 을 강제하는 저위험 정리. C-c 는 README 알고리즘 절과 정합한 연속형 IWLO 로 통일하여 임계 부근 voxel 에서 부드러운 전이를 얻는다 (jaccard ≥ 0.95 + plot 증명, Q-C1).
+**Goal:** master spec §3 Phase C 중 결과 보존 정리 (P2-6, P2-5) 를 단일 PR 로 머지한다. P2-2 (이중 알고리즘 통일) 는 별도 spec 에서 재설계.
+
+**Architecture:** C-a → C-b 는 결과 동일성 (jaccard ≥ 0.99) 을 강제하는 저위험 정리. C-c (제외) 는 IWLOParams 와 함께 재설계해야 하는 알고리즘 변경.
 
 **Tech Stack:** C++17, OctoMap, Eigen3, pybind11, pytest, colcon (Release).
 
