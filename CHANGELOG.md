@@ -1,5 +1,41 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Phase B-2: Correctness Fixes (refactor)
+
+> Master design: `docs/source/design/2026-05-03-quality-perf-uplift-design.md`
+> Plan: `docs/source/plans/2026-05-05-phase-b2-correctness.md`
+> Risk: 중간. 의도된 정확도 개선 (회귀가 아닌 변화는 허용).
+
+### Fixed
+- **B-2a (P0-2)** `iwlo_updater.cpp:intensity_to_weight`: `intensity_max == intensity_threshold` 케이스에서 `(intensity - threshold) / 0` → NaN → log-odds 누적기 영구 오염 방지. range ≤ 1e-9 이면 `normalized = 1.0` 으로 saturate.
+- **B-2b (P0-7)** `3d_mapper_node.py`: `/sonar_3d_mapper/updated_tile_indices` 만 `RELIABLE + TRANSIENT_LOCAL + KEEP_LAST(depth=1)` 로 분리. RViz/visualizer late-joiner 가 마지막 tile-index 받기 보장. 다른 publisher (PointCloud2, MarkerArray, filtered_image) 는 streaming sensor data 라 기존 공유 qos_profile 유지.
+- **B-2c (P0-4)** `3d_mapper.py`: `_collect_first_hits` signature 에 `depth_filter_mask` 인자 추가 + `process_sonar_image` 호출 순서 재배치 (depth_estimation → first_hits → ray_processing). 기존엔 first_hits 가 mask 적용 전에 계산돼 ray_processing 이 버린 bearing 의 first hit 도 shadow geometry 에 포함 → 잘못된 shadow false-negative.
+- **B-2d (P0-5)** `iwlo_updater` end-to-end weight 경로:
+  - `MapperBackend::batch_update_iwlo` 에 `Eigen::VectorXd weights = Eigen::VectorXd()` 추가
+  - `ProbabilityUpdater::batch_update_iwlo` 에서 `delta_L *= weights(i)` (empty vector → 1.0 fallback)
+  - `OutofcoreTileMapper::batch_update_iwlo` 는 검증만 (Tile::batch_update 시그니처 확장은 후순위)
+  - `python_bindings.cpp` `weights = Eigen::VectorXd()` default + `_apply_updates_to_octree` 가 `update_info['count']` 를 weight 로 전달 → 한 frame 에 N 회 관측된 voxel 이 N× delta 적용. (Q-B1 확정 사양)
+- **B-2e (P0-8)** `3d_mapper.py:is_in_shadow_region`: 수동 binary search → `bisect_left/right` slice 순회. tolerance window 안에 3개 이상 bearing 들어오는 dense overlap 케이스에서 mid±1 외의 bearing 누락 fix (random trial 측정에서 ~0.2% 케이스 영향).
+
+### Changed
+- `scripts/regression/regression_test.sh`: ROS env self-source + `set +u` guard 로 fresh shell / background task 호출 호환. UCRC P-2 baseline 측정 시 발견된 결함.
+- `docs/source/plans/2026-05-05-phase-b2-correctness.md` Task 0 결과 반영: P-1 (`m3000d-range20-tilt30`) baseline 은 sonar-livox stamp_diff ≈ 0.21s 가 TimeSync 임계 0.1s 초과 → 모든 frame drop. **Phase B-2 는 P-2 단일 진행**, P-1 정상화는 별도 fix 영역으로 분리.
+
+### Added
+- `tests/test_iwlo_intensity_guard.py` (3 PASS): NaN 가드 동작 검증
+- `tests/test_iwlo_weights.py` (3 PASS): weight=1/3 결과 차이 + size mismatch 예외
+
+### Verification
+- colcon build PASS (Release).
+- 단위 테스트 14 PASS (기존 8 + B-2a 3 + B-2d 3).
+- Bit-exact micro test (B-2e): sparse overlap 2000/2000 동일, dense overlap 1/500 의도된 변화 (정확도 개선 방향).
+- P-2 측정: B-2a candidate vs B-1 baseline jaccard 0.73 — **same-code measurement variance 범위 내** (Phase B-1 에서 측정된 floor ≈ 0.18). 라이브 fast_lio + bag play timing 비결정성이 본질 한계라 jaccard ≥ 0.99 임계는 결정적 SLAM 환경에서만 의미. 본 phase 의 5건 fix 자체의 동작 변경은 단위 테스트 + micro test 로 직접 증명.
+
+### Notes
+- **B-2d weight 경로 OutofcoreTileMapper 미적용**: `Tile::batch_update` 시그니처 확장 + 시간 변동 검증이 추가 작업이라 본 phase 에서 제외. ProbabilityUpdater 경로 (in-memory mode) 는 정상 동작. out-of-core mode 사용 시 weight 가 silent 1.0 로 fallback.
+- **P-1 dataset**: TimeSync 임계 완화는 algorithm 변경이라 별 phase 또는 별 mini-task 로 분리. `time_sync.max_diff = 0.1s` → `0.25s` 후보값.
+- 다음 phase: **B-3** (concurrency, P0-1 + P1-1). SLAM gating PR #2 머지 완료 — 게이트 통과.
+
 ## [Unreleased] — SLAM quality gating
 
 ### Added
