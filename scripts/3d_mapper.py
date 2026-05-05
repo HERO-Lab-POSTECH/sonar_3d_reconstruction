@@ -10,6 +10,7 @@ Author: Sonar 3D Reconstruction Team
 Date: 2025
 """
 
+import bisect
 import numpy as np
 from collections import defaultdict
 from typing import Tuple, List, Dict, Any, Optional
@@ -483,38 +484,21 @@ class SonarTo3DMapper:
         bearing_resolution = self.horizontal_fov / self.image_width
         tolerance = bearing_resolution * self.angular_cone_width * 2
 
-        # Binary search for nearest bearing
-        left, right = 0, len(bearing_first_hits) - 1
-        while left <= right:
-            mid = (left + right) // 2
-            mid_bearing = bearing_first_hits[mid][0]
-
-            if abs(mid_bearing - bearing_angle) < tolerance:
-                # Found adjacent bearing - check shadow
-                if mid_bearing != bearing_angle:
-                    first_hit = bearing_first_hits[mid][1]
-                    if first_hit > 0 and voxel_range > first_hit:
-                        return True
-
-                # Check immediate neighbors
-                if mid > 0:
-                    prev_bearing, prev_hit = bearing_first_hits[mid - 1]
-                    if abs(prev_bearing - bearing_angle) < tolerance and prev_bearing != bearing_angle:
-                        if prev_hit > 0 and voxel_range > prev_hit:
-                            return True
-
-                if mid < len(bearing_first_hits) - 1:
-                    next_bearing, next_hit = bearing_first_hits[mid + 1]
-                    if abs(next_bearing - bearing_angle) < tolerance and next_bearing != bearing_angle:
-                        if next_hit > 0 and voxel_range > next_hit:
-                            return True
-                return False
-
-            elif mid_bearing < bearing_angle:
-                left = mid + 1
-            else:
-                right = mid - 1
-
+        # Bracket the bearings whose angle is within `tolerance` of the
+        # query. `bisect` over the sorted bearings — `bearing_first_hits[i][0]`
+        # is the sort key — and check every entry in [left, right). Previous
+        # implementation used a hand-rolled binary search that examined only
+        # `mid` and `mid±1`, missing entries when more than two bearings fell
+        # inside the tolerance window (full overlap mode).
+        bearings = [b for b, _ in bearing_first_hits]
+        left = bisect.bisect_left(bearings, bearing_angle - tolerance)
+        right = bisect.bisect_right(bearings, bearing_angle + tolerance)
+        for i in range(left, right):
+            other_bearing, other_hit = bearing_first_hits[i]
+            if other_bearing == bearing_angle:
+                continue
+            if other_hit > 0 and voxel_range > other_hit:
+                return True
         return False
 
     def world_to_key(self, x: float, y: float, z: float) -> Tuple[int, int, int]:
