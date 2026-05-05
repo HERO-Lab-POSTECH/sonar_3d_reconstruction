@@ -9,7 +9,7 @@ Date: 2025
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 import numpy as np
 import time
 
@@ -268,10 +268,16 @@ class SonarMapperNode(Node):
         else:
             # Out-of-core mode: eviction-based + periodic saving
             self.timer = None
+            tile_indices_qos = QoSProfile(
+                reliability=ReliabilityPolicy.RELIABLE,
+                durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                history=HistoryPolicy.KEEP_LAST,
+                depth=1,
+            )
             self.tile_update_pub = self.create_publisher(
                 Int32MultiArray,
                 '/sonar_3d_mapper/updated_tile_indices',
-                qos_profile
+                tile_indices_qos
             )
             # Periodically save dirty tiles + notify visualizer
             self.flush_timer = self.create_timer(self.tile_save_interval, self.periodic_flush_and_notify)
