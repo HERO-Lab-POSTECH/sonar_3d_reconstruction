@@ -70,6 +70,7 @@ install(TARGETS sonar_3d_reconstruction_cpp
 install(FILES
   sonar_3d_reconstruction/__init__.py
   sonar_3d_reconstruction/qos.py
+  sonar_3d_reconstruction/map_save.py
   DESTINATION local/lib/python3.10/dist-packages/sonar_3d_reconstruction
 )
 
