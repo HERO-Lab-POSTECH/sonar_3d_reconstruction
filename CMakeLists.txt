@@ -69,6 +69,7 @@ install(TARGETS sonar_3d_reconstruction_cpp
 # Install __init__.py from source (contains C++ module loader)
 install(FILES
   sonar_3d_reconstruction/__init__.py
+  sonar_3d_reconstruction/qos.py
   DESTINATION local/lib/python3.10/dist-packages/sonar_3d_reconstruction
 )
 

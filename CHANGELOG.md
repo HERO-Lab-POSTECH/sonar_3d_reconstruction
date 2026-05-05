@@ -1,5 +1,15 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Phase P4a: QoS helper module (refactor)
+
+### Added
+- `sonar_3d_reconstruction/qos.py` — workspace QoS 3-tier helper (SENSOR/RELIABLE/LATCHED) per spec §2.4
+
+### Verification
+- colcon build PASS
+
+---
+
 ## [Unreleased] — Phase P2: Foxglove removal (refactor)
 
 ### Removed
