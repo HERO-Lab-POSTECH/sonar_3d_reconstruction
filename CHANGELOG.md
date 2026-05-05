@@ -1,5 +1,28 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Phase P5b: use_sim_time 자동 정합 (refactor)
+
+### Added
+- `_auto_force_sim_time(context)` helper inline 두 launch (3d_mapping, robot_3d_mapping)에 추가:
+  - `bag_path` arg 비어있지 않으면 `use_sim_time:=true` silent force
+  - prev value가 false였으면 `[launch] bag_path='...' → forcing use_sim_time:=true` 한 줄 print
+  - downstream OpaqueFunction이 모두 정합된 값 사용
+
+### Why silent (not RuntimeError on conflict)
+LaunchContext에서 user-explicit-false vs default-false 구분하는 신뢰할 만한 방법이 없음. bag replay = sim time이 항상 옳으므로 silent override가 안전.
+
+### Verification
+- colcon build PASS
+- bag_path 미명시: force 메시지 없음
+- bag_path 명시: `[launch] bag_path='/tmp/foo' → forcing use_sim_time:=true (was: false)` 출력 확인
+
+### Out of scope (no bag_path arg)
+- fast_lio mapping/localization launches
+- cartographer slam launch
+이들은 bag을 직접 launch에서 spawn하지 않음 (외부 `ros2 bag play` 명령으로 별도 실행). bag_path arg 도입은 후속 phase.
+
+---
+
 ## [Unreleased] — Phase P5a: Launch arg standardization (refactor)
 
 ### Changed (BREAKING — external launch invocations)
