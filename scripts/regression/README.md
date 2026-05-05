@@ -63,7 +63,7 @@ python3 src/sonar_3d_reconstruction/scripts/regression/regression_plot.py
 | `MEAN_LOG_ODDS_THRESHOLD` | `0.0` (B-1) | mean_log_odds_diff 최대값 |
 | `LAUNCH_PKG` / `LAUNCH_FILE` | `sonar_3d_reconstruction` / `3d_mapping.launch.py` | sonar 처리 launch |
 | `SLAM_LAUNCH_PKG` / `SLAM_LAUNCH_FILE` | `fast_lio` / `mapping.launch.py` | SLAM (odom 공급) launch |
-| `PC_TOPIC` | `/pkrc/sonar/cpp_pointcloud` | record 대상 출력 토픽 |
+| `PC_TOPIC` | `/sonar_3d_mapper/point_cloud` | record 대상 출력 토픽 (sonar 노드의 `topics.pointcloud` default) |
 | `ROS_DOMAIN_ID` | `42` | DDS 도메인 격리 (§8 참조). 0 이 아니면 default group 과 분리 |
 
 ## 4. 임계값 (Spec §4.4)

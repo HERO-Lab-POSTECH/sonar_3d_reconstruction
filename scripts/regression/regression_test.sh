@@ -21,16 +21,24 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # 환경 변수 (기본값, override 가능)
 # ---------------------------------------------------------------------------
-: "${BAG_PATH:=/workspace/data/7_ucrc_watertank/20260122_sonar_lidar/m750d_custom_platform/m750d-range15-tilt45-v1}"
+: "${BAG_PATH:=/workspace/data/7_ucrc_watertank/20260122_sonar_lidar/m3000d_blueboat/m3000d-range15-tilt90}"
 : "${PLAY_DURATION:=90}"
 : "${OUT_DIR:=/tmp/sonar3d_regression}"
 : "${LAUNCH_PKG:=sonar_3d_reconstruction}"
 : "${LAUNCH_FILE:=3d_mapping.launch.py}"
 : "${SLAM_LAUNCH_PKG:=fast_lio}"
 : "${SLAM_LAUNCH_FILE:=mapping.launch.py}"
-: "${PC_TOPIC:=/pkrc/sonar/cpp_pointcloud}"
+: "${PC_TOPIC:=/sonar_3d_mapper/point_cloud}"
 : "${JACCARD_THRESHOLD:=1.0}"
 : "${MEAN_LOG_ODDS_THRESHOLD:=0.0}"
+
+# Dataset profile (P-1/P-2 default = P-2 m3000d/tilt90, fast_lio odom).
+# bag 마다 sonar_model/sonar_pitch/odometry 가 다르므로 호출 측에서 override.
+# QoS_RELIABILITY 는 bag 의 publisher QoS 와 일치해야 input drop 0 보장 (UCRC bag = best_effort).
+: "${SONAR_MODEL:=m3000d}"
+: "${SONAR_PITCH:=90.0}"
+: "${ODOMETRY:=fast_lio}"
+: "${QOS_RELIABILITY:=best_effort}"
 
 # DDS 격리: 같은 컨테이너의 다른 세션 노드와 cross-talk 방지.
 # 0 이 아닌 값이면 default group 과 분리됨. override 가능.
@@ -64,6 +72,11 @@ Environment overrides:
   PC_TOPIC                  (default: ${PC_TOPIC})
   JACCARD_THRESHOLD         (default: ${JACCARD_THRESHOLD})
   MEAN_LOG_ODDS_THRESHOLD   (default: ${MEAN_LOG_ODDS_THRESHOLD})
+  SONAR_MODEL               (default: ${SONAR_MODEL})    # m750d | m3000d
+  SONAR_PITCH               (default: ${SONAR_PITCH})    # 30.0 | 60.0 | 90.0
+  ODOMETRY                  (default: ${ODOMETRY})    # cartographer | fast_lio | fast_lio_loc
+  QOS_RELIABILITY           (default: ${QOS_RELIABILITY})    # reliable | best_effort
+  ROS_DOMAIN_ID             (default: ${ROS_DOMAIN_ID})    # DDS 도메인 격리
 EOF
 }
 
@@ -82,23 +95,33 @@ run_replay() {
 
     echo "[regression_test] mode=${label} bag=${BAG_PATH} duration=${PLAY_DURATION}s out=${out}"
     echo "[regression_test] ROS_DOMAIN_ID=${ROS_DOMAIN_ID}"
+    echo "[regression_test] profile: sonar=${SONAR_MODEL} pitch=${SONAR_PITCH} odom=${ODOMETRY} qos=${QOS_RELIABILITY}"
 
     # 1) out 디렉토리 정리 + 생성
     rm -rf "${out}"
     mkdir -p "${out}"
 
     # 2) fast_lio mapping.launch.py 백그라운드 launch (setsid → 독립 process group)
+    #    qos_reliability 는 bag publisher QoS 와 일치해야 fast_lio 가 livox/imu 를 받음.
     echo "[regression_test] launching SLAM: ${SLAM_LAUNCH_PKG} ${SLAM_LAUNCH_FILE}"
     setsid ros2 launch "${SLAM_LAUNCH_PKG}" "${SLAM_LAUNCH_FILE}" \
         use_sim_time:=true rviz:=false foxglove:=false \
+        qos_reliability:="${QOS_RELIABILITY}" \
         > "${out}/slam_launch.log" 2>&1 &
     local slam_pgid=$!
     sleep 5
 
     # 3) sonar_3d mapping.launch.py 백그라운드 launch (setsid → 독립 process group)
+    #    sonar_model/sonar_pitch/odometry 는 bag 마다 다르므로 dataset profile 변수에서 forward.
     echo "[regression_test] launching SONAR: ${LAUNCH_PKG} ${LAUNCH_FILE}"
     setsid ros2 launch "${LAUNCH_PKG}" "${LAUNCH_FILE}" \
         use_sim_time:=true rviz:=false \
+        sonar_model:="${SONAR_MODEL}" \
+        sonar_pitch:="${SONAR_PITCH}" \
+        odometry:="${ODOMETRY}" \
+        qos_reliability:="${QOS_RELIABILITY}" \
+        show_opencv:=false \
+        launch_visualizer:=false \
         > "${out}/sonar_launch.log" 2>&1 &
     local sonar_pgid=$!
     sleep 8
