@@ -17,7 +17,6 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 import numpy as np
 import os
-import struct
 import time
 
 # ROS2 message imports
@@ -419,14 +418,14 @@ class MapVisualizerNode(Node):
         cloud.row_step = cloud.point_step * cloud.width
         cloud.is_dense = True
 
-        # Pack data
-        data = []
-        for i in range(len(voxels)):
-            data.append(struct.pack('ffff',
-                                   voxels[i, 0], voxels[i, 1], voxels[i, 2],
-                                   voxels[i, 3]))
-
-        cloud.data = b''.join(data)
+        packed = np.empty(len(voxels), dtype=[
+            ('x', '<f4'), ('y', '<f4'), ('z', '<f4'), ('intensity', '<f4'),
+        ])
+        packed['x'] = voxels[:, 0]
+        packed['y'] = voxels[:, 1]
+        packed['z'] = voxels[:, 2]
+        packed['intensity'] = voxels[:, 3]
+        cloud.data = packed.tobytes()
         self.pc_pub.publish(cloud)
 
 

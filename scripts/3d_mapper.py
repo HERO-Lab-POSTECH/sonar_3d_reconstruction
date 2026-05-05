@@ -220,12 +220,8 @@ class SonarTo3DMapper:
 
             # Actual first hit from sonar image
             intensity_profile = polar_image[:, b_idx]
-            actual_depth = -1.0
-            for r_idx, intensity in enumerate(intensity_profile):
-                range_m = r_idx * range_resolution
-                if intensity > self.intensity_threshold and range_m >= self.min_range:
-                    actual_depth = range_m
-                    break
+            first_hit_idx = self._first_hit_index(intensity_profile, range_resolution)
+            actual_depth = first_hit_idx * range_resolution if first_hit_idx >= 0 else -1.0
 
             active_indices.append(b_idx)
             directions.append(dir_world)
@@ -457,6 +453,14 @@ class SonarTo3DMapper:
         half_fov = self.horizontal_fov / 2
         return abs(bearing_angle) <= half_fov
 
+    def _first_hit_index(self, intensity_profile: np.ndarray, range_resolution: float) -> int:
+        hits = (intensity_profile > self.intensity_threshold) & (
+            np.arange(len(intensity_profile)) * range_resolution >= self.min_range
+        )
+        if not hits.any():
+            return -1
+        return int(np.argmax(hits))
+
     def is_in_shadow_region(self, voxel_range: float, bearing_angle: float,
                             bearing_first_hits: List[Tuple[float, float]]) -> bool:
         """
@@ -559,15 +563,9 @@ class SonarTo3DMapper:
         updates = []
         
         # Find first hit
-        first_hit_idx = -1
         range_resolution = self.max_range / len(intensity_profile)
-        
-        for r_idx, intensity in enumerate(intensity_profile):
-            range_m = r_idx * range_resolution
-            if intensity > self.intensity_threshold and range_m >= self.min_range:
-                first_hit_idx = r_idx
-                break
-        
+        first_hit_idx = self._first_hit_index(intensity_profile, range_resolution)
+
         # If no hit, skip this ray (no update)
         if first_hit_idx == -1:
             return updates  # Return empty updates - no information available
@@ -674,11 +672,9 @@ class SonarTo3DMapper:
                 continue
 
             intensity_profile = polar_image[:, b_idx]
-            for r_idx, intensity in enumerate(intensity_profile):
-                range_m = r_idx * range_resolution
-                if intensity > self.intensity_threshold and range_m >= self.min_range:
-                    bearing_first_hits.append((bearing_angle, r_idx * range_resolution))
-                    break
+            first_hit_idx = self._first_hit_index(intensity_profile, range_resolution)
+            if first_hit_idx >= 0:
+                bearing_first_hits.append((bearing_angle, first_hit_idx * range_resolution))
 
         bearing_first_hits.sort(key=lambda x: x[0])
         return bearing_first_hits

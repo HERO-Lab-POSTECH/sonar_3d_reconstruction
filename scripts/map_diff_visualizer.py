@@ -196,14 +196,17 @@ class MapDiffVisualizer(Node):
             msg.header = header
             return msg
 
-        # Pack RGB into single float
-        rgb_packed = struct.unpack('f', struct.pack('BBBB', b, g, r, 255))[0]
+        rgb_uint32 = np.frombuffer(
+            np.array([b, g, r, 255], dtype=np.uint8).tobytes(), dtype='<u4'
+        )[0]
 
-        # Create point data
-        cloud_data = []
-        for p in points:
-            cloud_data.append(struct.pack('fffI', p[0], p[1], p[2],
-                                         struct.unpack('I', struct.pack('f', rgb_packed))[0]))
+        packed = np.empty(len(points), dtype=[
+            ('x', '<f4'), ('y', '<f4'), ('z', '<f4'), ('rgb', '<u4'),
+        ])
+        packed['x'] = points[:, 0]
+        packed['y'] = points[:, 1]
+        packed['z'] = points[:, 2]
+        packed['rgb'] = rgb_uint32
 
         msg = PointCloud2()
         msg.header = header
@@ -218,7 +221,7 @@ class MapDiffVisualizer(Node):
         msg.is_bigendian = False
         msg.point_step = 16
         msg.row_step = msg.point_step * len(points)
-        msg.data = b''.join(cloud_data)
+        msg.data = packed.tobytes()
         msg.is_dense = True
 
         return msg

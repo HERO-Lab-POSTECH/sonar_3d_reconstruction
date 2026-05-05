@@ -13,6 +13,51 @@
 - `scripts/3d_mapper_node.py`: `_sonar_callback` now calls `_quality_gate_passes()` between the time-sync gate and `synchronized_callback`. Drop counter (`_quality_drop_count`) is throttled-logged every 10 drops, mirroring the existing `_sync_drop_count` pattern.
 - `parameter_callback`: `slam_quality.threshold` and `slam_quality.fail_mode` are dynamically tunable at runtime; `grace_period_sec` / `stale_timeout_sec` are startup-only.
 
+## [Unreleased] — Phase B-1: surgical performance + regression infra (refactor)
+
+> Master design: `docs/source/design/2026-05-03-quality-perf-uplift-design.md`
+> Plan: `docs/source/plans/2026-05-03-phase-b1-perf-surgical.md`
+> Bit-exact 변경 (P0-3, B-1.2, B-1.3) + B-1.0 회귀 인프라 신설.
+
+### Added
+- `scripts/regression/` — Phase B-1.0 회귀 측정 인프라
+  - `regression_metric.py`: voxelize / jaccard / log_odds_diff / read_last_pointcloud / read_processing_stats
+  - `regression_test.sh`: bag replay + SLAM/Sonar launch + cloud bag record orchestrator
+  - `regression_compare.py` / `regression_plot.py`: baseline vs candidate 비교·시각화 driver
+  - `tests/regression/test_metric.py`: 6 단위 테스트
+  - `README.md`: §1~§8 측정 절차 + 환경 함정 4종 (DDS / launch SIGINT / cpp dlopen / launch 인자+QoS+토픽)
+- `tests/test_gil_release.py`: pybind11 GIL release smoke (2 PASS)
+
+### Changed
+- `sonar_3d_reconstruction/cpp/python_bindings.cpp`: 23개 .def에 `py::call_guard<py::gil_scoped_release>()` 적용 (P0-3) — Python GIL을 잡지 않은 채 heavy C++ 호출 → 멀티 콜백 구조에서 다른 스레드 진행 가능.
+- `scripts/3d_mapper_node.py` `publish_pointcloud2`: Python for-loop + `struct.pack('ffff', …)` → numpy structured array `.tobytes()` (B-1.2). Per-point Python 객체 변환 제거. byte-level identical (micro test).
+- `scripts/map_visualizer_node.py` `publish_pointcloud`: 동일 패턴 (B-1.2).
+- `scripts/map_diff_visualizer.py` `_create_pointcloud`: 동일 패턴 + `(x,y,z,rgb)` 4-field 변형 (B-1.2).
+- `scripts/3d_mapper.py`: `_first_hit_index(intensity_profile, range_resolution)` 헬퍼 추가 — boolean mask + `np.argmax` 1-pass. 3 호출지점 (`compute_depth_estimation`, `process_sonar_ray`, `_collect_first_hits`)을 헬퍼 호출로 통일 (B-1.3). 기존 for-loop 결과와 byte-level identical (22 trial micro test PASS).
+- `scripts/regression/regression_test.sh` (Task 4b): `ROS_DOMAIN_ID=42` 격리, `setsid` process group + INT/TERM/KILL 3단계 escalation, dataset profile env vars (`SONAR_MODEL` / `SONAR_PITCH` / `ODOMETRY` / `QOS_RELIABILITY`), `PC_TOPIC` default = `/sonar_3d_mapper/point_cloud`, `BAG_PATH` default = P-2.
+- `docs/source/design/2026-05-03-quality-perf-uplift-design.md` §4.1 dataset matrix rescope: P-2 (m3000d-range15-tilt90)는 모든 phase, P-1 (m3000d-range20-tilt30)은 B-2~D만 (B-1 제외 — sonar-livox stamp_diff ≈ 0.21s가 TimeSync 임계 0.1s 초과).
+
+### Removed
+- `scripts/3d_mapper_node.py`, `scripts/map_visualizer_node.py`: 사용처 사라진 `import struct` 정리.
+- `scripts/3d_mapper.py`: 3 호출지점에서 first-hit 검색 for-loop 5~7줄씩 제거 후 헬퍼 한 줄 호출로 대체.
+
+### Verification
+- colcon build PASS (Release).
+- 단위 테스트 8 PASS (`test_gil_release` 2 + `regression/test_metric` 6).
+- Bit-exact micro test:
+  - PointCloud2 packing: ref `struct.pack('ffff', …) for-loop` vs new `np.empty(dtype=[('x','<f4')…]).tobytes()` → byte-level identical (32B / 16B).
+  - first-hit 검색: ref Python for-loop vs new boolean-mask `np.argmax` → 22 random trials + min_range edge cases 모두 동일 인덱스.
+- P-2 measurement (PLAY_DURATION=90s, fast_lio + sonar 동시 launch):
+  - baseline (HEAD `f45ac5c` 직전 머지 상태) → 910 messages, 22068 voxels (last frame).
+  - candidate (HEAD `3a72687` 시점) → 978 / 973 messages (2회 측정), 22025 / 21848 voxels.
+  - candidate run1 vs run2 jaccard 0.822 — **same-code measurement variance > Phase B-1 plan 임계 (jaccard=1.0)**. fast_lio odom drift + bag play timing 비결정성이 본질 한계.
+  - 따라서 Phase B-1 bit-exact 검증은 **micro test**로 제공 (코드 변경이 byte-level 동일임을 직접 증명). 회귀 인프라는 Phase B-2~D의 변경 효과 검증용으로 자산화.
+
+### Notes
+- Phase B-1 plan §Task 4b/5/6/7 완료. Task 8 (현재 commit + push + PR) 진행.
+- B-1 임계 `jaccard=1.0 / mean Δlog-odds=0.0` 은 결정적 SLAM 환경(혹은 record-and-replay 방식)에서만 의미. 현 인프라(라이브 fast_lio 동시 launch)는 same-code variance ≈ 0.18 jaccard. B-2 이후는 의도된 알고리즘 변화 + ≥0.95 임계라 inframove ≪ 변경효과 ⇒ 인프라 그대로 사용.
+- 다음 phase: B-2 (correctness 5건). P-1 dataset 문제는 B-2 TimeSync 임계 검토 시 정식 해결.
+
 ## [Unreleased] — Phase A: Cleanup (refactor)
 
 > Master design: `docs/source/design/2026-05-03-quality-perf-uplift-design.md`

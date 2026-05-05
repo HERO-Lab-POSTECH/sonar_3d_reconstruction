@@ -231,22 +231,36 @@
 
 UCRC watertank 2026-01-22 시리즈를 사용 (`/workspace/data/7_ucrc_watertank/20260122_sonar_lidar/`). 모든 bag에 **livox MID360 (CustomMsg)** + **IMU** 포함되어 있고 별도 odometry 토픽은 없음 → **회귀 테스트 시 `fast_lio`를 함께 launch**하여 실 운용 그래프와 동일하게 측정.
 
-#### Primary (모든 phase 측정)
+#### Primary (phase 별 적용)
 
-| 이름 | 경로 (생략: `7_ucrc_watertank/20260122_sonar_lidar/`) | Duration | Sonar | 용도 |
-|------|---------------------------------------------------------|----------|-------|------|
-| **P-1** | `m750d_custom_platform/m750d-range15-tilt45-v1` | 272.8s | m750d, tilt45, range15, 1284 frames | 메인 회귀 측정 (m750d) |
-| **P-2** | `m3000d_blueboat/m3000d-range15-tilt90` | 352.0s | m3000d, tilt90 (직하방), range15, 1757 frames | 메인 회귀 측정 (m3000d, README 기본값) |
+| 이름 | 경로 (생략: `7_ucrc_watertank/20260122_sonar_lidar/`) | Duration | Sonar / Preset | 환경 | 적용 phase |
+|------|---------------------------------------------------------|----------|----------------|------|-----------|
+| **P-2** | `m3000d_blueboat/m3000d-range15-tilt90` | 352.0s | m3000d, tilt90 (직하방), range15, 1757 frames | Map1 (크레인 이동 전) | **B-1 ~ D** (모든 phase) |
+| **P-1** | `m3000d_blueboat/m3000d-range20-tilt30` | 209.6s | m3000d, tilt30, range20, 1046 frames | Map2 (크레인 이동 후) | **B-2 ~ D** (B-1 제외) |
 
-각 phase는 **P-1 + P-2 모두**에서 임계 통과해야 머지 가능 (sonar 모델 양쪽 검증).
+- **Phase B-1 (bit-exact)**: P-2 단일 측정. 같은 코드를 두 빌드(baseline / candidate) 에서 돌려 결과 동일성(jaccard=1.0, mean Δlog-odds=0.0) 만 검증하면 되므로 dataset 다양성은 불필요.
+- **Phase B-2 ~ D**: P-1 + P-2 모두에서 임계 통과해야 머지 (preset 30/90 + Map1/Map2 환경 양쪽).
+
+> **Notes (2026-05-05)**:
+> - 초기 spec 의 P-1 (`m750d-range15-tilt45-v1`) 은 launch preset 매트릭스
+>   (30/60/90 만 지원) 와 mismatch 하여 실측정 불가능. m3000d × Map2 × tilt30
+>   으로 교체하면서 sonar 모델 다양성은 잃었으나 preset/환경 다양성을 확보.
+> - 새 P-1 (range20-tilt30) 은 sonar-livox stamp_diff 가 일정하게 ~0.21s 로
+>   현 코드의 TimeSync 임계 (`time_sync.max_diff = 0.1s`) 를 모두 초과하여
+>   baseline 단계에서 0/0 frame 처리됨. Phase B-2 의 correctness fix 영역
+>   (P0-class) 에서 TimeSync 임계 완화 또는 dataset 교체로 정식 해결 후
+>   P-1 회귀 측정 정상화. Phase B-1 은 P-2 단일로 진행해도 bit-exact 검증
+>   목적에는 충분.
+> - m750d 검증은 Phase B-2 또는 D 시점 secondary 로 별도 추가 (필요 시
+>   tilt45 preset 신설 또는 closest preset(30°) 매핑).
 
 #### Secondary (Phase D 추가 검증, 매트릭스)
 
 | 이름 | bag | 검증 차원 |
 |------|-----|----------|
-| S-1 | `m3000d_blueboat/m3000d-range20-tilt30` (209.6s) | tilt 30°, 최대 range, 가장 짧음 |
+| S-1 | `m3000d_blueboat/m3000d-range15-tilt60-v2` (353.3s) | tilt 60° preset 매칭 (Map1) |
 | S-2 | `m3000d_blueboat/m3000d-range15-tilt60-robot` (517.1s) | robot detection 시나리오 (긴 데이터, 동적 객체) |
-| S-3 | `m750d_custom_platform/m750d-range15-tilt45-robot-v1` | m750d × robot detection |
+| S-3 | `m750d_custom_platform/m750d-range15-tilt45-v1` | m750d 모델 검증 (preset 매핑 정책 결정 후) |
 
 #### Reference Maps (보조 비교)
 

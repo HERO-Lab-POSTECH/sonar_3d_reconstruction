@@ -12,7 +12,6 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 import numpy as np
 import time
-import struct
 
 # ROS2 message imports
 from sensor_msgs.msg import Image, PointCloud2, PointField
@@ -853,14 +852,14 @@ class SonarMapperNode(Node):
         cloud.row_step = cloud.point_step * cloud.width
         cloud.is_dense = True
         
-        # Pack data
-        data = []
-        for i in range(len(points)):
-            data.append(struct.pack('ffff',
-                                   points[i, 0], points[i, 1], points[i, 2],
-                                   probabilities[i]))
-        
-        cloud.data = b''.join(data)
+        packed = np.empty(len(points), dtype=[
+            ('x', '<f4'), ('y', '<f4'), ('z', '<f4'), ('intensity', '<f4'),
+        ])
+        packed['x'] = points[:, 0]
+        packed['y'] = points[:, 1]
+        packed['z'] = points[:, 2]
+        packed['intensity'] = probabilities
+        cloud.data = packed.tobytes()
         
         # Publish
         self.pc_pub.publish(cloud)
