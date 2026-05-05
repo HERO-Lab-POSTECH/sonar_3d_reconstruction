@@ -5,28 +5,17 @@ Launch file for Map Visualizer (standalone)
 Visualize a saved out-of-core map without running the 3d_mapper node.
 Runs only map_visualizer_node.
 
-================================================================================
-LAUNCH ARGUMENTS
-================================================================================
-  map_path      : Out-of-core map directory path               (required)
-  use_sim_time  : Use simulation time                          (default: false)
-  rviz          : Launch RViz                                  (default: false)
-  publish_rate  : Point cloud publish rate [Hz]                (default: 1.0)
-  vis_mode      : Visualization mode (0=pointcloud, 1=octomap, 2=all) (default: 0)
+Arguments:
+  map_path     : Out-of-core map directory path (required)              (default: required)
+  use_sim_time : Use simulation time (set true for bag)                 (default: false)
+  use_rviz     : Launch RViz                                            (default: false)
+  publish_rate : Point cloud publish rate [Hz]                          (default: 1.0)
+  vis_mode     : Visualization mode (0=pointcloud, 1=octomap, 2=all)   (default: 0)
 
-================================================================================
-EXAMPLES
-================================================================================
-  # Basic usage (map_path required):
+Examples:
   ros2 launch sonar_3d_reconstruction map_visualizer.launch.py map_path:=/path/to/map
-
-  # With RViz:
-  ros2 launch sonar_3d_reconstruction map_visualizer.launch.py map_path:=/path/to/map rviz:=true
-
-  # With bag playback:
+  ros2 launch sonar_3d_reconstruction map_visualizer.launch.py map_path:=/path/to/map use_rviz:=true
   ros2 launch sonar_3d_reconstruction map_visualizer.launch.py map_path:=/path/to/map use_sim_time:=true
-
-  # Custom publish rate:
   ros2 launch sonar_3d_reconstruction map_visualizer.launch.py map_path:=/path/to/map publish_rate:=5.0
 """
 
@@ -102,7 +91,7 @@ def generate_launch_description():
     rviz_config = os.path.join(pkg_dir, 'rviz', rviz_config_name)
 
     use_sim_time = LaunchConfiguration('use_sim_time')
-    rviz = LaunchConfiguration('rviz')
+    use_rviz = LaunchConfiguration('use_rviz')
 
     return LaunchDescription([
         DeclareLaunchArgument('map_path',
@@ -110,7 +99,7 @@ def generate_launch_description():
         DeclareLaunchArgument('use_sim_time',
             default_value='false',
             description='Use simulation time'),
-        DeclareLaunchArgument('rviz',
+        DeclareLaunchArgument('use_rviz',
             default_value='false',
             description='Launch RViz'),
         DeclareLaunchArgument('publish_rate',
@@ -129,7 +118,7 @@ def generate_launch_description():
             executable='rviz2',
             arguments=['-d', rviz_config],
             parameters=[{'use_sim_time': use_sim_time}],
-            condition=IfCondition(rviz)
+            condition=IfCondition(use_rviz)
         ),
 
     ])

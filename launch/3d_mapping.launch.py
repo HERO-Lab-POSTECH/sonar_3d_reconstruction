@@ -2,85 +2,28 @@
 """
 Launch file for 3D Sonar Mapping System
 
-================================================================================
-LAUNCH ARGUMENTS
-================================================================================
-  sonar_model   : Sonar model selection [m750d, m3000d]              (default: m3000d)
-                  - m750d:  FOV=70deg,  topic=/sensor/sonar/oculus/m750d/image
-                  - m3000d: FOV=130deg, topic=/sensor/sonar/oculus/m3000d/image
+Arguments:
+  sonar_model       : Sonar model [m750d, m3000d]                     (default: m3000d)
+  odometry          : Odometry source [cartographer, fast_lio, fast_lio_loc] (default: cartographer)
+  map_path          : Out-of-core map directory (empty = in-memory)   (default: '')
+  bag_path          : Bag file path for playback                      (default: '')
+  bag_rate          : Bag playback rate                               (default: 1.0)
+  output_bag_path   : Recording output directory (empty = no record)  (default: '')
+  use_opencv_window : Show OpenCV sonar visualization                 (default: true)
+  use_sim_time      : Use simulation time (set true for bag)          (default: false)
+  use_rviz          : Launch RViz                                     (default: false)
+  sonar_pitch       : Sonar pitch angle [deg] [30.0, 60.0, 90.0]     (default: 90.0)
+  use_visualizer    : Launch map visualizer node (needs out-of-core)  (default: true)
 
-  odometry      : Odometry source [cartographer, fast_lio, fast_lio_loc] (default: cartographer)
-                  - cartographer:  topic=/localization/cartographer/odometry
-                  - fast_lio:      topic=/localization/fast_lio/odometry
-                  - fast_lio_loc:  topic=/localization/fast_lio_loc/odometry
+TF tree (provided by SLAM launch or bag file):
+  map -> odom -> base_link -> sonar_link / livox_frame / imu_link
+  Legacy aliases: body->base_link, oculus->sonar_link
 
-  map_path      : Out-of-core map directory path                     (default: "" = in-memory)
-                  If provided, enables disk-based mapping. Reuses existing map.
-
-  bag_file      : Bag file path for playback                         (default: "" = no playback)
-  bag_rate      : Bag playback rate                                  (default: 1.0)
-  record_path   : Recording output directory                         (default: "" = no recording)
-
-  show_opencv   : Show OpenCV visualization                          (default: true)
-  use_sim_time  : Use simulation time                                (default: false)
-  rviz          : Launch RViz                                        (default: false)
-  sonar_pitch   : Sonar pitch angle [deg] [30.0, 60.0, 90.0]         (default: 90.0)
-                  Loads matching tilt preset: config/presets/tilt_{pitch}.yaml
-                  Each preset has optimized filtering, IWLO, and adaptive parameters
-  launch_visualizer : Launch map visualizer node                     (default: true)
-
-  qos_reliability : QoS reliability for sensor subscribers           (default: best_effort)
-                    Options: reliable, best_effort
-                    Note: Use best_effort when playing back old bag files recorded
-                          with BEST_EFFORT QoS
-
-================================================================================
-TF TREE (provided by SLAM launch or bag file)
-================================================================================
-  map
-  └── odom
-      └── base_link
-          ├── livox_frame (LiDAR)
-          ├── imu_link
-          └── sonar_link (Oculus sonar)
-
-  Legacy alias (for old bag compatibility):
-    body -> base_link
-    oculus -> sonar_link
-
-================================================================================
-TOPICS
-================================================================================
-  Input:
-    - /sensor/sonar/oculus/{m750d,m3000d}/image (sensor_msgs/Image)
-    - /localization/{cartographer,fast_lio,fast_lio_loc}/odometry (nav_msgs/Odometry)
-  Output:
-    - /perception/sonar_3d/points (sensor_msgs/PointCloud2)
-    - /perception/sonar_3d/markers (visualization_msgs/MarkerArray)
-
-================================================================================
-EXAMPLES
-================================================================================
-  # With Cartographer SLAM (separate terminal):
-  ros2 launch cartographer_slam slam.launch.py
+Examples:
   ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py
-
-  # With Fast-LIO SLAM (separate terminal):
-  ros2 launch fast_lio mapping.launch.py
   ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py odometry:=fast_lio
-
-  # With Fast-LIO Localization:
-  ros2 launch fast_lio localization.launch.py map_path:=/path/to/map.pcd
-  ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py odometry:=fast_lio_loc
-
-  # Bag playback (TF from bag):
-  ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py bag_file:=/path/to/bag use_sim_time:=true
-
-  # Out-of-core mapping (disk-based, for large maps):
-  ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py map_path:=/path/to/map_dir
-
-  # BEST_EFFORT QoS (for old bag files):
-  ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py bag_file:=/path/to/bag use_sim_time:=true qos_reliability:=best_effort
+  ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py bag_path:=/path/to.bag use_sim_time:=true
+  ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py map_path:=/path/to/map_dir use_rviz:=true
 """
 
 import os
@@ -135,10 +78,9 @@ def setup_mapper_nodes(context, *args, **kwargs):
     sonar_model = context.launch_configurations.get('sonar_model', 'm3000d')
     odometry = context.launch_configurations.get('odometry', 'cartographer')
     map_path = context.launch_configurations.get('map_path', '')
-    show_opencv = context.launch_configurations.get('show_opencv', 'false')
+    use_opencv_window = context.launch_configurations.get('use_opencv_window', 'false')
     sonar_pitch = context.launch_configurations.get('sonar_pitch', '90.0')
-    launch_visualizer = context.launch_configurations.get('launch_visualizer', 'false')
-    qos_reliability = context.launch_configurations.get('qos_reliability', 'reliable')
+    use_visualizer = context.launch_configurations.get('use_visualizer', 'false')
 
     # Resolve tilt preset config
     tilt_preset = os.path.join(
@@ -185,8 +127,7 @@ def setup_mapper_nodes(context, *args, **kwargs):
         'topics.odometry': odometry_topic,
         'topics.slam_confidence': slam_confidence_topic,
         'outofcore.use': use_outofcore,
-        'visualization.show_opencv_visualization': show_opencv == 'true',
-        'qos.reliability': qos_reliability,
+        'visualization.show_opencv_visualization': use_opencv_window == 'true',
     }
 
     if use_outofcore:
@@ -214,7 +155,7 @@ def setup_mapper_nodes(context, *args, **kwargs):
     ))
 
     # Map Visualizer node (if enabled and using out-of-core)
-    if launch_visualizer.lower() == 'true' and use_outofcore:
+    if use_visualizer.lower() == 'true' and use_outofcore:
         visualizer_overrides = {
             'use_sim_time': use_sim_time == 'true',
             'outofcore.map_path': map_path,
@@ -238,17 +179,17 @@ def setup_mapper_nodes(context, *args, **kwargs):
 
 
 def setup_bag_playback(context, *args, **kwargs):
-    """Setup bag playback if bag_file is provided"""
-    bag_file = context.launch_configurations.get('bag_file', '')
+    """Setup bag playback if bag_path is provided"""
+    bag_path = context.launch_configurations.get('bag_path', '')
     bag_rate = context.launch_configurations.get('bag_rate', '1.0')
     use_sim_time = context.launch_configurations.get('use_sim_time', 'false')
 
-    if not bag_file:
+    if not bag_path:
         return []
 
-    print(f'[3D Mapping] Bag playback: {bag_file} (rate={bag_rate}x)')
+    print(f'[3D Mapping] Bag playback: {bag_path} (rate={bag_rate}x)')
 
-    cmd = ['ros2', 'bag', 'play', bag_file, '--rate', bag_rate]
+    cmd = ['ros2', 'bag', 'play', bag_path, '--rate', bag_rate]
     if use_sim_time == 'true':
         cmd.append('--clock')
 
@@ -261,15 +202,15 @@ def setup_bag_playback(context, *args, **kwargs):
 
 
 def setup_bag_recording(context, *args, **kwargs):
-    """Setup bag recording if record_path is provided"""
-    record_path = context.launch_configurations.get('record_path', '')
+    """Setup bag recording if output_bag_path is provided"""
+    output_bag_path = context.launch_configurations.get('output_bag_path', '')
 
-    if not record_path:
+    if not output_bag_path:
         return []
 
     # Create timestamped subfolder
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    bag_output = os.path.join(record_path, timestamp)
+    bag_output = os.path.join(output_bag_path, timestamp)
 
     print(f'[3D Mapping] Bag recording: {bag_output}/')
 
@@ -298,7 +239,7 @@ def generate_launch_description():
 
     # Launch configurations
     use_sim_time = LaunchConfiguration('use_sim_time')
-    rviz = LaunchConfiguration('rviz')
+    use_rviz = LaunchConfiguration('use_rviz')
 
     # Build launch description
     ld = LaunchDescription([
@@ -324,26 +265,26 @@ def generate_launch_description():
         # =====================================================================
         # BAG PLAYBACK & RECORDING
         # =====================================================================
-        DeclareLaunchArgument('bag_file',
+        DeclareLaunchArgument('bag_path',
             default_value='',
             description='Bag file path for playback (empty = no playback)'),
         DeclareLaunchArgument('bag_rate',
             default_value='1.0',
             description='Bag playback rate'),
-        DeclareLaunchArgument('record_path',
+        DeclareLaunchArgument('output_bag_path',
             default_value='',
             description='Recording output directory (empty = no recording)'),
 
         # =====================================================================
         # VISUALIZATION & LAUNCH OPTIONS
         # =====================================================================
-        DeclareLaunchArgument('show_opencv',
+        DeclareLaunchArgument('use_opencv_window',
             default_value='true',
             description='Show OpenCV visualization'),
         DeclareLaunchArgument('use_sim_time',
             default_value='false',
             description='Use simulation time'),
-        DeclareLaunchArgument('rviz',
+        DeclareLaunchArgument('use_rviz',
             default_value='false',
             description='Launch RViz'),
 
@@ -354,12 +295,9 @@ def generate_launch_description():
             default_value='90.0',
             choices=['30.0', '60.0', '90.0'],
             description='Sonar pitch angle [deg] - loads matching tilt preset config'),
-        DeclareLaunchArgument('launch_visualizer',
+        DeclareLaunchArgument('use_visualizer',
             default_value='true',
             description='Launch map visualizer node (requires out-of-core mode)'),
-        DeclareLaunchArgument('qos_reliability',
-            default_value='best_effort',
-            description='QoS reliability for sensor subscribers: reliable or best_effort'),
     ])
 
     # 3D Mapper + Visualizer nodes
@@ -371,13 +309,13 @@ def generate_launch_description():
         executable='rviz2',
         arguments=['-d', rviz_config],
         parameters=[{'use_sim_time': use_sim_time}],
-        condition=IfCondition(rviz)
+        condition=IfCondition(use_rviz)
     ))
 
-    # Bag playback (conditional on bag_file)
+    # Bag playback (conditional on bag_path)
     ld.add_action(OpaqueFunction(function=setup_bag_playback))
 
-    # Bag recording (conditional on record_path)
+    # Bag recording (conditional on output_bag_path)
     ld.add_action(OpaqueFunction(function=setup_bag_recording))
 
     return ld

@@ -1,5 +1,37 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Phase P5a: Launch arg standardization (refactor)
+
+### Changed (BREAKING — external launch invocations)
+- Launch arg rename per workspace conventions spec §2.5:
+  - `rviz` → `use_rviz`
+  - `bag_file` → `bag_path`
+  - `record_path` → `output_bag_path`
+  - `show_opencv` → `use_opencv_window`
+  - `launch_visualizer` → `use_visualizer`
+- All 3 launch files (3d_mapping, robot_3d_mapping, map_visualizer) header docstring 표준 적용
+
+### Removed (BREAKING — external launch invocations)
+- `qos_reliability` arg — QoS는 spec §2.4의 helper로 코드에 박힘
+- `marker_min_depth`, `marker_max_depth`, `marker_alpha` args — config yaml로 이동 (P6에서 처리)
+
+### Migration
+기존 호출 → 새 호출 매핑:
+- `rviz:=true`               → `use_rviz:=true`
+- `bag_file:=/path/to.bag`   → `bag_path:=/path/to.bag`
+- `record_path:=/path/to/dir` → `output_bag_path:=/path/to/dir`
+- `show_opencv:=true`        → `use_opencv_window:=true`
+- `launch_visualizer:=true`  → `use_visualizer:=true`
+- `qos_reliability:=...`     → (제거; 영향 없음)
+- `marker_*`                 → (P6 머지 후 config yaml에서 직접 수정)
+
+### Verification
+- colcon build PASS
+- ros2 launch --show-args: 신규 arg 표시
+- 정적 grep: launch 파일에서 legacy arg 0건
+
+---
+
 ## [Unreleased] — Phase P4c: Topic + QoS sync (refactor)
 
 ### Changed

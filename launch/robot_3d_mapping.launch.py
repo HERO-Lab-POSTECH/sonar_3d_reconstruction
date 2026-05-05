@@ -1,76 +1,35 @@
 #!/usr/bin/env python3
 """
-Launch file for Robot Detection V2 - Dual Map Visualization
+Launch file for Robot Detection - Dual Map Visualization
 
-================================================================================
-DESCRIPTION
-================================================================================
-  Detects robots/objects by scanning with sonar and visualizing results.
-  The original map is shown in normal colors, new scan data shown in RED.
+Detects robots/objects by scanning with sonar. The original map is shown in
+normal colors; new scan data written to detection_map shown in RED.
 
-  Flow:
-    1. Map visualizer shows the ORIGINAL map (normal Z-axis coloring)
-    2. Mapper writes new observations to detection_map (empty by default)
-    3. Detection visualizer shows detection_map in RED (/robot_detection/octomap)
+Arguments:
+  sonar_model        : Sonar model [m750d, m3000d]                     (default: m3000d)
+  odometry           : Odometry source [cartographer, fast_lio, fast_lio_loc] (default: cartographer)
+  sonar_pitch        : Sonar tilt angle [deg] (preset: 30, 60, 90)    (default: 60.0)
+  map_path           : Path to existing map tiles (required)           (default: '')
+  detection_map_path : Detection map path (empty = auto-derived)       (default: '')
+  bag_path           : Bag file path for playback                      (default: '')
+  bag_rate           : Bag playback rate                               (default: 1.0)
+  use_opencv_window  : Show OpenCV sonar visualization                 (default: true)
+  use_sim_time       : Use simulation time (set true for bag)          (default: false)
+  use_rviz           : Launch RViz                                     (default: false)
+  use_visualizer     : Launch original map visualizer node             (default: true)
 
-================================================================================
-LAUNCH ARGUMENTS
-================================================================================
-  map_path      : Path to existing map tiles (required)                 (default: "")
-                  Read-only. Shown by map_visualizer as reference.
+Preset selection:
+  sonar_pitch=30 -> config/presets/robot_detect_tilt_30.yaml
+  sonar_pitch=60 -> config/presets/robot_detect_tilt_60.yaml (default)
+  sonar_pitch=90 -> config/presets/robot_detect_tilt_90.yaml
 
-  detection_map_path : Path to detection map (mapper writes here)       (default: "" = auto)
-                       If empty, auto-derived as {parent}/robot_detection_map.
-                       Created empty if not exists. Existing data reused.
+Output topics:
+  /map_visualizer/octomap   - original map (OctoMap, Z-axis coloring)
+  /robot_detection/octomap  - detection map (OctoMap, RED)
 
-  sonar_model   : Sonar model selection [m750d, m3000d]                 (default: m3000d)
-  odometry      : Odometry source [cartographer, fast_lio, fast_lio_loc] (default: cartographer)
-  sonar_pitch   : Sonar tilt angle [30, 60, 90]                         (default: 60)
-
-  bag_file      : Bag file path for playback                            (default: "" = no playback)
-  bag_rate      : Bag playback rate                                     (default: 1.0)
-
-  show_opencv   : Show OpenCV sonar visualization                       (default: true)
-  use_sim_time  : Use simulation time                                   (default: false)
-  rviz          : Launch RViz                                           (default: false)
-  launch_visualizer : Launch original map visualizer node               (default: true)
-  qos_reliability   : QoS reliability for sensor subscribers            (default: best_effort)
-
-
-  marker_min_depth  : Min depth for marker grayscale coloring [m]       (default: 0.0)
-                      Depth at this value mapped to black
-  marker_max_depth  : Max depth for marker grayscale coloring [m]       (default: 10.0)
-                      Depth at this value mapped to white
-  marker_alpha      : Marker transparency (0.0~1.0)                     (default: 0.8)
-                      0.0 = fully transparent, 1.0 = fully opaque
-
-================================================================================
-PRESET SELECTION
-================================================================================
-  sonar_pitch=30  -> config/presets/robot_detect_tilt_30.yaml
-  sonar_pitch=60  -> config/presets/robot_detect_tilt_60.yaml (default)
-  sonar_pitch=90  -> config/presets/robot_detect_tilt_90.yaml
-
-================================================================================
-OUTPUT TOPICS
-================================================================================
-  /map_visualizer/octomap      - original map (OctoMap, Z-axis coloring)
-  /robot_detection/octomap     - detection map (OctoMap, RED)
-
-================================================================================
-EXAMPLES
-================================================================================
-  # Robot detection on existing map:
-  ros2 launch sonar_3d_reconstruction robot_3d_mapping_v2.launch.py \\
-      map_path:=/home/hero/data/7_ucrc_watertank/map/sonar use_sim_time:=true
-
-  # With custom detection map path:
-  ros2 launch sonar_3d_reconstruction robot_3d_mapping_v2.launch.py \\
-      map_path:=/path/to/sonar detection_map_path:=/path/to/detection use_sim_time:=true
-
-  # With bag playback:
-  ros2 launch sonar_3d_reconstruction robot_3d_mapping_v2.launch.py \\
-      map_path:=/path/to/map bag_file:=/path/to/bag use_sim_time:=true
+Examples:
+  ros2 launch sonar_3d_reconstruction robot_3d_mapping.launch.py map_path:=/path/to/sonar use_sim_time:=true
+  ros2 launch sonar_3d_reconstruction robot_3d_mapping.launch.py map_path:=/path/to/map bag_path:=/path/to/bag use_sim_time:=true
 """
 
 import os
@@ -139,14 +98,10 @@ def setup_nodes(context, *args, **kwargs):
     sonar_model = context.launch_configurations.get('sonar_model', 'm3000d')
     odometry = context.launch_configurations.get('odometry', 'cartographer')
     map_path = context.launch_configurations.get('map_path', '')
-    show_opencv = context.launch_configurations.get('show_opencv', 'false')
-    launch_visualizer = context.launch_configurations.get('launch_visualizer', 'true')
-    qos_reliability = context.launch_configurations.get('qos_reliability', 'best_effort')
+    use_opencv_window = context.launch_configurations.get('use_opencv_window', 'false')
+    use_visualizer = context.launch_configurations.get('use_visualizer', 'true')
     detection_map_arg = context.launch_configurations.get('detection_map_path', '')
     sonar_pitch = float(context.launch_configurations.get('sonar_pitch', '60.0'))
-    marker_min_depth = float(context.launch_configurations.get('marker_min_depth', '0.0'))
-    marker_max_depth = float(context.launch_configurations.get('marker_max_depth', '10.0'))
-    marker_alpha = float(context.launch_configurations.get('marker_alpha', '0.8'))
     pitch_int = int(sonar_pitch)  # For preset file lookup
 
     # Robot detection preset (selected by sonar_pitch)
@@ -223,15 +178,11 @@ def setup_nodes(context, *args, **kwargs):
         'topics.marker': '/robot_detection/occupancy_grid',
         'outofcore.use': True,
         'outofcore.map_path': detection_map_path,
-        'visualization.show_opencv_visualization': show_opencv == 'true',
+        'visualization.show_opencv_visualization': use_opencv_window == 'true',
         'visualization.tile_save_interval': 3.0,
-        'qos.reliability': qos_reliability,
         'mounting.orientation.roll': 0.0,
         'mounting.orientation.pitch': float(sonar_pitch),
         'mounting.orientation.yaw': 0.0,
-        'visualization.marker_min_depth': marker_min_depth,
-        'visualization.marker_max_depth': marker_max_depth,
-        'visualization.marker_alpha': marker_alpha,
         'depth_estimation.enabled': True,
         'depth_estimation.reference_map_path': original_map_path,
     }
@@ -259,7 +210,7 @@ def setup_nodes(context, *args, **kwargs):
     # =========================================================================
     # Node 2: Original Map Visualizer (shows existing map, normal coloring)
     # =========================================================================
-    if launch_visualizer.lower() == 'true':
+    if use_visualizer.lower() == 'true':
         visualizer_overrides = {
             'use_sim_time': use_sim_time == 'true',
             'outofcore.map_path': original_map_path,
@@ -290,17 +241,17 @@ def setup_nodes(context, *args, **kwargs):
 
 
 def setup_bag_playback(context, *args, **kwargs):
-    """Setup bag playback if bag_file is provided"""
-    bag_file = context.launch_configurations.get('bag_file', '')
+    """Setup bag playback if bag_path is provided"""
+    bag_path = context.launch_configurations.get('bag_path', '')
     bag_rate = context.launch_configurations.get('bag_rate', '1.0')
     use_sim_time = context.launch_configurations.get('use_sim_time', 'false')
 
-    if not bag_file:
+    if not bag_path:
         return []
 
-    print(f'[Robot Detection V2] Bag playback: {bag_file} (rate={bag_rate}x)')
+    print(f'[Robot Detection V2] Bag playback: {bag_path} (rate={bag_rate}x)')
 
-    cmd = ['ros2', 'bag', 'play', bag_file, '--rate', bag_rate]
+    cmd = ['ros2', 'bag', 'play', bag_path, '--rate', bag_rate]
     if use_sim_time == 'true':
         cmd.append('--clock')
 
@@ -321,7 +272,7 @@ def generate_launch_description():
 
     # Launch configurations
     use_sim_time = LaunchConfiguration('use_sim_time')
-    rviz = LaunchConfiguration('rviz')
+    use_rviz = LaunchConfiguration('use_rviz')
 
     # Build launch description
     ld = LaunchDescription([
@@ -353,7 +304,7 @@ def generate_launch_description():
         # =====================================================================
         # BAG PLAYBACK
         # =====================================================================
-        DeclareLaunchArgument('bag_file',
+        DeclareLaunchArgument('bag_path',
             default_value='',
             description='Bag file path for playback (empty = no playback)'),
         DeclareLaunchArgument('bag_rate',
@@ -363,34 +314,22 @@ def generate_launch_description():
         # =====================================================================
         # VISUALIZATION & LAUNCH OPTIONS
         # =====================================================================
-        DeclareLaunchArgument('show_opencv',
+        DeclareLaunchArgument('use_opencv_window',
             default_value='true',
             description='Show OpenCV visualization'),
         DeclareLaunchArgument('use_sim_time',
             default_value='false',
             description='Use simulation time'),
-        DeclareLaunchArgument('rviz',
+        DeclareLaunchArgument('use_rviz',
             default_value='false',
             description='Launch RViz'),
 
         # =====================================================================
         # ADVANCED OPTIONS
         # =====================================================================
-        DeclareLaunchArgument('launch_visualizer',
+        DeclareLaunchArgument('use_visualizer',
             default_value='true',
             description='Launch original map visualizer node'),
-        DeclareLaunchArgument('qos_reliability',
-            default_value='best_effort',
-            description='QoS reliability for sensor subscribers: reliable or best_effort'),
-        DeclareLaunchArgument('marker_min_depth',
-            default_value='0.0',
-            description='Min depth for marker grayscale coloring [m] (mapped to black)'),
-        DeclareLaunchArgument('marker_max_depth',
-            default_value='10.0',
-            description='Max depth for marker grayscale coloring [m] (mapped to white)'),
-        DeclareLaunchArgument('marker_alpha',
-            default_value='0.8',
-            description='Marker transparency (0.0=transparent, 1.0=opaque)'),
     ])
 
     # Mapper + Visualizers
@@ -402,10 +341,10 @@ def generate_launch_description():
         executable='rviz2',
         arguments=['-d', rviz_config],
         parameters=[{'use_sim_time': use_sim_time}],
-        condition=IfCondition(rviz)
+        condition=IfCondition(use_rviz)
     ))
 
-    # Bag playback (conditional on bag_file)
+    # Bag playback (conditional on bag_path)
     ld.add_action(OpaqueFunction(function=setup_bag_playback))
 
     return ld
