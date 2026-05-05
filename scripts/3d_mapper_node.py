@@ -10,6 +10,7 @@ Date: 2025
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
+from sonar_3d_reconstruction.qos import SENSOR_QOS, RELIABLE_QOS, LATCHED_QOS
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 import numpy as np
@@ -111,8 +112,6 @@ class SonarMapperNode(Node):
         # Get topic names (with namespaced names)
         sonar_topic = self.get_parameter('topics.sonar').value
         odometry_topic = self.get_parameter('topics.odometry').value
-        pointcloud_topic = self.get_parameter('topics.pointcloud').value
-        marker_topic = self.get_parameter('topics.marker').value
         slam_confidence_topic = self.get_parameter('topics.slam_confidence').value
 
         # Auto-generate range_topic from sonar_topic: /sensor/sonar/.../image -> /sensor/sonar/.../param/range
@@ -219,7 +218,7 @@ class SonarMapperNode(Node):
             Odometry,
             odometry_topic,
             self._odom_callback,
-            qos_profile,
+            RELIABLE_QOS,
             callback_group=self.odom_cbg,
         )
 
@@ -227,28 +226,28 @@ class SonarMapperNode(Node):
             Image,
             sonar_topic,
             self._sonar_callback,
-            qos_profile,
+            SENSOR_QOS,
             callback_group=self.sonar_cbg,
         )
-        
-        # Create publishers (use same QoS for consistency)
+
+        # Create publishers (hardcoded per spec §2.3.3 rule 1)
         self.pc_pub = self.create_publisher(
             PointCloud2,
-            pointcloud_topic,
-            qos_profile
+            '/perception/sonar_3d/points',
+            SENSOR_QOS
         )
 
         self.marker_pub = self.create_publisher(
             MarkerArray,
-            marker_topic,
-            qos_profile
+            '/perception/sonar_3d/markers',
+            SENSOR_QOS
         )
 
         # Crosstalk filtered image publisher (for debugging)
         self.filtered_image_pub = self.create_publisher(
             Image,
-            '/sonar_3d_mapper/filtered_image',
-            qos_profile
+            '/sonar_3d_mapper/debug/crosstalk_filtered',
+            SENSOR_QOS
         )
 
         # Subscribe to dynamic range topic from sonar driver
@@ -256,7 +255,7 @@ class SonarMapperNode(Node):
             Float32,
             range_topic,
             self.range_callback,
-            qos_profile,
+            LATCHED_QOS,
             callback_group=self.sonar_cbg,
         )
 
@@ -266,7 +265,7 @@ class SonarMapperNode(Node):
                 Float32,
                 slam_confidence_topic,
                 self._confidence_callback,
-                qos_profile,
+                RELIABLE_QOS,
                 callback_group=self.sonar_cbg,
             )
             self.get_logger().info(
@@ -287,16 +286,10 @@ class SonarMapperNode(Node):
         else:
             # Out-of-core mode: eviction-based + periodic saving
             self.timer = None
-            tile_indices_qos = QoSProfile(
-                reliability=ReliabilityPolicy.RELIABLE,
-                durability=DurabilityPolicy.TRANSIENT_LOCAL,
-                history=HistoryPolicy.KEEP_LAST,
-                depth=1,
-            )
             self.tile_update_pub = self.create_publisher(
                 Int32MultiArray,
-                '/sonar_3d_mapper/updated_tile_indices',
-                tile_indices_qos
+                '/perception/sonar_3d/tile_indices',
+                LATCHED_QOS
             )
             # Periodically save dirty tiles + notify visualizer
             self.flush_timer = self.create_timer(

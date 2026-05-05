@@ -10,11 +10,11 @@ Usage:
         --map_b /path/to/map_b/map_tile
 
 Topics published:
-    - /map_diff/map_a (PointCloud2): Red - Map A voxels
-    - /map_diff/map_b (PointCloud2): Blue - Map B voxels
-    - /map_diff/only_a (PointCloud2): Orange - Only in Map A
-    - /map_diff/only_b (PointCloud2): Cyan - Only in Map B
-    - /map_diff/common (PointCloud2): Green - Common voxels
+    - /perception/map_diff/map_a (PointCloud2): Red - Map A voxels
+    - /perception/map_diff/map_b (PointCloud2): Blue - Map B voxels
+    - /perception/map_diff/only_a (PointCloud2): Orange - Only in Map A
+    - /perception/map_diff/only_b (PointCloud2): Cyan - Only in Map B
+    - /perception/map_diff/common (PointCloud2): Green - Common voxels
 """
 
 import argparse
@@ -26,6 +26,7 @@ from typing import List, Tuple
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
+from sonar_3d_reconstruction.qos import SENSOR_QOS
 from sensor_msgs.msg import PointCloud2, PointField
 from std_msgs.msg import Header
 
@@ -82,19 +83,12 @@ class MapDiffVisualizer(Node):
         self.declare_parameter('frame_id', 'map')
         self.frame_id = self.get_parameter('frame_id').value
 
-        # QoS profile (BEST_EFFORT for sensor data consistency)
-        qos_profile = QoSProfile(
-            reliability=QoSReliabilityPolicy.BEST_EFFORT,
-            history=QoSHistoryPolicy.KEEP_LAST,
-            depth=10
-        )
-
         # Publishers
-        self.pub_map_a = self.create_publisher(PointCloud2, '/map_diff/map_a', qos_profile)
-        self.pub_map_b = self.create_publisher(PointCloud2, '/map_diff/map_b', qos_profile)
-        self.pub_only_a = self.create_publisher(PointCloud2, '/map_diff/only_a', qos_profile)
-        self.pub_only_b = self.create_publisher(PointCloud2, '/map_diff/only_b', qos_profile)
-        self.pub_common = self.create_publisher(PointCloud2, '/map_diff/common', qos_profile)
+        self.pub_map_a = self.create_publisher(PointCloud2, '/perception/map_diff/map_a', SENSOR_QOS)
+        self.pub_map_b = self.create_publisher(PointCloud2, '/perception/map_diff/map_b', SENSOR_QOS)
+        self.pub_only_a = self.create_publisher(PointCloud2, '/perception/map_diff/only_a', SENSOR_QOS)
+        self.pub_only_b = self.create_publisher(PointCloud2, '/perception/map_diff/only_b', SENSOR_QOS)
+        self.pub_common = self.create_publisher(PointCloud2, '/perception/map_diff/common', SENSOR_QOS)
 
         # Load and compute diff
         self.get_logger().info('Loading maps...')
@@ -108,7 +102,7 @@ class MapDiffVisualizer(Node):
 
         # Timer for publishing (1 Hz)
         self.timer = self.create_timer(1.0, self._publish_clouds)
-        self.get_logger().info('Publishing to /map_diff/* topics. Open RViz2 to visualize.')
+        self.get_logger().info('Publishing to /perception/map_diff/* topics. Open RViz2 to visualize.')
 
     def _load_map(self, map_path: Path) -> np.ndarray:
         """Load all occupied voxels from a map"""

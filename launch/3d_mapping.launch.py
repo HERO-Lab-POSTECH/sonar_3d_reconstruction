@@ -10,9 +10,9 @@ LAUNCH ARGUMENTS
                   - m3000d: FOV=130deg, topic=/sensor/sonar/oculus/m3000d/image
 
   odometry      : Odometry source [cartographer, fast_lio, fast_lio_loc] (default: cartographer)
-                  - cartographer:  topic=cartographer_2d/odometry
-                  - fast_lio:      topic=/fast_lio/odometry
-                  - fast_lio_loc:  topic=/fast_lio/localization/odometry
+                  - cartographer:  topic=/localization/cartographer/odometry
+                  - fast_lio:      topic=/localization/fast_lio/odometry
+                  - fast_lio_loc:  topic=/localization/fast_lio_loc/odometry
 
   map_path      : Out-of-core map directory path                     (default: "" = in-memory)
                   If provided, enables disk-based mapping. Reuses existing map.
@@ -53,10 +53,10 @@ TOPICS
 ================================================================================
   Input:
     - /sensor/sonar/oculus/{m750d,m3000d}/image (sensor_msgs/Image)
-    - {cartographer_2d,/fast_lio}/odometry (nav_msgs/Odometry)
+    - /localization/{cartographer,fast_lio,fast_lio_loc}/odometry (nav_msgs/Odometry)
   Output:
-    - /sonar_3d_mapper/point_cloud (sensor_msgs/PointCloud2)
-    - /sonar_3d_mapper/occupancy_grid (visualization_msgs/MarkerArray)
+    - /perception/sonar_3d/points (sensor_msgs/PointCloud2)
+    - /perception/sonar_3d/markers (visualization_msgs/MarkerArray)
 
 ================================================================================
 EXAMPLES
@@ -112,15 +112,15 @@ SONAR_CONFIG = {
 # ODOMETRY CONFIGURATION
 # =============================================================================
 ODOMETRY_CONFIG = {
-    'cartographer': 'cartographer_2d/odometry',
-    'fast_lio': '/fast_lio/odometry',
-    'fast_lio_loc': '/fast_lio/localization/odometry',
+    'cartographer': '/localization/cartographer/odometry',
+    'fast_lio': '/localization/fast_lio/odometry',
+    'fast_lio_loc': '/localization/fast_lio_loc/odometry',
 }
 
 CONFIDENCE_CONFIG = {
     'cartographer': '',                                  # no per-frame scalar published
     'fast_lio': '',                                      # mapping mode: fitness undefined
-    'fast_lio_loc': '/fast_lio/localization/confidence',
+    'fast_lio_loc': '/localization/fast_lio_loc/confidence',
 }
 
 
