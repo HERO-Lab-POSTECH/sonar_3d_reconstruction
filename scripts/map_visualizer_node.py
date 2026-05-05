@@ -15,6 +15,7 @@ Date: 2025
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
+from sonar_3d_reconstruction.qos import SENSOR_QOS, LATCHED_QOS
 import numpy as np
 import os
 import time
@@ -117,32 +118,25 @@ class MapVisualizerNode(Node):
             except Exception:
                 pass
 
-        # Publishers (use node name for unique topic names per instance)
-        node_name = self.get_name()
+        # Publishers (hardcoded per spec §2.3.3 rule 1)
         if OCTOMAP_MSGS_AVAILABLE:
-            self.octomap_pub = self.create_publisher(Octomap, f'/{node_name}/octomap', 10)
+            self.octomap_pub = self.create_publisher(Octomap, '/perception/sonar_3d_visualizer/octomap', SENSOR_QOS)
         else:
             self.octomap_pub = None
 
-        self.pc_pub = self.create_publisher(PointCloud2, f'/{node_name}/point_cloud', 10)
+        self.pc_pub = self.create_publisher(PointCloud2, '/perception/sonar_3d_visualizer/points', SENSOR_QOS)
 
         # MarkerArray publisher for auto-expire mode
         if self.marker_lifetime > 0:
-            self.marker_pub = self.create_publisher(MarkerArray, f'/{node_name}/marker_array', 10)
+            self.marker_pub = self.create_publisher(MarkerArray, '/perception/sonar_3d_visualizer/markers', SENSOR_QOS)
             self.last_tile_update_time = 0.0
 
         # Subscribe to tile update notifications from mapper node
-        # Use BEST_EFFORT QoS for consistency with mapper node
-        qos_profile = QoSProfile(
-            reliability=QoSReliabilityPolicy.BEST_EFFORT,
-            history=QoSHistoryPolicy.KEEP_LAST,
-            depth=10
-        )
         self.tile_update_sub = self.create_subscription(
             Int32MultiArray,
-            '/sonar_3d_mapper/updated_tile_indices',
+            '/perception/sonar_3d/tile_indices',
             self.tile_update_callback,
-            qos_profile
+            LATCHED_QOS
         )
         self.pending_tile_updates = []  # Pending tile updates
 

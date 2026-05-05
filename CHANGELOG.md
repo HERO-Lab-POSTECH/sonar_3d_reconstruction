@@ -1,5 +1,37 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Phase P4c: Topic + QoS sync (refactor)
+
+### Changed
+- `scripts/3d_mapper_node.py`: publishers hardcoded per spec §2.3.3 rule 1
+  - `/sonar_3d_mapper/point_cloud` → `/perception/sonar_3d/points` (SENSOR_QOS)
+  - `/sonar_3d_mapper/occupancy_grid` → `/perception/sonar_3d/markers` (SENSOR_QOS)
+  - `/sonar_3d_mapper/filtered_image` → `/sonar_3d_mapper/debug/crosstalk_filtered` (SENSOR_QOS)
+  - `/sonar_3d_mapper/updated_tile_indices` → `/perception/sonar_3d/tile_indices` (LATCHED_QOS)
+- `scripts/3d_mapper_node.py`: subscriber QoS helpers adopted
+  - `odom_sub` → RELIABLE_QOS, `sonar_sub` → SENSOR_QOS
+  - `range_sub` → LATCHED_QOS, `slam_confidence_sub` → RELIABLE_QOS
+- `scripts/map_visualizer_node.py`: publishers hardcoded
+  - `/{node_name}/octomap` → `/perception/sonar_3d_visualizer/octomap` (SENSOR_QOS)
+  - `/{node_name}/point_cloud` → `/perception/sonar_3d_visualizer/points` (SENSOR_QOS)
+  - `/{node_name}/marker_array` → `/perception/sonar_3d_visualizer/markers` (SENSOR_QOS)
+  - tile_update_sub: `/sonar_3d_mapper/updated_tile_indices` → `/perception/sonar_3d/tile_indices` (LATCHED_QOS)
+- `scripts/map_diff_visualizer.py`: `/map_diff/*` → `/perception/map_diff/*` (SENSOR_QOS, 5 publishers)
+- `launch/3d_mapping.launch.py`: ODOMETRY_CONFIG/CONFIDENCE_CONFIG synced with lidar_slam P4b
+  - `cartographer_2d/odometry` → `/localization/cartographer/odometry`
+  - `/fast_lio/odometry` → `/localization/fast_lio/odometry`
+  - `/fast_lio/localization/odometry` → `/localization/fast_lio_loc/odometry`
+  - `/fast_lio/localization/confidence` → `/localization/fast_lio_loc/confidence`
+- `launch/robot_3d_mapping.launch.py`: remappings updated to new topic names
+- `config/common.yaml`: `topics.pointcloud`/`topics.marker` keys removed (hardcoded in code)
+- `scripts/config.py`: `topics.pointcloud`/`topics.marker` parameter declarations removed
+
+### Verification
+- colcon build PASS (0.42s)
+- static grep: legacy topic refs 0건 in source
+
+---
+
 ## [Unreleased] — Phase P4a: QoS helper module (refactor)
 
 ### Added

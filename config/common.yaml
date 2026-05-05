@@ -33,7 +33,7 @@ sonar_3d_mapper:
       filter_width: 0.02             # Notch width on bearing freq axis (0.0-1.0)
       filter_strength: 0.8           # Suppression strength (0.0-1.0)
       dc_preserve_ratio: 0.05        # DC preservation radius ratio (0.0-0.5)
-      publish_filtered: true        # Publish filtered image to /sonar_3d_mapper/filtered_image
+      publish_filtered: true        # Publish filtered image to /sonar_3d_mapper/debug/crosstalk_filtered
 
     processing:                      # [Dynamic]
       frame_skip: 5                  # Process every N frames
@@ -64,10 +64,6 @@ sonar_3d_mapper:
       base: "base_link"              # Robot body frame (from boat_description URDF)
       map: "map"                     # Fixed frame in RViz
       publish_tf: false
-
-    topics:
-      pointcloud: "/sonar_3d_mapper/point_cloud"
-      marker: "/sonar_3d_mapper/occupancy_grid"
 
     # ==========================================================================
     # VISUALIZATION [Dynamic]
