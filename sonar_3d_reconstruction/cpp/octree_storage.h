@@ -15,6 +15,7 @@
 #include <octomap/OcTree.h>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace sonar_3d_reconstruction
 {
@@ -125,6 +126,9 @@ private:
     double resolution_;
     std::unique_ptr<octomap::OcTree> octree_;
     std::unordered_map<octomap::OcTreeKey, IWLOMeta, OcTreeKeyHash> iwlo_meta_;
+    /// Keys with metadata changed since last sync_to_octree (P2-5).
+    /// `sync_to_octree` re-applies only these to the octree, then clears.
+    std::unordered_set<octomap::OcTreeKey, OcTreeKeyHash> dirty_keys_;
     bool dirty_ = false;
 
     /**

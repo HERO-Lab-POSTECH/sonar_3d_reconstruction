@@ -1,5 +1,38 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Phase C: Octree Storage Hardening (refactor)
+
+> Master design: `docs/source/design/2026-05-03-quality-perf-uplift-design.md`
+> Phase design: `docs/source/design/2026-05-05-phase-c-algorithm-unify-design.md`
+> Plan: `docs/source/plans/2026-05-05-phase-c-algorithm-unify.md`
+
+### Fixed
+- **C-a (P2-6)** `cpp/octree_storage.cpp::load_iwlo_meta`: 루프 내 entry 별 `ifs.good()` 검사 추가. truncate / EOF 시 `iwlo_meta_.clear()` 후 `false` 반환하여 호출자가 부분 손상된 storage 를 받지 않도록 보호.
+
+### Changed
+- **C-b (P2-5)** `cpp/octree_storage.{h,cpp}`: `dirty_keys_` (`unordered_set<OcTreeKey>`) 멤버 추가. `set_log_odds` / `increment_observation_count` / `get_or_create_meta` / `load_iwlo_meta` 가 변경된 key 를 추적, `clear()` 가 reset, `sync_to_octree()` 는 dirty subset 만 octree 에 반영 후 비움. flush 빈도 높은 환경 (out-of-core mapper 의 매 frame 검사) 에서 비용 amortize.
+
+### Added
+- `test/test_octree_storage_load.cpp` — 5 gtest 케이스 (3 truncation + 2 incremental sync 동등성).
+- `docs/source/design/2026-05-05-phase-c-algorithm-unify-design.md` — Phase C thin design doc.
+- `docs/source/plans/2026-05-05-phase-c-algorithm-unify.md` — Phase C plan.
+
+### Verification
+- colcon build PASS (Release, BUILD_TESTING=ON).
+- 단위 테스트: 14 pytest + 5 gtest = 19 PASS.
+- 회귀 측정 (P-2, `m3000d-range15-tilt90`, 90s, fast_lio odom):
+  - baseline (main 2facddf): 99 frames, 76,858 voxels, 21,776 occupied (28.3%).
+  - candidate (HEAD): 동등 — C-a/C-b 는 결과 보존 변경 (jaccard ≥ 0.99 임계).
+
+### Notes (P2-2 분리)
+- master spec §3 Phase C 의 P2-2 (이중 알고리즘 통일, Q-C1 연속형 채택) 는 본 PR 에서 분리.
+- 이유: 첫 시도 (commit `e987cc6`, 본 branch 에서 reset 으로 제거) 회귀 측정 결과, 기존 preset 의 IWLOParams 비대칭 (`tilt_90.yaml`: `L_occ=7.0`, `L_free=-10.0`) 와 continuous form 이 결합되면 break-even `w ≈ 0.59` 가 되어, P-2 90s window 동안 occupied voxel 0 (baseline 21,776). spec §1.2 사용자 핵심 제약 "맵 결과는 더 좋아야 한다" 정면 위반.
+- 후속: P2-2 는 IWLOParams (`L_occ` / `L_free` 비대칭) 재튜닝과 함께 별도 spec / plan / PR 로 재설계. 영향 preset: `tilt_30/60/90`, `robot_detect_tilt_30/60`. master spec Phase C 표 갱신 완료 (P2-2 상태 = 분리).
+
+### 다음 phase
+- **Phase C-c 재설계** (P2-2 + IWLOParams 재튜닝): 별도 spec.
+- **Phase D** (vectorization, P1-3): 별도 spec, Q-D1 정책 (A안 → B안).
+
 ## [Unreleased] — Phase B-3: Concurrency (refactor)
 
 > Master design: `docs/source/design/2026-05-03-quality-perf-uplift-design.md`

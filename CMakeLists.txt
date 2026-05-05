@@ -122,6 +122,27 @@ if(BUILD_TESTING)
   # a copyright and license is added to all source files
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
+
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_octree_storage_load
+    test/test_octree_storage_load.cpp
+    sonar_3d_reconstruction/cpp/octree_storage.cpp
+    sonar_3d_reconstruction/cpp/iwlo_updater.cpp
+    sonar_3d_reconstruction/cpp/probability_updater.cpp
+    sonar_3d_reconstruction/cpp/tile.cpp
+    sonar_3d_reconstruction/cpp/tile_manager.cpp
+    sonar_3d_reconstruction/cpp/octree_mapper.cpp
+    sonar_3d_reconstruction/cpp/outofcore_tile_mapper.cpp
+  )
+  target_include_directories(test_octree_storage_load PRIVATE
+    sonar_3d_reconstruction/cpp
+    ${EIGEN3_INCLUDE_DIR}
+    ${OCTOMAP_INCLUDE_DIRS}
+  )
+  target_link_libraries(test_octree_storage_load
+    ${OCTOMAP_LIBRARIES}
+    Eigen3::Eigen
+  )
 endif()
 
 ament_package()

@@ -183,11 +183,11 @@
 **목표**: 알고리즘 이중 구현 정리 + 누적 오류 제거.
 
 **범위**:
-| 항목 ID | 위치 | 변경 |
-|--------|------|------|
-| P2-2 | `cpp/iwlo_updater.cpp:106` vs `probability_updater.cpp:368-374` vs `tile.cpp:94-101` | **연속형(`IWLOUpdater::compute_delta_log_odds`)로 통일** (Q-C1 확정), `ProbabilityUpdater::batch_update_iwlo` / `Tile::update_voxel`의 이진 분기 제거 |
-| P2-5 | `cpp/octree_storage.cpp:276-286` | `dirty_keys_` 추적 → 변경 voxel만 sync_to_octree |
-| P2-6 | `cpp/octree_storage.cpp:249-260` | `load_iwlo_meta` 루프 내 `ifs.good()` 검사 |
+| 항목 ID | 위치 | 변경 | 상태 (2026-05-05) |
+|--------|------|------|------------------|
+| P2-2 | `cpp/iwlo_updater.cpp:106` vs `probability_updater.cpp:368-374` vs `tile.cpp:94-101` | **연속형(`IWLOUpdater::compute_delta_log_odds`)로 통일** (Q-C1 확정), `ProbabilityUpdater::batch_update_iwlo` / `Tile::update_voxel`의 이진 분기 제거 | **분리** — Phase C PR 머지 시 회귀 측정에서 사용자 핵심 제약 위반 (occupied voxel 21,776 → 0). IWLOParams (`L_occ` / `L_free` 비대칭) 재튜닝과 함께 별도 spec 으로 재설계 |
+| P2-5 | `cpp/octree_storage.cpp:276-286` | `dirty_keys_` 추적 → 변경 voxel만 sync_to_octree | Phase C 머지 |
+| P2-6 | `cpp/octree_storage.cpp:249-260` | `load_iwlo_meta` 루프 내 `ifs.good()` 검사 | Phase C 머지 |
 
 **확정 (Q-C1)**: 연속형 채택. 사유는 §10 참조.
 

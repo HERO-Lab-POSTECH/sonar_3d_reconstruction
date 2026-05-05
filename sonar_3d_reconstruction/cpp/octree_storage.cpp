@@ -38,6 +38,7 @@ double OctreeStorage::get_log_odds(const octomap::OcTreeKey& key) const
 void OctreeStorage::set_log_odds(const octomap::OcTreeKey& key, double value)
 {
     iwlo_meta_[key].log_odds = value;
+    dirty_keys_.insert(key);
     dirty_ = true;
 }
 
@@ -52,12 +53,14 @@ int OctreeStorage::get_observation_count(const octomap::OcTreeKey& key) const
 
 int OctreeStorage::increment_observation_count(const octomap::OcTreeKey& key)
 {
+    dirty_keys_.insert(key);
     dirty_ = true;
     return ++iwlo_meta_[key].observation_count;
 }
 
 IWLOMeta& OctreeStorage::get_or_create_meta(const octomap::OcTreeKey& key)
 {
+    dirty_keys_.insert(key);
     dirty_ = true;
     return iwlo_meta_[key];
 }
@@ -244,6 +247,7 @@ bool OctreeStorage::load_iwlo_meta(const std::string& filepath)
     }
 
     iwlo_meta_.clear();
+    dirty_keys_.clear();
     iwlo_meta_.reserve(count);
 
     for (uint64_t i = 0; i < count; ++i) {
@@ -256,10 +260,19 @@ bool OctreeStorage::load_iwlo_meta(const std::string& filepath)
         ifs.read(reinterpret_cast<char*>(&meta.log_odds), sizeof(double));
         ifs.read(reinterpret_cast<char*>(&meta.observation_count), sizeof(int));
 
+        if (!ifs.good()) {
+            std::cerr << "[OctreeStorage] IWLO metadata truncated at entry "
+                      << i << " of declared " << count << std::endl;
+            iwlo_meta_.clear();
+            dirty_keys_.clear();
+            return false;
+        }
+
         iwlo_meta_[key] = meta;
+        dirty_keys_.insert(key);
     }
 
-    return ifs.good();
+    return true;
 }
 
 // =============================================================================
@@ -270,19 +283,28 @@ void OctreeStorage::clear()
 {
     octree_->clear();
     iwlo_meta_.clear();
+    dirty_keys_.clear();
     dirty_ = true;
 }
 
 void OctreeStorage::sync_to_octree()
 {
-    for (const auto& [key, meta] : iwlo_meta_) {
+    if (dirty_keys_.empty()) {
+        return;
+    }
+    for (const auto& key : dirty_keys_) {
+        auto it = iwlo_meta_.find(key);
+        if (it == iwlo_meta_.end()) {
+            continue;  // Defensive: meta erased after dirty marking
+        }
         octomap::point3d coord = octree_->keyToCoord(key);
         octomap::OcTreeNode* node = octree_->updateNode(coord, true, true);
         if (node) {
-            node->setLogOdds(static_cast<float>(meta.log_odds));
+            node->setLogOdds(static_cast<float>(it->second.log_odds));
         }
     }
     octree_->updateInnerOccupancy();
+    dirty_keys_.clear();
 }
 
 size_t OctreeStorage::prune()
