@@ -38,10 +38,18 @@ double IWLOUpdater::intensity_to_weight(double intensity,
         return 0.0;
     }
 
-    // Normalize: [threshold, max] -> [0, 1]
-    double normalized = (intensity - intensity_threshold) /
-                        (intensity_max - intensity_threshold);
-    normalized = std::max(0.0, std::min(1.0, normalized));
+    // Guard against zero-range normalization. If intensity_max collapses onto
+    // intensity_threshold (mis-configuration or extreme dynamic-range data),
+    // any intensity above threshold counts as the saturated end of the range.
+    constexpr double kRangeEpsilon = 1e-9;
+    const double range = intensity_max - intensity_threshold;
+    double normalized;
+    if (range <= kRangeEpsilon) {
+        normalized = 1.0;
+    } else {
+        normalized = (intensity - intensity_threshold) / range;
+        normalized = std::max(0.0, std::min(1.0, normalized));
+    }
 
     // Sigmoid transformation centered at 0.5
     double x = sharpness * (normalized - 0.5);
