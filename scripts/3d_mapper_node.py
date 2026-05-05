@@ -10,6 +10,8 @@ Date: 2025
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
+from rclpy.executors import MultiThreadedExecutor
+from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 import numpy as np
 import time
 
@@ -203,18 +205,30 @@ class SonarMapperNode(Node):
         self._latest_odom_msg = None
         self._odom_lock = threading.Lock()
 
+        # Callback groups (P1-1, B-3b):
+        # - odom: ReentrantCallbackGroup so the 200Hz odom topic never
+        #   waits for the slower sonar pipeline; odom callbacks only
+        #   touch _latest_odom_msg behind _odom_lock.
+        # - sonar: MutuallyExclusiveCallbackGroup so range/confidence/
+        #   sonar/timer callbacks that all reach into `self.mapper`
+        #   never run concurrently and corrupt internal state.
+        self.odom_cbg = ReentrantCallbackGroup()
+        self.sonar_cbg = MutuallyExclusiveCallbackGroup()
+
         self.odom_sub = self.create_subscription(
             Odometry,
             odometry_topic,
             self._odom_callback,
-            qos_profile
+            qos_profile,
+            callback_group=self.odom_cbg,
         )
 
         self.sonar_sub = self.create_subscription(
             Image,
             sonar_topic,
             self._sonar_callback,
-            qos_profile
+            qos_profile,
+            callback_group=self.sonar_cbg,
         )
         
         # Create publishers (use same QoS for consistency)
@@ -242,7 +256,8 @@ class SonarMapperNode(Node):
             Float32,
             range_topic,
             self.range_callback,
-            qos_profile
+            qos_profile,
+            callback_group=self.sonar_cbg,
         )
 
         # SLAM quality confidence subscription (only if topic configured)
@@ -252,6 +267,7 @@ class SonarMapperNode(Node):
                 slam_confidence_topic,
                 self._confidence_callback,
                 qos_profile,
+                callback_group=self.sonar_cbg,
             )
             self.get_logger().info(
                 f'[SlamQuality] Gate enabled: threshold={self._quality_threshold:.2f}, '
@@ -264,7 +280,10 @@ class SonarMapperNode(Node):
         if not self.use_outofcore:
             # In-memory mode: configurable pointcloud publishing rate
             publish_interval = 1.0 / self.pointcloud_publish_rate
-            self.timer = self.create_timer(publish_interval, self.publish_pointcloud)
+            self.timer = self.create_timer(
+                publish_interval, self.publish_pointcloud,
+                callback_group=self.sonar_cbg,
+            )
         else:
             # Out-of-core mode: eviction-based + periodic saving
             self.timer = None
@@ -280,7 +299,10 @@ class SonarMapperNode(Node):
                 tile_indices_qos
             )
             # Periodically save dirty tiles + notify visualizer
-            self.flush_timer = self.create_timer(self.tile_save_interval, self.periodic_flush_and_notify)
+            self.flush_timer = self.create_timer(
+                self.tile_save_interval, self.periodic_flush_and_notify,
+                callback_group=self.sonar_cbg,
+            )
         
         # No need for TF timer anymore since we use static transform
         
@@ -367,7 +389,10 @@ class SonarMapperNode(Node):
                     if self.timer is not None:
                         self.timer.cancel()
                     publish_interval = 1.0 / self.pointcloud_publish_rate
-                    self.timer = self.create_timer(publish_interval, self.publish_pointcloud)
+                    self.timer = self.create_timer(
+                        publish_interval, self.publish_pointcloud,
+                        callback_group=self.sonar_cbg,
+                    )
                     self.get_logger().info(f'Publish rate changed to {new_rate}Hz')
             elif name == 'visualization.tile_save_interval':
                 new_interval = float(value)
@@ -376,7 +401,10 @@ class SonarMapperNode(Node):
                     # Recreate flush timer with new interval
                     if hasattr(self, 'flush_timer') and self.flush_timer is not None:
                         self.flush_timer.cancel()
-                    self.flush_timer = self.create_timer(self.tile_save_interval, self.periodic_flush_and_notify)
+                    self.flush_timer = self.create_timer(
+                        self.tile_save_interval, self.periodic_flush_and_notify,
+                        callback_group=self.sonar_cbg,
+                    )
                     self.get_logger().info(f'Tile save interval changed to {new_interval}s')
 
             # === Mounting Orientation (requires TF update) ===
@@ -919,8 +947,16 @@ def main(args=None):
 
     node = SonarMapperNode()
 
+    # Drive the node with a MultiThreadedExecutor (P1-1, B-3b). odom
+    # callbacks run on a Reentrant group so the 200Hz odom topic does
+    # not back up behind sonar processing; the sonar/range/timer
+    # callbacks share a MutuallyExclusive group so per-frame mapper
+    # state stays consistent.
+    executor = MultiThreadedExecutor(num_threads=4)
+    executor.add_node(node)
+
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:
