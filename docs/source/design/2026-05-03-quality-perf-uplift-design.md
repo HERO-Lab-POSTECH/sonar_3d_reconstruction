@@ -91,7 +91,7 @@
 
 각 phase는 별도 branch + squash merge → main이 다음 phase의 baseline.
 
-### Phase A — Cleanup (위험: 0%)
+### Phase A — Cleanup (위험: 0%) — ✅ 머지 완료 (#1, `330d0ed`, 2026-05-04)
 
 **목표**: 알고리즘에 영향 없는 정리 작업. 회귀 측정 의무 없음(build PASS만).
 
@@ -110,7 +110,7 @@
 
 ---
 
-### Phase B-1 — Performance Surgical (위험: 낮음)
+### Phase B-1 — Performance Surgical (위험: 낮음) — ✅ 머지 완료 (#3, `c7f5c38`, 2026-05-05)
 
 **목표**: 알고리즘 결과를 정확히 동일하게 유지하면서 처리량 개선. **첫 측정 phase**이므로 회귀 인프라를 함께 도입한다.
 
@@ -131,7 +131,7 @@
 
 ---
 
-### Phase B-2 — Correctness Fixes (위험: 중간)
+### Phase B-2 — Correctness Fixes (위험: 중간) — ✅ 머지 완료 (#4, `a43af15`, 2026-05-05)
 
 **목표**: 의도된 정확도 변화. 결과는 baseline 대비 **개선** 또는 **동률**이어야 한다.
 
@@ -153,7 +153,7 @@
 
 ---
 
-### Phase B-3 — Concurrency 🚧 (위험: 높음, 게이트)
+### Phase B-3 — Concurrency 🚧 (위험: 높음, 게이트) — ✅ 머지 완료 (#5, `2facddf`, 2026-05-05)
 
 **목표**: 동시성 안전성 + 콜백 직렬화 해소.
 
@@ -178,7 +178,7 @@
 
 ---
 
-### Phase C — Algorithm Unification (위험: 중간)
+### Phase C — Algorithm Unification (위험: 중간) — ✅ 머지 완료 (#6, `7bf13e4`, 2026-05-05) — C-a/C-b 만, P2-2 영구 폐기
 
 **목표**: 알고리즘 이중 구현 정리 + 누적 오류 제거.
 
@@ -203,14 +203,14 @@
 
 ---
 
-### Phase D — Vectorization (위험: 높음, 가장 큰 효과)
+### Phase D — Vectorization (위험: 높음, 가장 큰 효과) — ✅ 완료 (PR #7, A안)
 
 **목표**: ray loop 벡터화 또는 C++ 측 ray-cast 이관 — 가장 큰 처리량 개선.
 
 **범위**:
-| 항목 ID | 위치 | 변경 |
-|--------|------|------|
-| P1-3 | `scripts/3d_mapper.py:557-664` (`process_sonar_ray`) | inner-loop matmul → bearing별 (x,y,z) 누적 후 일괄 변환, 또는 C++ ray-cast 이관 |
+| 항목 ID | 상태 | 위치 | 변경 |
+|--------|------|------|------|
+| P1-3 | ✅ A안 머지 완료 (#7, squash `7ff3b70`, 2026-05-05). B안 (C++) 은 사용자 결정으로 **불필요** 판정. | `scripts/3d_mapper.py:557-664` (`process_sonar_ray`) | inner-loop matmul → bearing별 (x,y,z) 누적 후 일괄 변환, 또는 C++ ray-cast 이관 |
 
 **구현 옵션**:
 1. **A안 (Python 내부 vectorize)**: 변경 표면이 작고 위험 낮음, 처리량 5-10× 기대
@@ -226,7 +226,7 @@
 **A안 측정 결과 (2026-05-05, P-2 m3000d-range15-tilt90, 90s, fast_lio odom)**:
 - jaccard = 0.974 (임계 0.99 미달, 그러나 unit test 의 100 bearing 에서 voxel key bit-exact atol=0 별도 입증).
 - avg proc_time baseline 104.2 ms → candidate 71.0 ms = **1.47×** (임계 1.5× 에 0.03× 미달).
-- Q-D1 결정 의뢰는 PR description 에서. B안 진행 여부는 측정 변동 (±5 ms) 과 fast_lio drift 노이즈를 감안한 사용자 판단에 위임.
+- Q-D1 결정 (사용자 2026-05-05): **(a) A안 머지 후 종결**. 코드 단위 bit-exact + 1.47× 처리량 효과를 충분으로 봄. 회귀 jaccard 0.974 는 B-1 측정 시 동일 코드 두 run jaccard ≈ 0.82 였던 환경 노이즈 (fast_lio drift + bag timing 비결정성) 의 부분집합으로 해석. B안 (C++ ray-cast 이관) 은 진행하지 않음.
 
 ---
 
@@ -471,8 +471,8 @@ D 완료 → 본 설계 종료
 |----|------|------|------|
 | Q-A1 | `qos_override.yaml` 처리 | **(a) 삭제** — launch가 어디서도 안 읽고, 토픽 키도 실제와 불일치하므로 surgical 제거 | Phase A의 P0-6은 "삭제"로 단정 |
 | Q-B1 | P0-5 voxel multiplicity | **(a) IWLO weight로 전달** — 사용자 핵심 제약("맵 결과는 더 좋아야 한다")에 부합. 결과 변화 허용(jaccard ≥0.95) + 시각 plot으로 개선 증명 | Phase B-2의 P0-5 임계: §4.4 그대로 |
-| Q-C1 | P2-2 이중 알고리즘 | **(a) 연속형 (`IWLOUpdater::compute_delta_log_odds`) 채택** — README 알고리즘 절(L.284-295)과 일치, 부드러운 전이로 노이즈 강건성 ↑. ProbabilityUpdater/Tile의 이진 분기 분기점 제거 | Phase C의 P2-2: "연속형으로 통일"로 단정 |
-| Q-D1 | Phase D 범위 | **(c) A안(Python vectorize) 결과 보고 후 B안(C++ 이관) 진행 여부 결정** | Phase D 시작 시 A안 plan만 작성, B안은 측정 후 사용자 합의 |
+| Q-C1 | P2-2 이중 알고리즘 | ~~**(a) 연속형 채택**~~ → **재결정 2026-05-05: (d) P2-2 폐기**. 회귀에서 연속형 candidate 의 occupied voxel = 0 (baseline 21,776) 으로 사용자 핵심 제약 위반. `IWLOParams` 재튜닝도 사용자 결정으로 진행 안 함. PR #6 은 P2-5 / P2-6 만 머지. | Phase C 는 C-a (P2-6) + C-b (P2-5) 만, P2-2 는 영구 폐기 |
+| Q-D1 | Phase D 범위 | **(a) A안 머지 후 종결** (사용자 결정 2026-05-05). 측정 1.47× / jaccard 0.974 가 임계와 0.03 차이로 미달이지만 unit-level bit-exact (atol=0) 가 알고리즘 동작 보존을 별도 입증. B안 (C++ 이관) 은 진행 안 함. | Phase D PR #7 머지 완료, B안 spec 작성 안 함 |
 | Q-Data | 회귀 측정용 odometry | **(b) bag 재생 + `fast_lio` 함께 launch** — bag에 odometry 토픽 없음. lidar+IMU 있음 → fast_lio mapping 모드로 odom 생성 | §4.1 dataset 표 + §4.2 회귀 스크립트 launch 구성 반영 |
 
 ---
