@@ -325,11 +325,19 @@ private:
     std::vector<TileIndex> recently_saved_tiles_;  // Tile indices saved during eviction
 
     /**
-     * Get or load a tile (thread-safe)
-     * @param idx Tile index
-     * @return Pointer to tile (never null)
+     * Get or load a tile (thread-safe). Public wrapper that acquires
+     * `cache_mutex_` and forwards to `get_or_load_tile_unlocked`.
      */
     Tile* get_or_load_tile(const TileIndex& idx);
+
+    /**
+     * Variant that assumes the caller already holds `cache_mutex_`.
+     * Use from internal code paths that need the cache lock for a
+     * larger critical section (e.g. an outer scan over multiple tiles
+     * where exposing the per-tile re-lock would either deadlock or
+     * defeat the section's atomicity).
+     */
+    Tile* get_or_load_tile_unlocked(const TileIndex& idx);
 
     /**
      * Handle tile eviction (save to disk)
