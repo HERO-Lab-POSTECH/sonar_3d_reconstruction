@@ -23,6 +23,8 @@ if SCRIPTS not in sys.path:
 import importlib.util
 spec = importlib.util.spec_from_file_location(
     "_mapper3d", os.path.join(SCRIPTS, "3d_mapper.py"))
+assert spec is not None and spec.loader is not None, \
+    f"failed to load 3d_mapper.py from {SCRIPTS}"
 _mapper3d = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(_mapper3d)
 SonarTo3DMapper = _mapper3d.SonarTo3DMapper
@@ -114,7 +116,7 @@ def golden():
 def _voxelize(updates, res):
     """Reduce update list to a deterministic set of (kind, key)."""
     out = set()
-    for pt, log_odds, kind, intensity in updates:
+    for pt, _log_odds, kind, _intensity in updates:
         ix = int(np.floor(pt[0] / res))
         iy = int(np.floor(pt[1] / res))
         iz = int(np.floor(pt[2] / res))
@@ -129,7 +131,7 @@ def test_vectorized_matches_scalar_for_100_bearings(mapper, fixed_intensity, fix
         # Result is a List[Tuple[ndarray(3,), float, str, Optional[float]]].
         assert isinstance(result, list)
         for entry in result:
-            pt, log_odds, kind, intensity = entry
+            pt, _log_odds, kind, intensity = entry
             assert pt.shape == (3,)
             assert kind in ("free", "occupied")
             if kind == "free":
