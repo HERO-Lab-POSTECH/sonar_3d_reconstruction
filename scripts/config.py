@@ -278,10 +278,15 @@ MAPPER_PARAMS: List[ParameterDef] = [
     ParameterDef('time_sync.max_stamp_diff_sec', 0.1,
                  'Max allowed |sonar.stamp - odom.stamp| in seconds. Frames exceeding this are dropped.'),
     ParameterDef('time_sync.max_odom_age_sec', 0.5,
-                 'Max allowed (now - odom.stamp) in seconds. Reserved for P8 ring-buffer pairing.',
+                 'Max allowed (sonar.stamp - odom.stamp) in seconds. Frames with stale odom are dropped.',
                  read_only=True),
     ParameterDef('time_sync.policy', 'latest',
-                 "Pairing policy: 'latest' (current behavior) or 'ringbuffer' (P8 fix). Reserved.",
+                 "Pairing policy: 'latest' | 'interpolate' | 'nearest'.",
+                 read_only=True),
+    ParameterDef('time_sync.compensate_rotation', False,
+                 'Apply angular_vel × dt to odom orientation when paired '
+                 '(small-angle approx). Reduces motion-blur in sonar 3D when '
+                 'pairing odom from a different timestamp. Off by default.',
                  read_only=True),
 
     # QoS (qos.*)

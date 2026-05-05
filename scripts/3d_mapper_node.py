@@ -13,10 +13,13 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 from sonar_3d_reconstruction.qos import SENSOR_QOS, RELIABLE_QOS, LATCHED_QOS
 from std_srvs.srv import Trigger
 from sonar_3d_reconstruction.map_save import resolve_map_save_path, update_latest_symlink
+from sonar_3d_reconstruction.odom_buffer import OdomBuffer
+from sonar_3d_reconstruction.timesync_diagnostics import TimesyncDiagnostics
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 import numpy as np
 import time
+from copy import deepcopy
 
 # ROS2 message imports
 from sensor_msgs.msg import Image, PointCloud2, PointField
@@ -26,6 +29,7 @@ from geometry_msgs.msg import TransformStamped, Point
 from std_msgs.msg import ColorRGBA
 from visualization_msgs.msg import MarkerArray, Marker
 from builtin_interfaces.msg import Duration
+from diagnostic_msgs.msg import DiagnosticArray
 from tf2_ros import StaticTransformBroadcaster
 
 # Message filters (kept for reference, using latest-odometry sync instead)
@@ -184,6 +188,16 @@ class SonarMapperNode(Node):
         self.frame_count = 0
         self.frame_skip = config['frame_skip']
         self._max_stamp_diff_sec = float(self.get_parameter('time_sync.max_stamp_diff_sec').value)
+        self._max_odom_age_sec = float(self.get_parameter('time_sync.max_odom_age_sec').value)
+        self._sync_policy = str(self.get_parameter('time_sync.policy').value)
+        self._compensate_rotation = bool(self.get_parameter('time_sync.compensate_rotation').value)
+
+        self._odom_buffer = OdomBuffer(max_size=50)
+        self._timesync_diag = TimesyncDiagnostics()
+        self._timesync_diag.policy = self._sync_policy
+        self._diag_pub = self.create_publisher(
+            DiagnosticArray, '/perception/sonar_3d/diagnostics', SENSOR_QOS)
+        self._diag_timer = self.create_timer(1.0, self._publish_diagnostics)
 
         # Register parameter change callback for dynamic updates
         self.add_on_set_parameters_callback(self.parameter_callback)
@@ -560,6 +574,7 @@ class SonarMapperNode(Node):
 
     def _odom_callback(self, msg: Odometry):
         """Store the latest odometry message (thread-safe)."""
+        self._odom_buffer.push(msg)
         with self._odom_lock:
             self._latest_odom_msg = msg
 
@@ -636,11 +651,20 @@ class SonarMapperNode(Node):
 
     def _sonar_callback(self, sonar_msg: Image):
         """
-        Pair each sonar frame with the latest available odometry.
-        Odometry runs at ~200Hz so the latest message is always very recent.
+        Pair each sonar frame with odometry using the configured policy.
+        Policy options: 'latest', 'interpolate', 'nearest'.
         """
-        with self._odom_lock:
-            odom_msg = self._latest_odom_msg
+        sonar_t = sonar_msg.header.stamp.sec + sonar_msg.header.stamp.nanosec * 1e-9
+
+        # Policy-based odom selection
+        if self._sync_policy == 'interpolate':
+            odom_msg = self._odom_buffer.interpolate(sonar_t)
+            if odom_msg is None:
+                odom_msg = self._odom_buffer.nearest(sonar_t)
+        elif self._sync_policy == 'nearest':
+            odom_msg = self._odom_buffer.nearest(sonar_t)
+        else:  # 'latest'
+            odom_msg = self._odom_buffer.latest()
 
         if odom_msg is None:
             if not hasattr(self, '_odom_warn_logged'):
@@ -648,15 +672,13 @@ class SonarMapperNode(Node):
                 self._odom_warn_logged = True
             return
 
-        # Log time info periodically for debugging.
-        # ros_now uses ROS clock — when use_sim_time:=true (bag replay), this
-        # tracks bag time, so age values stay meaningful. With wall clock the
-        # ages would drift by the wall–sim delta.
-        sonar_t = sonar_msg.header.stamp.sec + sonar_msg.header.stamp.nanosec * 1e-9
         odom_t = odom_msg.header.stamp.sec + odom_msg.header.stamp.nanosec * 1e-9
         ros_now = self.get_clock().now().nanoseconds * 1e-9
         stamp_diff = abs(sonar_t - odom_t)
 
+        # Log time info periodically for debugging.
+        # ros_now uses ROS clock — when use_sim_time:=true (bag replay), this
+        # tracks bag time, so age values stay meaningful.
         if not hasattr(self, '_sync_log_count'):
             self._sync_log_count = 0
         self._sync_log_count += 1
@@ -669,6 +691,7 @@ class SonarMapperNode(Node):
 
         # Reject frames where sonar-odom time difference exceeds threshold
         if stamp_diff > self._max_stamp_diff_sec:
+            self._timesync_diag.dropped_stamp_diff += 1
             if not hasattr(self, '_sync_drop_count'):
                 self._sync_drop_count = 0
             self._sync_drop_count += 1
@@ -679,12 +702,58 @@ class SonarMapperNode(Node):
                 )
             return
 
+        # Odom freshness check: positive when odom is older than sonar
+        odom_age = sonar_t - odom_t
+        if odom_age > self._max_odom_age_sec:
+            self._timesync_diag.dropped_stale_odom += 1
+            if self._timesync_diag.dropped_stale_odom % 10 == 1:
+                self.get_logger().warn(
+                    f'[TimeSync] odom_age={odom_age:.3f}s > {self._max_odom_age_sec}s '
+                    f'(stale odom), dropping '
+                    f'(total {self._timesync_diag.dropped_stale_odom})'
+                )
+            return
+
+        # Update diagnostics rolling means
+        self._timesync_diag.stamp_diff_mean.add(stamp_diff)
+        self._timesync_diag.odom_age_mean.add(odom_age)
+
         # SLAM quality gate (skip frame if confidence too low / stale per fail_mode)
         if self._slam_quality_enabled:
             if not self._quality_gate_passes():
+                self._timesync_diag.dropped_quality_gate += 1
                 return
 
+        # Optional rotation compensation
+        if self._compensate_rotation:
+            odom_msg = self._apply_rotation_compensation(odom_msg, dt=odom_age)
+
+        self._timesync_diag.paired_count += 1
         self.synchronized_callback(sonar_msg, odom_msg)
+
+    def _apply_rotation_compensation(self, odom_msg: Odometry, dt: float) -> Odometry:
+        """Apply angular_vel × dt to odom orientation. Small-angle approx."""
+        import math
+        out = deepcopy(odom_msg)
+        w = odom_msg.twist.twist.angular
+        half_dt = dt * 0.5
+        qd_x = w.x * half_dt
+        qd_y = w.y * half_dt
+        qd_z = w.z * half_dt
+        qd_w = 1.0
+        norm = math.sqrt(qd_x**2 + qd_y**2 + qd_z**2 + qd_w**2)
+        qd_x, qd_y, qd_z, qd_w = qd_x/norm, qd_y/norm, qd_z/norm, qd_w/norm
+        q = odom_msg.pose.pose.orientation
+        out.pose.pose.orientation.w = q.w*qd_w - q.x*qd_x - q.y*qd_y - q.z*qd_z
+        out.pose.pose.orientation.x = q.w*qd_x + q.x*qd_w + q.y*qd_z - q.z*qd_y
+        out.pose.pose.orientation.y = q.w*qd_y - q.x*qd_z + q.y*qd_w + q.z*qd_x
+        out.pose.pose.orientation.z = q.w*qd_z + q.x*qd_y - q.y*qd_x + q.z*qd_w
+        return out
+
+    def _publish_diagnostics(self):
+        """Publish timesync DiagnosticArray at 1Hz."""
+        msg = self._timesync_diag.to_msg(self.get_clock().now())
+        self._diag_pub.publish(msg)
 
     def synchronized_callback(self, sonar_msg: Image, odom_msg: Odometry):
         """

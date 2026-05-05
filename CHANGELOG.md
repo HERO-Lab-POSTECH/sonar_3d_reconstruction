@@ -1,5 +1,39 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Phase P8: Timesync hardening + diagnostics (refactor + feat)
+
+### Added
+- `sonar_3d_reconstruction/odom_buffer.py` — thread-safe ring buffer (maxlen=50) for
+  nav_msgs/Odometry with `latest()`, `nearest()`, `interpolate()` (SLERP + LERP) methods
+- `sonar_3d_reconstruction/timesync_diagnostics.py` — `RollingMean(n)` + `TimesyncDiagnostics`
+  building `diagnostic_msgs/DiagnosticArray` on `/perception/sonar_3d/diagnostics` (1Hz)
+- `test/test_timesync.py` — 7 pure-Python unit tests for both new modules
+- `scripts/3d_mapper_node.py`:
+  - Policy-based odom selection: `latest` | `interpolate` | `nearest` (via `time_sync.policy`)
+  - Odom freshness check: drops frames where `sonar_t - odom_t > max_odom_age_sec`
+  - `_apply_rotation_compensation()` — angular_vel × dt small-angle correction on odom orientation
+  - `_publish_diagnostics()` — 1Hz DiagnosticArray with rolling means + drop counters
+- `scripts/config.py`: `time_sync.compensate_rotation` ParameterDef (bool, read_only=True, default False)
+- `config/common.yaml`: `compensate_rotation: false` key in `time_sync` block
+- `CMakeLists.txt`: `odom_buffer.py` + `timesync_diagnostics.py` install lines
+
+### Changed
+- `_sonar_callback`: odom selection via `OdomBuffer` policy (preserves `_latest_odom_msg` fallback)
+- `_odom_callback`: now also pushes to `_odom_buffer` ring buffer
+- Diagnostics counters (`dropped_stamp_diff`, `dropped_stale_odom`, `dropped_quality_gate`,
+  `paired_count`) supersede ad-hoc `_sync_drop_count`; latter kept for log continuity
+
+### Verification
+- colcon build PASS (0.41s)
+- Smoke import PASS (`OdomBuffer`, `TimesyncDiagnostics`)
+- 7 unit tests PASS
+
+### Notes
+- **FINAL phase** of the workspace conventions effort (P1–P8 all complete after this merge)
+- `time_sync.compensate_rotation` default is `false`; enable for high-angular-velocity ops
+
+---
+
 ## [Unreleased] — Phase P7: Map save UX (sonar_3d) (refactor)
 
 ### Added
