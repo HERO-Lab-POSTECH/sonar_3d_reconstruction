@@ -82,18 +82,33 @@ class _Time:
         return TimeMsg(sec=10, nanosec=0)
 
 
-def test_diagnostic_msg_error_on_stale_odom():
+def test_diagnostic_msg_stale_odom_does_not_gate_level():
+    """B-4 option (c): dropped_stale_odom is structurally unreachable
+    under default config (max_stamp_diff < max_odom_age). The counter
+    is exposed for visibility but no longer gates the diagnostic level.
+    """
     d = TimesyncDiagnostics()
     d.stamp_diff_mean.add(0.05)
     d.paired_count = 100
     d.dropped_stale_odom = 5
     msg = d.to_msg(_Time())
-    assert msg.status[0].level == DiagnosticStatus.ERROR
+    assert msg.status[0].level == DiagnosticStatus.OK
     assert any(
         kv.key == 'paired_count' and kv.value == '100'
         for kv in msg.status[0].values
     )
-    assert any(kv.key == 'stamp_diff_max_sec' for kv in msg.status[0].values)
+    assert any(
+        kv.key == 'dropped_stale_odom' and kv.value == '5'
+        for kv in msg.status[0].values
+    )
+
+
+def test_diagnostic_msg_warn_on_quality_gate_accumulation():
+    """Sustained SLAM quality-gate drops (>10) promote to WARN."""
+    d = TimesyncDiagnostics()
+    d.dropped_quality_gate = 11
+    msg = d.to_msg(_Time())
+    assert msg.status[0].level == DiagnosticStatus.WARN
 
 
 def test_diagnostic_msg_warn_on_stamp_diff():

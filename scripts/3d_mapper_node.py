@@ -800,11 +800,14 @@ class SonarMapperNode(Node):
         # Process the sonar image
         stats = self.mapper.process_sonar_image(sonar_image, position, orientation)
 
-        # Publish current frame's occupied voxels as MarkerArray (auto-expire)
+        # Publish current frame's occupied voxels as MarkerArray (auto-expire).
+        # Stamp markers with the sonar input stamp so downstream consumers
+        # (TF lookups, foxglove timeline) align with the actual measurement
+        # instant rather than the latency-shifted publish time.
         occupied_points = stats.get('occupied_points', None)
         if occupied_points is not None and len(occupied_points) > 0:
             if len(occupied_points) > 0:
-                self.publish_detection_markers(occupied_points)
+                self.publish_detection_markers(occupied_points, sonar_msg.header.stamp)
 
         # Show visualization if enabled (non-blocking, separate thread)
         if self.show_opencv_visualization:
@@ -997,16 +1000,22 @@ class SonarMapperNode(Node):
             response.message = f'Save failed: {e}'
         return response
 
-    def publish_detection_markers(self, points: np.ndarray):
+    def publish_detection_markers(self, points: np.ndarray, stamp=None):
         """
         Publish current frame's occupied voxels as MarkerArray with Z-axis coloring.
         Each frame gets a unique marker ID so markers expire independently after 5s.
+
+        Args:
+            points: Nx3 occupied voxel positions in map frame.
+            stamp: Source sonar stamp (builtin_interfaces/Time). Falls back to
+                current ROS time only when called outside the synchronized
+                callback (e.g., periodic flush paths).
         """
         marker_array = MarkerArray()
 
         marker = Marker()
         marker.header.frame_id = self.map_frame_id
-        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.header.stamp = stamp if stamp is not None else self.get_clock().now().to_msg()
         marker.ns = 'detection'
         marker.id = self.frame_count  # Unique ID per frame → independent lifetime
         marker.type = Marker.CUBE_LIST
