@@ -1,5 +1,23 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Pre-experiment Fix C-1 (fix)
+
+### Added
+- `config/bag_record_qos_override.yaml` — QoS override profile for `ros2 bag record`. All BEST_EFFORT publishers (lidar/imu/sonar/oculus/ping360/perception outputs) explicitly marked. Without this, recorder defaults to RELIABLE which silently fails to capture from BEST_EFFORT publishers.
+
+### Changed
+- `launch/3d_mapping.launch.py:setup_bag_recording()` — bag record cmd now includes `--qos-profile-overrides-path <qos_override_yaml>`.
+- `launch/robot_3d_mapping.launch.py` — added `setup_bag_recording()` function and `output_bag_path` launch argument with the same QoS override pattern.
+
+### Verification
+- colcon build PASS
+- Manual smoke (deferred to user): `ros2 launch sonar_3d_reconstruction 3d_mapping.launch.py output_bag_path:=/tmp/test_bag` then `ros2 bag info /tmp/test_bag/<ts>` and confirm livox+oculus topics show msg_count > 0.
+
+### Notes
+- Subscriber-side QoS unaffected. Only changes how bag recorder negotiates QoS with BEST_EFFORT publishers.
+
+---
+
 ## [Unreleased] — Post-Audit Fix B-3 (fix)
 
 ### Fixed

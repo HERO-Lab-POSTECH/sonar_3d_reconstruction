@@ -1,0 +1,38 @@
+# QoS override profile for ros2 bag record.
+# Auto-loaded by setup_bag_recording() in 3d_mapping.launch.py.
+#
+# ros2 bag record defaults to RELIABLE QoS. BEST_EFFORT publishers silently
+# produce 0 messages in the bag unless the recorder matches their reliability.
+# All BEST_EFFORT publishers in this system are listed below.
+/sensor/lidar/livox_mid360/points:
+  reliability: best_effort
+/sensor/ins/livox_mid360/imu:
+  reliability: best_effort
+/sensor/sonar/oculus/m750d/sonar:
+  reliability: best_effort
+/sensor/sonar/oculus/m750d/image:
+  reliability: best_effort
+/sensor/sonar/oculus/m3000d/sonar:
+  reliability: best_effort
+/sensor/sonar/oculus/m3000d/image:
+  reliability: best_effort
+/sensor/sonar/ping360/image:
+  reliability: best_effort
+/sensor/sonar/ping360/scan:
+  reliability: best_effort
+/sensor/sonar/ping360/echo:
+  reliability: best_effort
+/sensor/sonar/ping1d/range:
+  reliability: best_effort
+/sensor/sonar/ping1d/data:
+  reliability: best_effort
+/perception/sonar_3d/points:
+  reliability: best_effort
+/perception/sonar_3d/markers:
+  reliability: best_effort
+/perception/sonar_3d/diagnostics:
+  reliability: best_effort
+/perception/sonar_3d_visualizer/points:
+  reliability: best_effort
+/perception/sonar_3d_visualizer/markers:
+  reliability: best_effort

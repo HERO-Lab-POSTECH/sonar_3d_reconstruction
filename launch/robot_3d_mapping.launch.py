@@ -34,6 +34,7 @@ Examples:
 
 import os
 import yaml
+from datetime import datetime
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
@@ -283,6 +284,36 @@ def setup_bag_playback(context, *args, **kwargs):
     ]
 
 
+def setup_bag_recording(context, *args, **kwargs):
+    """Setup bag recording if output_bag_path is provided"""
+    output_bag_path = context.launch_configurations.get('output_bag_path', '')
+
+    if not output_bag_path:
+        return []
+
+    # Create timestamped subfolder
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    bag_output = os.path.join(output_bag_path, timestamp)
+
+    # QoS override: ros2 bag record defaults to RELIABLE, which silently
+    # drops messages from BEST_EFFORT publishers (livox, oculus, ping360, etc.)
+    pkg_dir = get_package_share_directory('sonar_3d_reconstruction')
+    qos_override_path = os.path.join(pkg_dir, 'config', 'bag_record_qos_override.yaml')
+
+    print(f'[Robot Detection V2] Bag recording: {bag_output}/')
+
+    return [
+        ExecuteProcess(
+            cmd=[
+                'ros2', 'bag', 'record', '-a',
+                '--qos-profile-overrides-path', qos_override_path,
+                '-o', bag_output,
+            ],
+            output='screen'
+        )
+    ]
+
+
 def generate_launch_description():
     # Package directories
     pkg_dir = get_package_share_directory('sonar_3d_reconstruction')
@@ -322,7 +353,7 @@ def generate_launch_description():
             description='Detection map path (empty = auto: {parent}/robot_detection_map)'),
 
         # =====================================================================
-        # BAG PLAYBACK
+        # BAG PLAYBACK & RECORDING
         # =====================================================================
         DeclareLaunchArgument('bag_path',
             default_value='',
@@ -330,6 +361,9 @@ def generate_launch_description():
         DeclareLaunchArgument('bag_rate',
             default_value='1.0',
             description='Bag playback rate'),
+        DeclareLaunchArgument('output_bag_path',
+            default_value='',
+            description='Recording output directory (empty = no recording)'),
 
         # =====================================================================
         # VISUALIZATION & LAUNCH OPTIONS
@@ -366,5 +400,8 @@ def generate_launch_description():
 
     # Bag playback (conditional on bag_path)
     ld.add_action(OpaqueFunction(function=setup_bag_playback))
+
+    # Bag recording (conditional on output_bag_path)
+    ld.add_action(OpaqueFunction(function=setup_bag_recording))
 
     return ld
