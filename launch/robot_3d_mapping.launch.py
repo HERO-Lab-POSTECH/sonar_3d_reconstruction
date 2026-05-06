@@ -61,14 +61,14 @@ SONAR_CONFIG = {
 # =============================================================================
 ODOMETRY_CONFIG = {
     'cartographer': 'cartographer_2d/odometry',
-    'fast_lio': '/fast_lio/odometry',
-    'fast_lio_loc': '/fast_lio/localization/odometry',
+    'fast_lio': '/localization/fast_lio/odometry',
+    'fast_lio_loc': '/localization/fast_lio_loc/odometry',
 }
 
 CONFIDENCE_CONFIG = {
     'cartographer': '',
     'fast_lio': '',
-    'fast_lio_loc': '/fast_lio/localization/confidence',
+    'fast_lio_loc': '/localization/fast_lio_loc/confidence',
 }
 
 # Valid sonar pitch angles for robot detection

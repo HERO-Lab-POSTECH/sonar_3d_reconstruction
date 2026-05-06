@@ -1,5 +1,25 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Post-merge fixes P9: timesync robustness, topic sync, crosstalk default, atomic symlink (fix)
+
+### Fixed
+- C-2: `odom_age = abs(sonar_t - odom_t)` 적용 — 미래 skew odom에 역방향 rotation compensation 방지
+- C-3: `timesync_diagnostics.py` ERROR 레벨 분기 추가 (`dropped_stale_odom > 0` → ERROR) + `RollingMax` 클래스 및 `stamp_diff_max` 추적
+- C-4: `time_sync.diagnostics_rate_hz` config 키 + ParameterDef 추가, 타이머 하드코딩(`1.0`) 제거
+- M-2: `robot_3d_mapping.launch.py` + `config.py` 토픽 default를 `/localization/fast_lio/*` 계층으로 동기화
+- M-3: `config/common.yaml` `crosstalk.enabled: false` — config.py default(False)와 일치
+- M-4: `map_save.py` latest symlink atomic update (`tmp → os.replace`) 패턴 적용 + `re.match(r'^\d{8}_\d{6}$')` heuristic 강화
+
+### Changed
+- `test/test_timesync.py`: `test_diagnostic_msg_warn` → `test_diagnostic_msg_error_on_stale_odom` (ERROR 레벨 확인), `test_diagnostic_msg_warn_on_stamp_diff` / `test_diagnostic_msg_ok` 신규 추가, `test_rolling_max` 추가 (총 10개)
+
+### Verification
+- colcon build PASS (0.19s)
+- pytest test/test_timesync.py: 10/10 PASS
+- `grep '/fast_lio/odometry'` runtime 파일: 0 old-path hits (모두 `/localization/fast_lio/*`)
+
+---
+
 ## [Unreleased] — Phase P8: Timesync hardening + diagnostics (refactor + feat)
 
 ### Added

@@ -15,9 +15,21 @@ class RollingMean:
         return sum(self._buf) / len(self._buf) if self._buf else 0.0
 
 
+class RollingMax:
+    def __init__(self, n: int = 50):
+        self._buf: deque = deque(maxlen=n)
+
+    def add(self, value: float) -> None:
+        self._buf.append(float(value))
+
+    def value(self) -> float:
+        return max(self._buf) if self._buf else 0.0
+
+
 class TimesyncDiagnostics:
     def __init__(self):
         self.stamp_diff_mean = RollingMean(50)
+        self.stamp_diff_max = RollingMax(50)
         self.odom_age_mean = RollingMean(50)
         self.paired_count = 0
         self.dropped_stamp_diff = 0
@@ -25,25 +37,44 @@ class TimesyncDiagnostics:
         self.dropped_quality_gate = 0
         self.policy = 'latest'
 
-    def to_msg(self, node_clock_now) -> DiagnosticArray:
+    def to_msg(
+        self,
+        node_clock_now,
+        max_stamp_diff_threshold: float = 0.1,
+        max_odom_age_threshold: float = 0.5,
+    ) -> DiagnosticArray:
         msg = DiagnosticArray()
         msg.header.stamp = node_clock_now.to_msg()
         status = DiagnosticStatus()
         status.name = 'sonar_3d_mapper: timesync'
         status.hardware_id = ''
-        if self.dropped_stale_odom > 0 or self.dropped_stamp_diff > 0:
+        stamp_max_exceeded = (
+            self.stamp_diff_max.value() > max_stamp_diff_threshold
+        )
+        if self.dropped_stale_odom > 0:
+            status.level = DiagnosticStatus.ERROR
+            status.message = 'Stale odom drops detected'
+        elif stamp_max_exceeded or self.dropped_stamp_diff > 0:
             status.level = DiagnosticStatus.WARN
-            status.message = 'Some frames dropped'
+            status.message = 'Stamp diff exceeded threshold'
         else:
             status.level = DiagnosticStatus.OK
             status.message = 'Healthy'
+        diff_mean = f'{self.stamp_diff_mean.value():.4f}'
+        diff_max = f'{self.stamp_diff_max.value():.4f}'
+        age_mean = f'{self.odom_age_mean.value():.4f}'
         status.values = [
-            KeyValue(key='stamp_diff_mean_sec', value=f'{self.stamp_diff_mean.value():.4f}'),
-            KeyValue(key='odom_age_mean_sec', value=f'{self.odom_age_mean.value():.4f}'),
+            KeyValue(key='stamp_diff_mean_sec', value=diff_mean),
+            KeyValue(key='stamp_diff_max_sec', value=diff_max),
+            KeyValue(key='odom_age_mean_sec', value=age_mean),
             KeyValue(key='paired_count', value=str(self.paired_count)),
-            KeyValue(key='dropped_stamp_diff', value=str(self.dropped_stamp_diff)),
-            KeyValue(key='dropped_stale_odom', value=str(self.dropped_stale_odom)),
-            KeyValue(key='dropped_quality_gate', value=str(self.dropped_quality_gate)),
+            KeyValue(
+                key='dropped_stamp_diff', value=str(self.dropped_stamp_diff)),
+            KeyValue(
+                key='dropped_stale_odom', value=str(self.dropped_stale_odom)),
+            KeyValue(
+                key='dropped_quality_gate',
+                value=str(self.dropped_quality_gate)),
             KeyValue(key='policy', value=self.policy),
         ]
         msg.status.append(status)
