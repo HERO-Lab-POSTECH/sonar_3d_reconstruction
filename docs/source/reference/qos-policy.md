@@ -26,7 +26,7 @@
 | `/sensor/sonar/ping360/param/*` | ping360_ros2 | Int32/Float32 | 🟢 BEST_EFFORT | VOLATILE | 5 |
 | `/sensor/sonar/sonoptix/*` | sonoptix_ros2 | Image/Int32/String/Bool | 🟢 BEST_EFFORT | VOLATILE | 5 |
 | `/sensor/lidar/livox_mid360/points` | livox_ros2 | PointCloud2/CustomMsg | 🟢 BEST_EFFORT | VOLATILE | 5 |
-| `/sensor/lidar/livox_mid360/imu` | livox_ros2 | Imu | 🟢 BEST_EFFORT | VOLATILE | 5 |
+| `/sensor/ins/livox_mid360/imu` | livox_ros2 | Imu | 🟢 BEST_EFFORT | VOLATILE | 5 |
 
 ## SLAM · Odometry Publisher
 
