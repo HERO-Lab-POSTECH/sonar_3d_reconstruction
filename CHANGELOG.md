@@ -1,5 +1,19 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Post-Audit Fix B-3 (fix)
+
+### Fixed
+- B-3: rotation compensation `dt` argument now signed (`sonar_t - odom_t`) instead of `abs(...)`. Future-stamped odom (negative delta) now correctly extrapolates orientation backward; previously the abs() in PR-A C-2 fix forced forward-only extrapolation, reversing direction in this case.
+
+### Tests
+- Added `tests/test_timesync_rotation_signed_dt.py` (2 tests).
+
+### Verification
+- colcon test PASS (12/12 incl. 2 new).
+- B-4 (`dropped_stale_odom` semantics) deferred to PR-C — separate semantic decision.
+
+---
+
 ## [Unreleased] — Post-merge fixes P9: timesync robustness, topic sync, crosstalk default, atomic symlink (fix)
 
 ### Fixed
