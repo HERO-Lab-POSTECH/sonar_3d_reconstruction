@@ -49,15 +49,45 @@
 
 ## Sonar 3D Reconstruction (Pub/Sub 종합)
 
+실제 토픽 카탈로그는 `scripts/3d_mapper_node.py`(노드명 `sonar_3d_mapper`) +
+`scripts/map_visualizer_node.py`(노드명 `map_visualizer`) 기준. namespace
+prefix는 `/perception/sonar_3d/*` (mapper 출력) 와
+`/perception/sonar_3d_visualizer/*` (visualizer 재발행) 두 갈래.
+
+### `sonar_3d_mapper` 노드 (3d_mapper_node.py)
+
 | Topic | Direction | Type | Reliability | Durability | Depth |
 |---|---|---|---|---|---|
-| `/sensor/sonar/oculus/*/image` | Sub | Image | 🟢 BEST_EFFORT | VOLATILE | 10 |
-| Odometry topic | Sub | Odometry | 🟢 BEST_EFFORT | VOLATILE | 10 |
-| `/param/range` | Sub | Float32 | 🟢 BEST_EFFORT | VOLATILE | 10 |
-| `/sonar_3d_mapper/point_cloud` | Pub | PointCloud2 | 🟢 BEST_EFFORT | VOLATILE | 10 |
-| `/sonar_3d_mapper/occupancy_grid` | Pub | MarkerArray | 🟢 BEST_EFFORT | VOLATILE | 10 |
-| `/sonar_3d_mapper/filtered_image` | Pub | Image | 🟢 BEST_EFFORT | VOLATILE | 10 |
-| `/sonar_3d_mapper/updated_tile_indices` | Pub | Int32MultiArray | 🟢 BEST_EFFORT | VOLATILE | 10 |
+| `/sensor/sonar/oculus/*/image` | Sub | Image | 🟢 BEST_EFFORT | VOLATILE | 5 |
+| `/fast_lio/odometry` (param `topics.odometry`) | Sub | Odometry | 🟣 RELIABLE | VOLATILE | 10 |
+| `/sensor/sonar/oculus/*/param/range` (param `topics.range`) | Sub | Float32 | 🟣 RELIABLE | TRANSIENT_LOCAL | 1 |
+| `/fast_lio/localization/confidence` (param `topics.slam_confidence`, optional) | Sub | Float32 | 🟣 RELIABLE | VOLATILE | 10 |
+| `/perception/sonar_3d/points` | Pub | PointCloud2 | 🟢 BEST_EFFORT | VOLATILE | 5 |
+| `/perception/sonar_3d/markers` | Pub | MarkerArray | 🟢 BEST_EFFORT | VOLATILE | 5 |
+| `/perception/sonar_3d/diagnostics` | Pub | DiagnosticArray | 🟢 BEST_EFFORT | VOLATILE | 5 |
+| `/perception/sonar_3d/tile_indices` | Pub | Int32MultiArray | 🟣 RELIABLE | TRANSIENT_LOCAL | 1 |
+| `/sonar_3d_mapper/debug/crosstalk_filtered` | Pub | Image | 🟢 BEST_EFFORT | VOLATILE | 5 |
+
+### `map_visualizer` 노드 (map_visualizer_node.py)
+
+| Topic | Direction | Type | Reliability | Durability | Depth |
+|---|---|---|---|---|---|
+| `/perception/sonar_3d/tile_indices` | Sub | Int32MultiArray | 🟣 RELIABLE | TRANSIENT_LOCAL | 1 |
+| `/perception/sonar_3d_visualizer/octomap` | Pub | Octomap | 🟢 BEST_EFFORT | VOLATILE | 5 |
+| `/perception/sonar_3d_visualizer/points` | Pub | PointCloud2 | 🟢 BEST_EFFORT | VOLATILE | 5 |
+| `/perception/sonar_3d_visualizer/markers` | Pub | MarkerArray | 🟢 BEST_EFFORT | VOLATILE | 5 |
+
+### Hop 흐름 (mapper → visualizer → RViz)
+
+```
+3d_mapper ─/perception/sonar_3d/points──────▶ RViz (직접)
+3d_mapper ─/perception/sonar_3d/tile_indices──▶ map_visualizer
+                                              ─/perception/sonar_3d_visualizer/octomap─▶ RViz
+                                              ─/perception/sonar_3d_visualizer/points──▶ RViz
+                                              ─/perception/sonar_3d_visualizer/markers─▶ RViz
+```
+
+> `tile_indices`는 visualizer가 디스크에서 부분 reload 할 tile 목록 신호용 — late-join 방지 위해 LATCHED.
 
 ## SLAM Subscribers
 

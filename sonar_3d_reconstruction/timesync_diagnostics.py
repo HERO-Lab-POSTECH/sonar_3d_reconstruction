@@ -33,6 +33,9 @@ class TimesyncDiagnostics:
         self.odom_age_mean = RollingMean(50)
         self.paired_count = 0
         self.dropped_stamp_diff = 0
+        # DEPRECATED (B-4): structurally unreachable under default config
+        # (max_stamp_diff < max_odom_age). KeyValue exposed below for legacy
+        # dashboard compatibility; value remains 0 for the lifetime of the node.
         self.dropped_stale_odom = 0
         self.dropped_quality_gate = 0
         self.policy = 'latest'
@@ -76,6 +79,7 @@ class TimesyncDiagnostics:
             KeyValue(
                 key='dropped_stamp_diff', value=str(self.dropped_stamp_diff)),
             KeyValue(
+                # DEPRECATED — see __init__ comment; always 0 under default cfg
                 key='dropped_stale_odom', value=str(self.dropped_stale_odom)),
             KeyValue(
                 key='dropped_quality_gate',

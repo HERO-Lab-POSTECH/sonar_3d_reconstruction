@@ -1,5 +1,28 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Post-Audit Fix PR-O (fix)
+
+### Fixed
+- `scripts/map_visualizer_node.py` — cache stamp at `tile_update_callback` entry (`self._last_callback_stamp`) and reuse in `publish_callback` so OctoMap/PointCloud2/MarkerArray published as a result of one callback share an identical stamp (visual consistency). Timer-driven path (`auto_refresh` fallback) still uses fresh stamp.
+
+### Removed
+- `setup.py` — dead block. Package `build_type` is `ament_cmake`, so setuptools entry was never executed; further the `entry_points` referenced `'3d_mapper_node=scripts.3d_mapper_node:main'` which is invalid Python (module name starts with digit). True install path is `CMakeLists.txt install(PROGRAMS ...)`.
+
+### Added
+- `.gitignore` — `*.so`, `*.pyc` patterns. Prevents `--symlink-install` C++ extension symlinks (`sonar_3d_reconstruction_cpp.cpython-*.so`) from leaking into the source tree.
+
+### Changed
+- `sonar_3d_reconstruction/timesync_diagnostics.py` — `dropped_stale_odom` annotated DEPRECATED (B-4: structurally unreachable under default config; KeyValue retained for legacy dashboard compatibility, value remains 0).
+- `docs/source/reference/qos-policy.md` — Sonar 3D Reconstruction section rewritten to reflect actual `/perception/sonar_3d/*` (mapper) + `/perception/sonar_3d_visualizer/*` (visualizer) topic prefixes, with hop diagram. Corrects 7th audit finding that legacy `/sonar_3d_mapper/*` topic names were documented despite being renamed.
+
+### Verification
+- colcon build PASS (clean, 7.11s)
+- pytest test/test_timesync.py: 11/11 PASS
+- pytest tests/: 18/18 PASS
+
+### Notes
+- 7차 audit High findings that this PR does NOT address (deferred): function-length over-runs (3d_mapper_node `__init__` 229 lines etc.) → Phase B-3b refactor; `config/common.yaml:36` topic-prefix standardization → separate config-cleanup PR.
+
 ## [Unreleased] — Post-Audit Fix PR-G (fix)
 
 ### Changed
