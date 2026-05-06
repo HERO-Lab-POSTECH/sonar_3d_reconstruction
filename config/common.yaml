@@ -29,7 +29,7 @@ sonar_3d_mapper:
     #       Selected by sonar_pitch launch argument (30, 60, 90)
 
     crosstalk:                       # [Dynamic] 2D FFT-based stripe removal
-      enabled: true                 # Filter on/off
+      enabled: false                # Filter on/off (default OFF — conservative)
       filter_width: 0.02             # Notch width on bearing freq axis (0.0-1.0)
       filter_strength: 0.8           # Suppression strength (0.0-1.0)
       dc_preserve_ratio: 0.05        # DC preservation radius ratio (0.0-0.5)
@@ -73,6 +73,7 @@ sonar_3d_mapper:
       max_odom_age_sec: 0.5         # [s] odom freshness cutoff (P8 ring-buffer)
       policy: "latest"              # latest | interpolate | nearest
       compensate_rotation: false    # [Static] apply angular_vel × dt rotation to paired odom
+      diagnostics_rate_hz: 1.0     # [Hz] diagnostics publish rate
 
     # ==========================================================================
     # VISUALIZATION [Dynamic]

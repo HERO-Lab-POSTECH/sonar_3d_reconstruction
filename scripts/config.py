@@ -257,7 +257,7 @@ MAPPER_PARAMS: List[ParameterDef] = [
     ParameterDef('topics.sonar', '/sensor/sonar/oculus/m750d/image',
                  'Sonar image topic',
                  read_only=True),
-    ParameterDef('topics.odometry', '/fast_lio/odometry',
+    ParameterDef('topics.odometry', '/localization/fast_lio/odometry',
                  'Odometry topic',
                  read_only=True),
     ParameterDef('topics.slam_confidence', '',
@@ -288,6 +288,8 @@ MAPPER_PARAMS: List[ParameterDef] = [
                  '(small-angle approx). Reduces motion-blur in sonar 3D when '
                  'pairing odom from a different timestamp. Off by default.',
                  read_only=True),
+    ParameterDef('time_sync.diagnostics_rate_hz', 1.0,
+                 'Diagnostics publish rate [Hz]'),
 
     # QoS (qos.*)
     ParameterDef('qos.reliability', 'best_effort',

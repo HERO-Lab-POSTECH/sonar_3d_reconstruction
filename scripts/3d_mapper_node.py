@@ -191,13 +191,16 @@ class SonarMapperNode(Node):
         self._max_odom_age_sec = float(self.get_parameter('time_sync.max_odom_age_sec').value)
         self._sync_policy = str(self.get_parameter('time_sync.policy').value)
         self._compensate_rotation = bool(self.get_parameter('time_sync.compensate_rotation').value)
+        self._diagnostics_rate_hz = float(
+            self.get_parameter('time_sync.diagnostics_rate_hz').value)
 
         self._odom_buffer = OdomBuffer(max_size=50)
         self._timesync_diag = TimesyncDiagnostics()
         self._timesync_diag.policy = self._sync_policy
         self._diag_pub = self.create_publisher(
             DiagnosticArray, '/perception/sonar_3d/diagnostics', SENSOR_QOS)
-        self._diag_timer = self.create_timer(1.0, self._publish_diagnostics)
+        diag_rate = max(self._diagnostics_rate_hz, 0.01)
+        self._diag_timer = self.create_timer(1.0 / diag_rate, self._publish_diagnostics)
 
         # Register parameter change callback for dynamic updates
         self.add_on_set_parameters_callback(self.parameter_callback)
@@ -702,8 +705,8 @@ class SonarMapperNode(Node):
                 )
             return
 
-        # Odom freshness check: positive when odom is older than sonar
-        odom_age = sonar_t - odom_t
+        # Odom freshness check: abs() handles both stale-past and future-skewed odom
+        odom_age = abs(sonar_t - odom_t)
         if odom_age > self._max_odom_age_sec:
             self._timesync_diag.dropped_stale_odom += 1
             if self._timesync_diag.dropped_stale_odom % 10 == 1:
@@ -716,6 +719,7 @@ class SonarMapperNode(Node):
 
         # Update diagnostics rolling means
         self._timesync_diag.stamp_diff_mean.add(stamp_diff)
+        self._timesync_diag.stamp_diff_max.add(stamp_diff)
         self._timesync_diag.odom_age_mean.add(odom_age)
 
         # SLAM quality gate (skip frame if confidence too low / stale per fail_mode)
@@ -751,8 +755,12 @@ class SonarMapperNode(Node):
         return out
 
     def _publish_diagnostics(self):
-        """Publish timesync DiagnosticArray at 1Hz."""
-        msg = self._timesync_diag.to_msg(self.get_clock().now())
+        """Publish timesync DiagnosticArray."""
+        msg = self._timesync_diag.to_msg(
+            self.get_clock().now(),
+            max_stamp_diff_threshold=self._max_stamp_diff_sec,
+            max_odom_age_threshold=self._max_odom_age_sec,
+        )
         self._diag_pub.publish(msg)
 
     def synchronized_callback(self, sonar_msg: Image, odom_msg: Odometry):

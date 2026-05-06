@@ -1,11 +1,14 @@
 """Unit tests for OdomBuffer and TimesyncDiagnostics."""
 import sys
+
 sys.path.insert(0, '/opt/ros/humble/lib/python3.10/site-packages')
 
-from nav_msgs.msg import Odometry
-from diagnostic_msgs.msg import DiagnosticStatus
-from sonar_3d_reconstruction.odom_buffer import OdomBuffer
-from sonar_3d_reconstruction.timesync_diagnostics import TimesyncDiagnostics, RollingMean
+from nav_msgs.msg import Odometry  # noqa: E402
+from diagnostic_msgs.msg import DiagnosticStatus  # noqa: E402
+from sonar_3d_reconstruction.odom_buffer import OdomBuffer  # noqa: E402
+from sonar_3d_reconstruction.timesync_diagnostics import (  # noqa: E402
+    TimesyncDiagnostics, RollingMean, RollingMax,
+)
 
 
 def _odom(t_sec: float, x: float = 0.0) -> Odometry:
@@ -55,20 +58,53 @@ def test_interpolate_outside_returns_none():
 
 def test_rolling_mean():
     rm = RollingMean(3)
-    rm.add(1.0); rm.add(2.0); rm.add(3.0); rm.add(4.0)
+    rm.add(1.0)
+    rm.add(2.0)
+    rm.add(3.0)
+    rm.add(4.0)
     assert abs(rm.value() - 3.0) < 1e-6
 
 
-def test_diagnostic_msg_warn():
+def test_rolling_max():
+    rm = RollingMax(3)
+    rm.add(1.0)
+    rm.add(3.0)
+    rm.add(2.0)
+    rm.add(4.0)
+    assert abs(rm.value() - 4.0) < 1e-6
+
+
+class _Time:
+    """Minimal clock stub for diagnostics tests."""
+
+    def to_msg(self):
+        from builtin_interfaces.msg import Time as TimeMsg
+        return TimeMsg(sec=10, nanosec=0)
+
+
+def test_diagnostic_msg_error_on_stale_odom():
     d = TimesyncDiagnostics()
     d.stamp_diff_mean.add(0.05)
     d.paired_count = 100
     d.dropped_stale_odom = 5
-    # Use a minimal node_clock_now stub
-    class _Time:
-        def to_msg(self):
-            from builtin_interfaces.msg import Time as TimeMsg
-            return TimeMsg(sec=10, nanosec=0)
+    msg = d.to_msg(_Time())
+    assert msg.status[0].level == DiagnosticStatus.ERROR
+    assert any(
+        kv.key == 'paired_count' and kv.value == '100'
+        for kv in msg.status[0].values
+    )
+    assert any(kv.key == 'stamp_diff_max_sec' for kv in msg.status[0].values)
+
+
+def test_diagnostic_msg_warn_on_stamp_diff():
+    d = TimesyncDiagnostics()
+    d.stamp_diff_max.add(0.2)  # exceeds default 0.1 threshold
     msg = d.to_msg(_Time())
     assert msg.status[0].level == DiagnosticStatus.WARN
-    assert any(kv.key == 'paired_count' and kv.value == '100' for kv in msg.status[0].values)
+
+
+def test_diagnostic_msg_ok():
+    d = TimesyncDiagnostics()
+    d.stamp_diff_max.add(0.05)  # within threshold
+    msg = d.to_msg(_Time())
+    assert msg.status[0].level == DiagnosticStatus.OK

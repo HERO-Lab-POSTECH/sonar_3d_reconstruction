@@ -1,5 +1,6 @@
 """Workspace-standard map save utility (spec §2.9)."""
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -10,7 +11,9 @@ def get_default_map_dir(pkg_name: str) -> Path:
     return Path(base) / pkg_name
 
 
-def resolve_map_save_path(user_path: str, pkg_name: str, map_filename: str) -> Path:
+def resolve_map_save_path(
+    user_path: str, pkg_name: str, map_filename: str
+) -> Path:
     """Empty user_path → auto-timestamp dir; else use as-is.
 
     Returns the final file path (parent dirs created).
@@ -32,9 +35,11 @@ def update_latest_symlink(saved_path: Path, pkg_name: str) -> None:
     supplied an explicit path).
     """
     ts_dir = saved_path.parent
-    if not ts_dir.is_dir() or not ts_dir.name.startswith('20'):
+    if not ts_dir.is_dir() or not re.match(r'^\d{8}_\d{6}$', ts_dir.name):
         return
     latest_link = get_default_map_dir(pkg_name) / 'latest'
-    if latest_link.is_symlink() or latest_link.exists():
-        latest_link.unlink()
-    latest_link.symlink_to(ts_dir.name)
+    tmp_link = latest_link.parent / (latest_link.name + '.tmp')
+    if tmp_link.is_symlink() or tmp_link.exists():
+        tmp_link.unlink()
+    tmp_link.symlink_to(ts_dir.name)
+    os.replace(str(tmp_link), str(latest_link))
