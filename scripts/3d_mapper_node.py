@@ -1048,6 +1048,7 @@ class SonarMapperNode(Node):
             p.z = float(points[i, 2])
             marker.points.append(p)
 
+            # abs(): map frame Z<0 = underwater; need magnitude for grayscale.
             depth = abs(float(points[i, 2]))
             gray = max(0.0, min((depth - min_depth) / depth_range, 1.0))
             c = ColorRGBA()

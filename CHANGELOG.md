@@ -1,5 +1,15 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Post-Audit Fix PR-E (fix)
+
+### Changed
+- `launch/robot_3d_mapping.launch.py` ODOMETRY_CONFIG — `cartographer` entry path normalized to `/localization/cartographer/odometry` (M-1, P9 leftover).
+- `scripts/3d_mapper_node.py:1051` — added comment explaining `abs()` for map-frame underwater depth → grayscale (L-2).
+- `scripts/map_diff_visualizer.py` — removed unused `QoSProfile`, `QoSReliabilityPolicy`, `QoSHistoryPolicy` imports (L-3).
+
+### Verification
+- colcon build PASS
+
 ## [Unreleased] — Pre-experiment Fix C-1 (fix)
 
 ### Added

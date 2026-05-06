@@ -25,7 +25,6 @@ from typing import List, Tuple
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from sonar_3d_reconstruction.qos import SENSOR_QOS
 from sensor_msgs.msg import PointCloud2, PointField
 from std_msgs.msg import Header

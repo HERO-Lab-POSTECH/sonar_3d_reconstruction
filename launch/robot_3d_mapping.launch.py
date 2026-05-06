@@ -61,7 +61,7 @@ SONAR_CONFIG = {
 # ODOMETRY CONFIGURATION
 # =============================================================================
 ODOMETRY_CONFIG = {
-    'cartographer': 'cartographer_2d/odometry',
+    'cartographer': '/localization/cartographer/odometry',
     'fast_lio': '/localization/fast_lio/odometry',
     'fast_lio_loc': '/localization/fast_lio_loc/odometry',
 }
