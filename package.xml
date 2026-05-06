@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>sonar_3d_reconstruction</name>
-  <version>1.0.0</version>
+  <version>1.0.1</version>
   <description>3D underwater terrain reconstruction and ROV tracking system through sonar sensor fusion</description>
   <maintainer email="luckkim123@gmail.com">root</maintainer>
   <license>MIT</license>

@@ -139,6 +139,11 @@ class MapVisualizerNode(Node):
             LATCHED_QOS
         )
         self.pending_tile_updates = []  # Pending tile updates
+        # Cached stamp from latest tile_update_callback. publish_callback uses
+        # this so all messages emitted while processing one callback share an
+        # identical stamp (visual consistency across octomap/pointcloud/markers).
+        # None until first callback arrives → publish_callback falls back to fresh.
+        self._last_callback_stamp = None
 
         # Timer for periodic publishing
         self.timer = self.create_timer(1.0 / self.publish_rate, self.publish_callback)
@@ -199,6 +204,9 @@ class MapVisualizerNode(Node):
 
         # Add to pending list (processed in publish_callback)
         self.pending_tile_updates.extend(tile_indices)
+        # Cache stamp at callback entry: messages republished as a result of
+        # this callback all share this stamp (visual consistency).
+        self._last_callback_stamp = self.get_clock().now().to_msg()
         if self.marker_lifetime > 0:
             self.last_tile_update_time = self.get_clock().now().nanoseconds * 1e-9
         self.get_logger().debug(f'Received {len(tile_indices)} tile update(s)')
@@ -266,7 +274,10 @@ class MapVisualizerNode(Node):
                 self.reload_specific_tiles(self.pending_tile_updates)
                 self.pending_tile_updates = []
                 try:
-                    stamp = self.get_clock().now().to_msg()
+                    # Use cached callback stamp for consistency across this
+                    # tile-update batch; fall back to fresh stamp if callback
+                    # not yet received (defensive — should not happen here).
+                    stamp = self._last_callback_stamp or self.get_clock().now().to_msg()
                     self.publish_marker_array(stamp)
                 except Exception as e:
                     self.get_logger().error(f'Marker publish error: {e}')
@@ -277,7 +288,8 @@ class MapVisualizerNode(Node):
         # last_refresh_time uses ROS clock so refresh throttle stays correct
         # under bag replay (use_sim_time:=true).
         ros_now = self.get_clock().now().nanoseconds * 1e-9
-        if len(self.pending_tile_updates) > 0:
+        callback_driven = len(self.pending_tile_updates) > 0
+        if callback_driven:
             self.reload_specific_tiles(self.pending_tile_updates)
             self.pending_tile_updates = []
             self.last_refresh_time = ros_now
@@ -288,7 +300,12 @@ class MapVisualizerNode(Node):
             self.last_refresh_time = ros_now
 
         try:
-            stamp = self.get_clock().now().to_msg()
+            # Callback-driven publish: use cached stamp so octomap+pointcloud
+            # share identical stamp. Timer-driven publish: fresh stamp.
+            if callback_driven and self._last_callback_stamp is not None:
+                stamp = self._last_callback_stamp
+            else:
+                stamp = self.get_clock().now().to_msg()
 
             if self.visualization_mode == self.VIS_MODE_ALL:
                 # Publish both
