@@ -705,8 +705,11 @@ class SonarMapperNode(Node):
                 )
             return
 
-        # Odom freshness check: abs() handles both stale-past and future-skewed odom
-        odom_age = abs(sonar_t - odom_t)
+        # Signed time delta: positive=odom_in_past, negative=odom_in_future.
+        # Used as signed dt for rotation extrapolation (preserves direction).
+        stamp_signed = sonar_t - odom_t
+        # Magnitude used for stale-odom drop & diagnostics rolling buffers.
+        odom_age = abs(stamp_signed)
         if odom_age > self._max_odom_age_sec:
             self._timesync_diag.dropped_stale_odom += 1
             if self._timesync_diag.dropped_stale_odom % 10 == 1:
@@ -730,7 +733,7 @@ class SonarMapperNode(Node):
 
         # Optional rotation compensation
         if self._compensate_rotation:
-            odom_msg = self._apply_rotation_compensation(odom_msg, dt=odom_age)
+            odom_msg = self._apply_rotation_compensation(odom_msg, dt=stamp_signed)
 
         self._timesync_diag.paired_count += 1
         self.synchronized_callback(sonar_msg, odom_msg)
