@@ -51,12 +51,17 @@ class TimesyncDiagnostics:
         stamp_max_exceeded = (
             self.stamp_diff_max.value() > max_stamp_diff_threshold
         )
-        if self.dropped_stale_odom > 0:
-            status.level = DiagnosticStatus.ERROR
-            status.message = 'Stale odom drops detected'
-        elif stamp_max_exceeded or self.dropped_stamp_diff > 0:
+        # B-4: dropped_stale_odom is structurally unreachable when
+        # max_stamp_diff < max_odom_age (default config), so it never gates
+        # a level transition. Quality-gate drops promote to WARN once we see
+        # a sustained stream (>10), since each drop is a frame omitted from
+        # the map.
+        if stamp_max_exceeded or self.dropped_stamp_diff > 0:
             status.level = DiagnosticStatus.WARN
             status.message = 'Stamp diff exceeded threshold'
+        elif self.dropped_quality_gate > 10:
+            status.level = DiagnosticStatus.WARN
+            status.message = 'SLAM quality drops accumulating'
         else:
             status.level = DiagnosticStatus.OK
             status.message = 'Healthy'

@@ -9,7 +9,6 @@ Date: 2025
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from sonar_3d_reconstruction.qos import SENSOR_QOS, RELIABLE_QOS, LATCHED_QOS
 from std_srvs.srv import Trigger
 from sonar_3d_reconstruction.map_save import resolve_map_save_path, update_latest_symlink
@@ -205,21 +204,8 @@ class SonarMapperNode(Node):
         # Register parameter change callback for dynamic updates
         self.add_on_set_parameters_callback(self.parameter_callback)
 
-        # Get QoS reliability setting (reliable or best_effort)
-        qos_reliability_str = self.get_parameter('qos.reliability').value
-        if qos_reliability_str == 'best_effort':
-            reliability = ReliabilityPolicy.BEST_EFFORT
-            self.get_logger().info('QoS reliability: BEST_EFFORT')
-        else:
-            reliability = ReliabilityPolicy.RELIABLE
-            self.get_logger().info('QoS reliability: RELIABLE')
-
-        # QoS profile for subscription (default: RELIABLE)
-        qos_profile = QoSProfile(
-            reliability=reliability,
-            history=HistoryPolicy.KEEP_LAST,
-            depth=10
-        )
+        # Subscriber/publisher QoS is fixed at module level (SENSOR_QOS for sensor
+        # streams, RELIABLE_QOS for odometry/confidence) — see imports.
 
         # Latest-odometry synchronization (robust against clock skew between machines)
         # Odometry arrives at ~200Hz, so the latest message is always <5ms old.
@@ -708,17 +694,11 @@ class SonarMapperNode(Node):
         # Signed time delta: positive=odom_in_past, negative=odom_in_future.
         # Used as signed dt for rotation extrapolation (preserves direction).
         stamp_signed = sonar_t - odom_t
-        # Magnitude used for stale-odom drop & diagnostics rolling buffers.
+        # odom_age = abs(stamp_signed) is identical to stamp_diff above; the
+        # frame already passed the stamp_diff guard so a separate stale-odom
+        # drop check would be unreachable. Kept only as a diagnostics rolling
+        # mean for visibility (B-4: removed redundant ERROR branch).
         odom_age = abs(stamp_signed)
-        if odom_age > self._max_odom_age_sec:
-            self._timesync_diag.dropped_stale_odom += 1
-            if self._timesync_diag.dropped_stale_odom % 10 == 1:
-                self.get_logger().warn(
-                    f'[TimeSync] odom_age={odom_age:.3f}s > {self._max_odom_age_sec}s '
-                    f'(stale odom), dropping '
-                    f'(total {self._timesync_diag.dropped_stale_odom})'
-                )
-            return
 
         # Update diagnostics rolling means
         self._timesync_diag.stamp_diff_mean.add(stamp_diff)

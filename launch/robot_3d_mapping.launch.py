@@ -195,8 +195,6 @@ def setup_nodes(context, *args, **kwargs):
         'topics.sonar': sonar_topic,
         'topics.odometry': odometry_topic,
         'topics.slam_confidence': slam_confidence_topic,
-        'topics.pointcloud': '/robot_detection/point_cloud',
-        'topics.marker': '/robot_detection/occupancy_grid',
         'outofcore.use': True,
         'outofcore.map_path': detection_map_path,
         'visualization.show_opencv_visualization': use_opencv_window == 'true',
@@ -223,6 +221,8 @@ def setup_nodes(context, *args, **kwargs):
         ],
         remappings=[
             ('/sonar_3d_mapper/debug/crosstalk_filtered', '/robot_detection/filtered_image'),
+            ('/perception/sonar_3d/points', '/robot_detection/point_cloud'),
+            ('/perception/sonar_3d/markers', '/robot_detection/occupancy_grid'),
             ('/perception/sonar_3d/tile_indices', '/robot_detection/updated_tile_indices'),
         ],
         output='screen'

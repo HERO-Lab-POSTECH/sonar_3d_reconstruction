@@ -36,3 +36,14 @@
   reliability: best_effort
 /perception/sonar_3d_visualizer/markers:
   reliability: best_effort
+# fast_lio BEST_EFFORT publishers (recorded for offline SLAM debugging).
+/localization/fast_lio/points_body:
+  reliability: best_effort
+/fast_lio/debug/path:
+  reliability: best_effort
+/fast_lio/debug/points_world:
+  reliability: best_effort
+/fast_lio/debug/points_effected:
+  reliability: best_effort
+/fast_lio/debug/map:
+  reliability: best_effort

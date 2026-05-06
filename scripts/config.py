@@ -291,11 +291,6 @@ MAPPER_PARAMS: List[ParameterDef] = [
     ParameterDef('time_sync.diagnostics_rate_hz', 1.0,
                  'Diagnostics publish rate [Hz]'),
 
-    # QoS (qos.*)
-    ParameterDef('qos.reliability', 'best_effort',
-                 'QoS reliability: reliable or best_effort',
-                 read_only=True),
-
     # Depth Estimation (depth_estimation.*) - Reference map comparison for robot detection
     ParameterDef('depth_estimation.enabled', False,
                  'Enable depth estimation from reference map',

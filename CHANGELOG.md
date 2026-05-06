@@ -1,5 +1,20 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Post-Audit Fix PR-G (fix)
+
+### Changed
+- `launch/robot_3d_mapping.launch.py` — robot_detection node: removed dead `topics.pointcloud`/`topics.marker` overrides (keys not declared in MAPPER_PARAMS, silently ignored) and added explicit `remappings=` for `/perception/sonar_3d/points` → `/robot_detection/point_cloud` and `/perception/sonar_3d/markers` → `/robot_detection/occupancy_grid` (4th audit High: previously the robot_detection mapper published on the same topics as the main mapper, causing topic collision and never producing the documented `/robot_detection/*` outputs).
+- `scripts/3d_mapper_node.py:208-222` — removed dead `qos.reliability` parameter read + unused `qos_profile` block (4th audit High: subscriptions/publishers all use module-level `SENSOR_QOS`/`RELIABLE_QOS`, so the parameter had zero runtime effect).
+- `scripts/config.py` — removed `qos.reliability` ParameterDef (no longer wired anywhere).
+- `scripts/3d_mapper_node.py:680-712` — removed structurally unreachable `dropped_stale_odom` branch (B-4 option c). With `max_stamp_diff_sec=0.1 < max_odom_age_sec=0.5` defaults, `odom_age = abs(stamp_signed) == stamp_diff` was always ≤ 0.1 ≤ 0.5 by the time it reached the check (frame already passed the L682 guard). Counter still tracked in diagnostics for compatibility.
+- `sonar_3d_reconstruction/timesync_diagnostics.py` — removed `dropped_stale_odom > 0` ERROR transition (B-4 option c). Replaced with WARN promotion when `dropped_quality_gate > 10` (sustained quality gating now visible).
+
+### Added
+- `config/bag_record_qos_override.yaml` — fast_lio BEST_EFFORT topics (`/localization/fast_lio/points_body`, `/fast_lio/debug/{path,points_world,points_effected,map}`). 4th audit High: SLAM-while-bagging produced 0 messages on these topics because they were absent from the override profile.
+
+### Verification
+- colcon build PASS
+
 ## [Unreleased] — Post-Audit Fix PR-E (fix)
 
 ### Changed
