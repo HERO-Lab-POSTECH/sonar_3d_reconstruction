@@ -1,5 +1,13 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Post-Audit Fix PR-T (docs)
+
+### Changed
+- `README.md` — topic catalog (lines 256-259) updated to reflect `/perception/sonar_3d/*` and `/perception/sonar_3d_visualizer/*` prefixes. Added `/perception/sonar_3d/diagnostics` and the visualizer output section. Last legacy `/sonar_3d_mapper/*` documentation reference removed (9th audit Medium 1).
+
+### Verification
+- Cross-checked README topics against `create_publisher` calls in `scripts/3d_mapper_node.py` and `scripts/map_visualizer_node.py`.
+
 ## [Unreleased] — Post-Audit Fix PR-R (fix)
 
 ### Changed
