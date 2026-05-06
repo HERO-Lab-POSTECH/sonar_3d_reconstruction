@@ -255,7 +255,7 @@ class SonarMapperNode(Node):
         # Crosstalk filtered image publisher (for debugging)
         self.filtered_image_pub = self.create_publisher(
             Image,
-            '/sonar_3d_mapper/debug/crosstalk_filtered',
+            '/perception/sonar_3d/debug/crosstalk_filtered',
             SENSOR_QOS
         )
 

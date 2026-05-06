@@ -220,7 +220,7 @@ def setup_nodes(context, *args, **kwargs):
             merged_params
         ],
         remappings=[
-            ('/sonar_3d_mapper/debug/crosstalk_filtered', '/robot_detection/filtered_image'),
+            ('/perception/sonar_3d/debug/crosstalk_filtered', '/robot_detection/filtered_image'),
             ('/perception/sonar_3d/points', '/robot_detection/point_cloud'),
             ('/perception/sonar_3d/markers', '/robot_detection/occupancy_grid'),
             ('/perception/sonar_3d/tile_indices', '/robot_detection/updated_tile_indices'),

@@ -66,7 +66,7 @@ prefix는 `/perception/sonar_3d/*` (mapper 출력) 와
 | `/perception/sonar_3d/markers` | Pub | MarkerArray | 🟢 BEST_EFFORT | VOLATILE | 5 |
 | `/perception/sonar_3d/diagnostics` | Pub | DiagnosticArray | 🟢 BEST_EFFORT | VOLATILE | 5 |
 | `/perception/sonar_3d/tile_indices` | Pub | Int32MultiArray | 🟣 RELIABLE | TRANSIENT_LOCAL | 1 |
-| `/sonar_3d_mapper/debug/crosstalk_filtered` | Pub | Image | 🟢 BEST_EFFORT | VOLATILE | 5 |
+| `/perception/sonar_3d/debug/crosstalk_filtered` | Pub | Image | 🟢 BEST_EFFORT | VOLATILE | 5 |
 
 ### `map_visualizer` 노드 (map_visualizer_node.py)
 

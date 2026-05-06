@@ -1,5 +1,14 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [Unreleased] — Post-Audit Fix PR-R (fix)
+
+### Changed
+- `scripts/3d_mapper_node.py:258`, `config/common.yaml:36`, `launch/robot_3d_mapping.launch.py:223`, `docs/source/reference/qos-policy.md:69` — `crosstalk_filtered` topic prefix standardized from legacy `/sonar_3d_mapper/debug/*` to `/perception/sonar_3d/debug/*`. Last remaining `/sonar_3d_mapper/*` topic reference removed (8th audit Medium 1, deferred from PR-O notes). `robot_3d_mapping.launch.py` remap source updated in lockstep so the `robot_detection` instance still rewires to `/robot_detection/filtered_image`.
+
+### Verification
+- colcon build PASS
+- pytest test/test_timesync.py: 11/11 PASS
+
 ## [Unreleased] — Post-Audit Fix PR-O (fix)
 
 ### Fixed
