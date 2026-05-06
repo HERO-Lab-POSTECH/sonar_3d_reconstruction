@@ -232,11 +232,20 @@ def setup_bag_recording(context, *args, **kwargs):
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     bag_output = os.path.join(output_bag_path, timestamp)
 
+    # QoS override: ros2 bag record defaults to RELIABLE, which silently
+    # drops messages from BEST_EFFORT publishers (livox, oculus, ping360, etc.)
+    pkg_dir = get_package_share_directory('sonar_3d_reconstruction')
+    qos_override_path = os.path.join(pkg_dir, 'config', 'bag_record_qos_override.yaml')
+
     print(f'[3D Mapping] Bag recording: {bag_output}/')
 
     return [
         ExecuteProcess(
-            cmd=['ros2', 'bag', 'record', '-a', '-o', bag_output],
+            cmd=[
+                'ros2', 'bag', 'record', '-a',
+                '--qos-profile-overrides-path', qos_override_path,
+                '-o', bag_output,
+            ],
             output='screen'
         )
     ]
