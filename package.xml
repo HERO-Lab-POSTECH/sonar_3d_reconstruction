@@ -52,6 +52,8 @@
   <exec_depend>cv_bridge</exec_depend>
   <exec_depend>visualization_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>octomap_msgs</exec_depend>
+  <exec_depend>diagnostic_msgs</exec_depend>
   
   <!-- Sensor driver dependencies (runtime only) -->
   <exec_depend>oculus_sonar</exec_depend>
