@@ -4,12 +4,24 @@ import threading
 from collections import deque
 from typing import Optional
 
+from builtin_interfaces.msg import Time as TimeMsg
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Quaternion
 
 
 def _stamp_to_sec(stamp) -> float:
     return stamp.sec + stamp.nanosec * 1e-9
+
+
+def _sec_to_stamp(target_sec: float) -> TimeMsg:
+    """Convert float seconds to builtin_interfaces/Time without precision loss
+    near the integer boundary."""
+    sec = int(math.floor(target_sec))
+    nanosec = int(round((target_sec - sec) * 1e9))
+    if nanosec >= 1_000_000_000:
+        sec += 1
+        nanosec -= 1_000_000_000
+    return TimeMsg(sec=sec, nanosec=nanosec)
 
 
 def _slerp_quaternion(q0: Quaternion, q1: Quaternion, t: float) -> Quaternion:
@@ -74,7 +86,10 @@ class OdomBuffer:
                     t = (target_sec - stamps[i]) / (stamps[i+1] - stamps[i])
                     m0, m1 = self._buffer[i], self._buffer[i+1]
                     out = Odometry()
-                    out.header.stamp = m1.header.stamp
+                    # Stamp the interpolated message at target_sec, not at the
+                    # upper bracket — otherwise stamp_diff diagnostics report
+                    # |sonar_t - upper_bracket| instead of ~0.
+                    out.header.stamp = _sec_to_stamp(target_sec)
                     out.header.frame_id = m0.header.frame_id
                     out.child_frame_id = m0.child_frame_id
                     p0, p1 = m0.pose.pose.position, m1.pose.pose.position
