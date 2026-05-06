@@ -253,10 +253,11 @@ Robot detection presets use aggressive occupied updates (`L_occ: 15.0`) and cons
 
 | Topic | Type | Description |
 |-------|------|-------------|
-| `/sonar_3d_mapper/point_cloud` | `sensor_msgs/PointCloud2` | Occupied voxels as 3D point cloud |
-| `/sonar_3d_mapper/occupancy_grid` | `visualization_msgs/MarkerArray` | RViz cube markers |
-| `/sonar_3d_mapper/filtered_image` | `sensor_msgs/Image` | Crosstalk-filtered sonar image |
-| `/sonar_3d_mapper/updated_tile_indices` | `std_msgs/Int32MultiArray` | Updated tile notifications (out-of-core) |
+| `/perception/sonar_3d/points` | `sensor_msgs/PointCloud2` | Occupied voxels as 3D point cloud |
+| `/perception/sonar_3d/markers` | `visualization_msgs/MarkerArray` | RViz cube markers |
+| `/perception/sonar_3d/debug/crosstalk_filtered` | `sensor_msgs/Image` | Crosstalk-filtered sonar image |
+| `/perception/sonar_3d/tile_indices` | `std_msgs/Int32MultiArray` | Updated tile notifications (out-of-core) |
+| `/perception/sonar_3d/diagnostics` | `diagnostic_msgs/DiagnosticArray` | Timesync diagnostics |
 
 ### Output (Robot Detection)
 
@@ -264,7 +265,14 @@ Robot detection presets use aggressive occupied updates (`L_occ: 15.0`) and cons
 |-------|------|-------------|
 | `/robot_detection/point_cloud` | `sensor_msgs/PointCloud2` | Detection point cloud |
 | `/robot_detection/occupancy_grid` | `visualization_msgs/MarkerArray` | Detection markers (RED) |
-| `/map_visualizer/octomap` | `octomap_msgs/Octomap` | Original map OctoMap visualization |
+
+### Output (Visualizer — out-of-core mode)
+
+| Topic | Type | Description |
+|-------|------|-------------|
+| `/perception/sonar_3d_visualizer/octomap` | `octomap_msgs/Octomap` | Reconstructed octomap from saved tiles |
+| `/perception/sonar_3d_visualizer/points` | `sensor_msgs/PointCloud2` | Tile-aggregated point cloud |
+| `/perception/sonar_3d_visualizer/markers` | `visualization_msgs/MarkerArray` | Tile-aggregated cube markers |
 
 ## TF Tree
 
