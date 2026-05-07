@@ -257,7 +257,7 @@ MAPPER_PARAMS: List[ParameterDef] = [
     ParameterDef('topics.sonar', '/sensor/sonar/oculus/m750d/image',
                  'Sonar image topic',
                  read_only=True),
-    ParameterDef('topics.odometry', '/localization/fast_lio/odometry',
+    ParameterDef('topics.odometry', '/slam/fast_lio/odometry',
                  'Odometry topic',
                  read_only=True),
     ParameterDef('topics.slam_confidence', '',
