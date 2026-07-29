@@ -55,15 +55,15 @@ SONAR_CONFIG = {
 # ODOMETRY CONFIGURATION
 # =============================================================================
 ODOMETRY_CONFIG = {
-    'cartographer': '/localization/cartographer/odometry',
-    'fast_lio': '/localization/fast_lio/odometry',
-    'fast_lio_loc': '/localization/fast_lio_loc/odometry',
+    'cartographer': '/slam/cartographer/odometry',
+    'fast_lio': '/slam/fast_lio/odometry',
+    'fast_lio_loc': '/slam/fast_lio_loc/odometry',
 }
 
 CONFIDENCE_CONFIG = {
     'cartographer': '',                                  # no per-frame scalar published
     'fast_lio': '',                                      # mapping mode: fitness undefined
-    'fast_lio_loc': '/localization/fast_lio_loc/confidence',
+    'fast_lio_loc': '/slam/fast_lio_loc/confidence',
 }
 
 

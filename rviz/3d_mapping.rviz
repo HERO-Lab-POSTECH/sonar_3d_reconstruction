@@ -201,7 +201,7 @@ Visualization Manager:
             Filter size: 10
             History Policy: Keep Last
             Reliability Policy: Reliable
-            Value: /fast_lio/localization/map
+            Value: /slam/fast_lio_loc/map
           Use Fixed Frame: true
           Use rainbow: true
           Value: true
@@ -404,7 +404,7 @@ Visualization Manager:
             Filter size: 10
             History Policy: Keep Last
             Reliability Policy: Reliable
-            Value: /fast_lio/localization/odometry
+            Value: /slam/fast_lio_loc/odometry
           Value: false
         - Angle Tolerance: 0.10000000149011612
           Class: rviz_default_plugins/Odometry

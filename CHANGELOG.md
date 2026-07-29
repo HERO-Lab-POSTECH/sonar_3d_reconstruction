@@ -1,5 +1,27 @@
 # CHANGELOG - sonar_3d_reconstruction
 
+## [1.1.0] — 2026-05-07 (minor)
+
+### Changed
+- `launch/3d_mapping.launch.py`, `launch/robot_3d_mapping.launch.py`: `ODOMETRY_CONFIG` and `CONFIDENCE_CONFIG` dictionaries updated to consume the workspace-unified SLAM topics. The mapper now subscribes to:
+  - cartographer odometry: `/localization/cartographer/odometry` → `/slam/cartographer/odometry`
+  - fast_lio odometry: `/localization/fast_lio/odometry` → `/slam/fast_lio/odometry`
+  - fast_lio_loc odometry: `/localization/fast_lio_loc/odometry` → `/slam/fast_lio_loc/odometry`
+  - fast_lio_loc confidence: `/localization/fast_lio_loc/confidence` → `/slam/fast_lio_loc/confidence`
+- `scripts/config.py`: default `topics.odometry` → `/slam/fast_lio/odometry` (was `/localization/fast_lio/odometry`).
+- `config/bag_record_qos_override.yaml`: bag-record QoS overrides reference the new `/slam/fast_lio/...` and `/slam/fast_lio/debug/...` paths.
+- `rviz/3d_mapping.rviz`: Display topics updated for `/slam/fast_lio_loc/map` and `/slam/fast_lio_loc/odometry`.
+
+### Notes
+- Coordinated breaking change with `fast_lio` v1.1.0, `cartographer_slam` v2.1.0, `pkrc_visualizer`. Mapper started against an older fast_lio/cartographer build will silently drop odometry frames (the topic exists with 0 publishers — no error).
+- TF tree usage unchanged: mapper still relies on the SLAM engine's `map → odom` broadcast via `tf2_ros.TransformListener` (frame names are independent of topic names).
+- QoS unchanged: RELIABLE for odometry/confidence, SENSOR for sonar image, LATCHED for range/tile_indices.
+- design/ and release-notes/ documentation entries refer to historical topic names and are intentionally left as-is.
+
+### Verification
+- grep `/localization/` `/cartographer_2d/` `/fast_lio/localization/` in `launch/`, `scripts/`, `config/`, `rviz/` → 0 hits (CHANGELOG and docs/source/ excluded).
+- colcon build PASS (sonar_3d_reconstruction).
+
 ## [Unreleased] — Post-Audit Fix PR-T (docs)
 
 ### Changed
